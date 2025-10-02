@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=1440, alias="JWT_EXPIRE_MINUTES")
     
-    # Database
-    database_url: str = Field(default="sqlite:///./fantasy11.db", alias="DATABASE_URL")
+    # MongoDB Database
+    mongodb_url: str = Field(default="mongodb://localhost:27017", alias="MONGODB_URL")
+    mongodb_db_name: str = Field(default="walle_fantasy", alias="MONGODB_DB_NAME")
     
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")

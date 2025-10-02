@@ -1,17 +1,32 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 import uvicorn
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from config.settings import settings
+from config.database import connect_to_mongo, close_mongo_connection
+from app.routes import auth_router, users_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup: Connect to MongoDB
+    await connect_to_mongo()
+    yield
+    # Shutdown: Close MongoDB connection
+    await close_mongo_connection()
+
 
 app = FastAPI(
-    title="Fantasy11 API",
-    description="Backend API for Fantasy11 cricket platform",
+    title="Walle Fantasy API",
+    description="Fantasy Cricket Platform API with MongoDB Authentication",
     version="1.0.0",
-    debug=settings.debug
+    debug=settings.debug,
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -22,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include authentication routers
+app.include_router(auth_router)
+app.include_router(users_router)
 
 # Pydantic models
 class Player(BaseModel):
@@ -62,11 +81,19 @@ sample_matches = [
 
 @app.get("/")
 async def root():
-    return {"message": "Fantasy11 API is running!"}
+    return {
+        "message": "Walle Fantasy API is running!",
+        "database": "MongoDB",
+        "version": "1.0.0"
+    }
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now()}
+    return {
+        "status": "healthy",
+        "database": "MongoDB connected",
+        "timestamp": datetime.now()
+    }
 
 @app.get("/api/players", response_model=List[Player])
 async def get_players():
@@ -120,8 +147,8 @@ async def get_leaderboard():
 
 if __name__ == "__main__":
     uvicorn.run(
-        app, 
-        host=settings.api_host, 
+        "main:app",
+        host=settings.api_host,
         port=settings.api_port,
         reload=settings.is_development
     )
