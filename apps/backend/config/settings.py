@@ -1,8 +1,13 @@
 import os
 from typing import Optional
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field
+
+# Get the root directory of the monorepo (two levels up from backend/config)
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+ENV_FILE = ROOT_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -59,10 +64,12 @@ class Settings(BaseSettings):
         return self.node_env.lower() == "test"
     
     class Config:
-        # Load from .env file
-        env_file = ".env"
+        # Load from .env file in the monorepo root
+        env_file = str(ENV_FILE)
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Ignore extra fields (like frontend-specific vars)
+        extra = "ignore"
 
 
 @lru_cache()

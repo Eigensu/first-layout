@@ -18,18 +18,21 @@ fantasy11-monorepo/
 ## Tech Stack
 
 ### Frontend
+
 - **Next.js 14** - React framework with App Router
 - **TypeScript** - Type safety
 - **Tailwind CSS** - Utility-first CSS framework
 - **React 18** - Latest React features
 
 ### Backend
+
 - **FastAPI** - Modern Python web framework
 - **Pydantic** - Data validation
 - **Uvicorn** - ASGI server
 - **Python 3.9+** - Programming language
 
 ### Development Tools
+
 - **Turborepo** - Monorepo build system
 - **ESLint** - Linting for JavaScript/TypeScript
 - **Prettier** - Code formatting
@@ -37,11 +40,13 @@ fantasy11-monorepo/
 ## Quick Start
 
 1. **Install dependencies**
+
    ```bash
    pnpm install
    ```
 
 2. **Set up Python environment for backend**
+
    ```bash
    cd apps/backend
    python -m venv venv
@@ -50,12 +55,23 @@ fantasy11-monorepo/
    cd ../..
    ```
 
-3. **Start development servers**
+3. **Configure environment variables**
+
+   ```bash
+   # Copy the environment template
+   cp .env.example .env
+
+   # Edit .env with your configuration
+   # See docs/ENVIRONMENT_SETUP.md for detailed instructions
+   ```
+
+4. **Start development servers**
    ```bash
    pnpm dev
    ```
 
 This will start:
+
 - Frontend at http://localhost:3000
 - Backend at http://localhost:8000
 
@@ -70,6 +86,7 @@ This will start:
 ## Features
 
 ### Current Features
+
 - ✅ Monorepo setup with Turborepo
 - ✅ Next.js 14 with App Router
 - ✅ FastAPI backend with sample endpoints
@@ -79,6 +96,7 @@ This will start:
 - ✅ CORS configuration for frontend-backend communication
 
 ### Planned Features
+
 - 🔲 User authentication and authorization
 - 🔲 Player database integration
 - 🔲 Team creation and management
@@ -91,6 +109,7 @@ This will start:
 ## API Endpoints
 
 ### Available Endpoints
+
 - `GET /` - API status
 - `GET /api/health` - Health check
 - `GET /api/players` - Get all players
@@ -103,16 +122,33 @@ This will start:
 
 ## Environment Setup
 
-### Backend Environment
-Copy `apps/backend/.env.example` to `apps/backend/.env` and update the values:
+This monorepo uses a **single centralized `.env` file** in the root directory for both frontend and backend.
+
+### Quick Setup
 
 ```bash
-cp apps/backend/.env.example apps/backend/.env
+# Copy the environment template
+cp .env.example .env
+
+# Edit with your values
+nano .env
 ```
+
+### 📖 Detailed Documentation
+
+See [docs/ENVIRONMENT_SETUP.md](./docs/ENVIRONMENT_SETUP.md) for:
+
+- Complete environment variables reference
+- Security best practices
+- Troubleshooting guide
+- Migration instructions
+
+**Important:** Both frontend and backend load from the root `.env` file. Do not create separate `.env` files in `apps/frontend` or `apps/backend`.
 
 ## Development
 
 ### Adding New Packages
+
 To add dependencies to specific applications:
 
 ```bash
@@ -132,6 +168,7 @@ pnpm add <package-name> --filter @fantasy11/ui
 ```
 
 ### Creating New Shared Packages
+
 1. Create a new directory in `packages/`
 2. Add `package.json` with appropriate configuration
 3. Update root `package.json` workspaces if needed
@@ -139,9 +176,11 @@ pnpm add <package-name> --filter @fantasy11/ui
 ## Deployment
 
 ### Frontend (Vercel)
+
 The frontend can be deployed to Vercel with minimal configuration.
 
 ### Backend (Railway/Heroku)
+
 The backend can be deployed to Railway, Heroku, or any platform supporting Python applications.
 
 ## Contributing
