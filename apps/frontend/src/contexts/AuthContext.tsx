@@ -75,8 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
 
-        // Redirect to dashboard
-        router.push("/dashboard");
+        // Redirect to home page after login
+        router.push("/");
       } catch (error) {
         const message = getErrorMessage(error);
         throw new Error(message);
@@ -104,8 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
 
-        // Redirect to dashboard
-        router.push("/dashboard");
+        // Redirect to home page after register
+        router.push("/");
       } catch (error) {
         const message = getErrorMessage(error);
         throw new Error(message);

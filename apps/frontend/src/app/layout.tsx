@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter, Poppins, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
+import AuthGate from "@/components/auth/AuthGate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -47,7 +48,9 @@ export default function RootLayout({
     >
       <body className={`${inter.className} bg-gray-50 antialiased`}>
         <AuthProvider>
-          <div className="min-h-screen">{children}</div>
+          <AuthGate>
+            <div className="min-h-screen">{children}</div>
+          </AuthGate>
         </AuthProvider>
       </body>
     </html>

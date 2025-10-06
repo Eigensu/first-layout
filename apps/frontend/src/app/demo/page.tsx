@@ -13,6 +13,8 @@ import {
   Avatar,
 } from "@/components";
 import type { Player } from "@/components";
+import { UserMenu } from "@/components/navigation/UserMenu";
+import { useAuth } from "@/contexts/AuthContext";
 
 const mockPlayers: Player[] = [
   {
@@ -72,6 +74,7 @@ const mockPlayers: Player[] = [
 ];
 
 export default function DemoPage() {
+  const { isAuthenticated } = useAuth();
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [captainId, setCaptainId] = useState<string>("");
   const [viceCaptainId, setViceCaptainId] = useState<string>("");
@@ -181,8 +184,16 @@ export default function DemoPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
-      <div className="py-5">
-        <PillNavbar />
+      {/* Header: Navbar + User menu */}
+      <div className="relative z-50 py-5">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 relative">
+          <PillNavbar />
+          {isAuthenticated && (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden md:block">
+              <UserMenu />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Hero Section */}

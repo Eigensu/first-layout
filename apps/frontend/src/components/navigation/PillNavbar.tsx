@@ -35,8 +35,8 @@ const PillNavbar: React.FC<PillNavbarProps> = ({ items = DEFAULT_ITEMS, activeId
   }, [activeId, items, pathname]);
 
   return (
-    <nav className={`mx-auto max-w-5xl px-4 ${className}`}>
-      <div className="bg-white rounded-full shadow-md border border-gray-200 p-2 flex items-center justify-between">
+    <nav className={`mx-auto max-w-3xl px-4 ${className}`}>
+      <div className="bg-white rounded-full shadow-md border border-gray-200 p-2 flex items-center justify-center">
         {items.map((item) => {
           const isActive = item.id === currentActiveId;
           return (
@@ -44,7 +44,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({ items = DEFAULT_ITEMS, activeId
               key={item.id}
               onClick={() => router.push(item.href)}
               className={`
-                flex items-center space-x-2 px-5 py-2 rounded-full font-medium transition-all
+                flex items-center space-x-1 px-9 py-1 rounded-full font-medium transition-all
                 ${
                   isActive
                     ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow"
