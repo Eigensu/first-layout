@@ -8,10 +8,11 @@ export interface InputProps
   label?: string;
   error?: string;
   icon?: "email" | "password" | "user";
+  variant?: "dark" | "light";
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, icon, type, className = "", ...props }, ref) => {
+  ({ label, error, icon, type, className = "", variant = "dark", ...props }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
     const isPasswordField = type === "password";
     const inputType = isPasswordField && showPassword ? "text" : type;
@@ -42,16 +43,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             type={inputType}
             className={`
-              w-full rounded-xl border
+              w-full border
               ${IconComponent ? "pl-12" : "pl-4"}
               ${isPasswordField ? "pr-12" : "pr-4"}
               py-3.5
-              bg-gray-800 text-white
-              placeholder-gray-400
-              border-gray-700
-              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent
+              ${variant === "light" ? "rounded-full bg-white text-gray-900 placeholder-gray-400 border-gray-200 focus:ring-orange-500" : "rounded-xl bg-gray-800 text-white placeholder-gray-400 border-gray-700 focus:ring-orange-500"}
+              focus:outline-none focus:ring-2 focus:border-transparent
               transition-all duration-200
-              ${error ? "border-red-500 focus:ring-red-500" : ""}
+              ${error ? (variant === "light" ? "border-red-500 focus:ring-red-500" : "border-red-500 focus:ring-red-500") : ""}
               ${className}
             `}
             {...props}
@@ -60,7 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors"
+              className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${variant === "light" ? "text-gray-400 hover:text-gray-500" : "text-gray-400 hover:text-gray-300"}`}
               tabIndex={-1}
             >
               {showPassword ? (
