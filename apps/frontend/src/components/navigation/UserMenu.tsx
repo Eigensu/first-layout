@@ -27,7 +27,7 @@ function UserMenuComp() {
       <button
         onClick={() => router.push("/user")}
         aria-label="User profile"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm shadow hover:brightness-110"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm shadow hover:brightness-110"
       >
         U
       </button>
@@ -56,7 +56,7 @@ function UserMenuComp() {
             }}
             className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
           >
-            <LayoutDashboard className="h-4 w-4 text-orange-600" />
+            <LayoutDashboard className="h-4 w-4 text-primary-600" />
             <span>Dashboard</span>
           </div>
           <div
@@ -68,7 +68,7 @@ function UserMenuComp() {
             }}
             className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
           >
-            <Settings className="h-4 w-4 text-orange-600" />
+            <Settings className="h-4 w-4 text-primary-600" />
             <span>Admin</span>
           </div>
           <div className="my-1 h-px bg-gray-100" />

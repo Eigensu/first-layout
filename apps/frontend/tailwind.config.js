@@ -9,18 +9,35 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Modern WalleFantasy Color Palette
+        // WalleFantasy Color Palette - Golden Beige Theme (Logo-Inspired)
         primary: {
-          50: "#FFF4ED",
-          100: "#FFE6D5",
-          200: "#FFCDAA",
-          300: "#FFAB74",
-          400: "#FF6B35", // Main orange
-          500: "#F7931E", // Secondary orange
-          600: "#EA580C",
-          700: "#C2410C",
-          800: "#9A3412",
-          900: "#7C2D12",
+          50: "#fdfcfa",
+          100: "#f9f7f3", // Background ivory
+          200: "#f0ebe0",
+          300: "#e6ddca",
+          400: "#d9cba3", // Light sand (Accent 2)
+          500: "#bfab79", // Main golden beige
+          600: "#a89363",
+          700: "#8c7853", // Muted brown (Accent 1)
+          800: "#6b5d3f",
+          900: "#4a4029",
+        },
+        accent: {
+          50: "#faf8f5",
+          100: "#f3efe8",
+          200: "#e6ddd0",
+          300: "#d4c4ad",
+          400: "#bfab8a",
+          500: "#8c7853", // Muted brown
+          600: "#756343",
+          700: "#5e4e36",
+          800: "#483a29",
+          900: "#32281d",
+        },
+        text: {
+          primary: "#2f2f2f", // Charcoal gray
+          secondary: "#5a5a5a",
+          tertiary: "#8a8a8a",
         },
         secondary: {
           50: "#EFF6FF",
@@ -32,7 +49,7 @@ module.exports = {
           600: "#2563EB",
           700: "#1D4ED8",
           800: "#1E40AF",
-          900: "#1E3A8A", // Deep blue
+          900: "#1E3A8A",
         },
         midnight: {
           50: "#F8FAFC",
@@ -44,7 +61,7 @@ module.exports = {
           600: "#475569",
           700: "#334155",
           800: "#1E293B",
-          900: "#0F172A", // Midnight
+          900: "#0F172A",
         },
         success: {
           50: "#ECFDF5",

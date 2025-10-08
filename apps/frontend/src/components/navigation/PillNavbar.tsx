@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, Trophy, Users, Star } from "lucide-react";
+import Image from "next/image";
 
 export interface PillNavItem {
   id: string;
@@ -56,6 +57,16 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
   return (
     <nav className={`mx-auto max-w-3xl px-4 ${className}`}>
       <div className="bg-white rounded-full shadow-md border border-gray-200 p-1.5 flex items-center justify-center gap-1">
+        {/* Logo */}
+        <div className="flex items-center pl-2 pr-3">
+          <Image
+            src="/logo.jpeg"
+            alt="WalleFantasy Logo"
+            width={32}
+            height={32}
+            className="rounded-full object-cover"
+          />
+        </div>
         {items.map((item) => {
           const isActive = item.id === currentActiveId;
           return (
@@ -66,7 +77,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                 flex items-center justify-center space-x-1.5 px-6 py-2.5 rounded-full font-medium transition-all whitespace-nowrap
                 ${
                   isActive
-                    ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md"
+                    ? "bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }
               `}

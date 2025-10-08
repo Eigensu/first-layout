@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
@@ -74,18 +75,24 @@ export function RegisterForm() {
       {/* Logo and Welcome */}
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-3 mb-2">
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
+            <Image
+              src="/logo.jpeg"
+              alt="WalleFantasy Logo"
+              width={64}
+              height={64}
+              className="object-cover"
+            />
+          </div>
+          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">
             WalleFantasy
           </h1>
-          <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
         </div>
         <p className="text-gray-600">Create your account</p>
       </div>
 
       {/* Register Form */}
-      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(249,115,22,0.5)]">
+      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(191,171,121,0.5)]">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
@@ -130,7 +137,8 @@ export function RegisterForm() {
 
           {/* Password guidance */}
           <p className="text-xs text-gray-500 pl-2 -mt-2">
-            Password should be at least 15 characters OR at least 8 characters including a number and a lowercase letter.
+            Password should be at least 15 characters OR at least 8 characters
+            including a number and a lowercase letter.
           </p>
 
           <Input
@@ -149,7 +157,7 @@ export function RegisterForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             disabled={isLoading}
           >
             {isLoading ? (
@@ -168,7 +176,7 @@ export function RegisterForm() {
               Already have an account?{" "}
               <Link
                 href="/auth/login"
-                className="text-orange-600 hover:text-orange-700 font-semibold transition-colors"
+                className="text-primary-600 hover:text-primary-700 font-semibold transition-colors"
               >
                 Sign In
               </Link>

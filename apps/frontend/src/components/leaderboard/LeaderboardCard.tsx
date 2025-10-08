@@ -52,7 +52,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
       return "bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500";
     }
     if (entry.rank === 1) {
-      return "bg-gradient-to-r from-orange-100 to-orange-50 border-2 border-orange-400";
+      return "bg-gradient-to-r from-primary-100 to-primary-50 border-2 border-primary-400";
     }
     return "bg-white border border-gray-200";
   };
@@ -73,7 +73,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
         className={`${getBackgroundClass()} rounded-3xl p-6 transition-all duration-300 hover:shadow-xl relative overflow-hidden`}
       >
         {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-200/30 to-transparent rounded-full -mr-16 -mt-16" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-200/30 to-transparent rounded-full -mr-16 -mt-16" />
 
         <div className="relative flex flex-col items-center text-center">
           {/* Rank badge */}
@@ -99,7 +99,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
           {/* Points */}
           <div className="mt-3">
-            <p className="text-3xl font-bold text-orange-600">
+            <p className="text-3xl font-bold text-primary-600">
               {entry.points.toLocaleString()}
             </p>
             <p className="text-xs text-gray-500 mt-1">points</p>
@@ -144,7 +144,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
         {getRankChangeIndicator(entry.rankChange)}
 
         <div className="text-right">
-          <p className="text-2xl font-bold text-orange-600">
+          <p className="text-2xl font-bold text-primary-600">
             {entry.points.toLocaleString()}
           </p>
           <p className="text-xs text-gray-500">points</p>

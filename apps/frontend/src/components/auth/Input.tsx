@@ -47,7 +47,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               ${IconComponent ? "pl-12" : "pl-4"}
               ${isPasswordField ? "pr-12" : "pr-4"}
               py-3.5
-              ${variant === "light" ? "rounded-full bg-white text-gray-900 placeholder-gray-400 border-gray-200 focus:ring-orange-500" : "rounded-xl bg-gray-800 text-white placeholder-gray-400 border-gray-700 focus:ring-orange-500"}
+              ${variant === "light" ? "rounded-full bg-white text-gray-900 placeholder-gray-400 border-gray-200 focus:ring-primary-500" : "rounded-xl bg-gray-800 text-white placeholder-gray-400 border-gray-700 focus:ring-primary-500"}
               focus:outline-none focus:ring-2 focus:border-transparent
               transition-all duration-200
               ${error ? (variant === "light" ? "border-red-500 focus:ring-red-500" : "border-red-500 focus:ring-red-500") : ""}

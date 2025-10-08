@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
@@ -51,18 +52,24 @@ export function LoginForm() {
       {/* Logo and Welcome */}
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-3 mb-2">
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
+            <Image
+              src="/logo.jpeg"
+              alt="WalleFantasy Logo"
+              width={64}
+              height={64}
+              className="object-cover"
+            />
+          </div>
+          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">
             WalleFantasy
           </h1>
-          <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
         </div>
         <p className="text-gray-600">Welcome back! Ready to play?</p>
       </div>
 
       {/* Login Form */}
-      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(249,115,22,0.5)]">
+      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(191,171,121,0.5)]">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
@@ -97,14 +104,14 @@ export function LoginForm() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
               />
               <span className="ml-2 text-sm text-gray-700">Remember me</span>
             </label>
             {/* Placeholder for future password reset */}
             <button
               type="button"
-              className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               disabled
             >
               Forgot password?
@@ -114,7 +121,7 @@ export function LoginForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             disabled={isLoading}
           >
             {isLoading ? "Signing in..." : "Sign In"}
@@ -126,7 +133,7 @@ export function LoginForm() {
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/register"
-                className="text-orange-600 hover:text-orange-700 font-semibold transition-colors"
+                className="text-primary-600 hover:text-primary-700 font-semibold transition-colors"
               >
                 Create Account
               </Link>

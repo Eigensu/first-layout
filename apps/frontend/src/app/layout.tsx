@@ -29,6 +29,11 @@ export const metadata: Metadata = {
     "The ultimate fantasy cricket platform with modern UI and real-time updates",
   keywords: "fantasy cricket, sports, gaming, team building",
   authors: [{ name: "WalleFantasy Team" }],
+  icons: {
+    icon: "/logo.jpeg",
+    shortcut: "/logo.jpeg",
+    apple: "/logo.jpeg",
+  },
 };
 
 export const viewport = {

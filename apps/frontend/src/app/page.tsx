@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Users, TrendingUp, Shield, ArrowRight } from "lucide-react";
@@ -42,7 +43,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
       {isLoading ? (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-orange-50 to-gray-50">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
           <div className="text-center">
             <Spinner size="lg" />
             <p className="mt-4 text-gray-600">Loading WalleFantasy...</p>
@@ -61,7 +62,7 @@ export default function HomePage() {
                   ) : (
                     <Link
                       href="/auth/login"
-                      className="inline-flex items-center rounded-full bg-gradient-to-r from-orange-500 to-orange-600 text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(255,100,0,0.35)] transition"
+                      className="inline-flex items-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)] transition"
                     >
                       Join Us
                     </Link>
@@ -82,7 +83,7 @@ export default function HomePage() {
                   transition={{ duration: 0.8 }}
                   className="text-center md:text-left"
                 >
-                  <h1 className="text-4xl sm:text-5xl lg:text-5xl font-extrabold text-orange-700 tracking-tight leading-tight mb-4">
+                  <h1 className="text-4xl sm:text-5xl lg:text-5xl font-extrabold text-primary-700 tracking-tight leading-tight mb-4">
                     Cricket Fantasy League
                   </h1>
                   <p className="text-lg sm:text-xl text-gray-700 mb-8 max-w-xl mx-auto md:mx-0 leading-relaxed">
@@ -93,7 +94,7 @@ export default function HomePage() {
                     {isAuthenticated ? (
                       <Link
                         href="/demo"
-                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 shadow-lg hover:shadow-[0_0_20px_rgba(255,100,0,0.5)] transition-all duration-300 group"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
                       >
                         Make Your Team Now
                         <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
@@ -102,7 +103,7 @@ export default function HomePage() {
                       <>
                         <Link
                           href="/auth/login"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 shadow-lg hover:shadow-[0_0_20px_rgba(255,100,0,0.5)] transition-all duration-300 group"
+                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
                         >
                           Get Started
                           <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
@@ -125,13 +126,21 @@ export default function HomePage() {
                   transition={{ duration: 0.8, delay: 0.2 }}
                   className="hidden md:flex justify-center items-center"
                 >
-                  <div className="w-full h-80 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-200 shadow-sm">
+                  <div className="w-full h-80 bg-gradient-to-br from-primary-100 to-primary-50 rounded-2xl flex items-center justify-center border border-primary-200 shadow-lg">
                     <div className="text-center">
-                      <p className="text-gray-800 text-xl">
-                        Visual Element Here
+                      <Image
+                        src="/logo.jpeg"
+                        alt="WalleFantasy"
+                        width={200}
+                        height={200}
+                        className="rounded-3xl shadow-2xl object-cover mx-auto mb-4"
+                        priority
+                      />
+                      <p className="text-primary-700 text-2xl font-bold">
+                        WalleFantasy
                       </p>
-                      <p className="text-sm text-gray-500">
-                        (e.g., Image of a cricketer)
+                      <p className="text-sm text-primary-600 mt-2">
+                        Your Fantasy Cricket Partner
                       </p>
                     </div>
                   </div>
@@ -141,10 +150,10 @@ export default function HomePage() {
           </section>
 
           {/* Features Section */}
-          <section className="py-16 bg-gradient-to-br from-orange-200 via-orange-100 to-orange-300 relative rounded-3xl mx-4 mb-10 sm:mb-12">
+          <section className="py-16 bg-gradient-to-br from-primary-200 via-primary-100 to-primary-300 relative rounded-3xl mx-4 mb-10 sm:mb-12">
             <div className="container mx-auto px-4 sm:px-6 max-w-screen-xl">
               <div className="text-center mb-10 sm:mb-14">
-                <h2 className="text-5xl font-extrabold text-center bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent leading-tight pb-1 mb-8">
+                <h2 className="text-5xl font-extrabold text-center bg-gradient-to-r from-primary-500 to-accent-600 bg-clip-text text-transparent leading-tight pb-1 mb-8">
                   Why Choose Us?
                 </h2>
                 <p className="text-lg text-gray-600 max-w-2xl mx-auto">
@@ -161,9 +170,9 @@ export default function HomePage() {
                   return (
                     <div
                       key={feature.title}
-                      className="relative bg-white/70 backdrop-blur-lg border border-orange-100 rounded-2xl p-8 shadow-md"
+                      className="relative bg-white/70 backdrop-blur-lg border border-primary-100 rounded-2xl p-8 shadow-md"
                     >
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center mb-4 shadow-inner">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-400 to-accent-500 flex items-center justify-center mb-4 shadow-inner">
                         <Icon className="w-7 h-7 text-white" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -178,7 +187,7 @@ export default function HomePage() {
           </section>
 
           {/* CTA Section */}
-          <section className="relative py-20 bg-gradient-to-br from-orange-600 via-red-500 to-yellow-500 text-white overflow-hidden rounded-3xl mx-4 mb-8 sm:mb-10">
+          <section className="relative py-20 bg-gradient-to-br from-primary-600 via-accent-500 to-accent-400 text-white overflow-hidden rounded-3xl mx-4 mb-8 sm:mb-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.1),transparent_60%)]" />
             <div className="container mx-auto px-6 text-center relative z-10 max-w-screen-xl">
               <motion.div
@@ -197,7 +206,7 @@ export default function HomePage() {
                 {isAuthenticated ? (
                   <Link
                     href="/dashboard"
-                    className="inline-flex items-center bg-white text-orange-600 font-semibold px-8 py-3 rounded-full text-lg shadow-lg hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-300 animate-pulse-slow"
+                    className="inline-flex items-center bg-white text-primary-600 font-semibold px-8 py-3 rounded-full text-lg shadow-lg hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-300 animate-pulse-slow"
                   >
                     Visit Your Dashboard
                     <ArrowRight className="ml-2" />
@@ -205,7 +214,7 @@ export default function HomePage() {
                 ) : (
                   <Link
                     href="/auth/register"
-                    className="inline-flex items-center bg-white text-orange-600 font-semibold px-8 py-3 rounded-full text-lg shadow-lg hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-300 animate-pulse-slow"
+                    className="inline-flex items-center bg-white text-primary-600 font-semibold px-8 py-3 rounded-full text-lg shadow-lg hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-300 animate-pulse-slow"
                   >
                     Create Your Team Now
                   </Link>

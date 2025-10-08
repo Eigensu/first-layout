@@ -28,11 +28,11 @@ const Avatar: React.FC<AvatarProps> = ({
 
   const getGradient = (name: string): string => {
     const gradients = [
-      "bg-gradient-to-br from-orange-400 to-red-500",
+      "bg-gradient-to-br from-primary-400 to-red-500",
       "bg-gradient-to-br from-blue-400 to-purple-500",
       "bg-gradient-to-br from-green-400 to-blue-500",
       "bg-gradient-to-br from-purple-400 to-pink-500",
-      "bg-gradient-to-br from-yellow-400 to-orange-500",
+      "bg-gradient-to-br from-yellow-400 to-primary-500",
       "bg-gradient-to-br from-indigo-400 to-purple-500",
     ];
 

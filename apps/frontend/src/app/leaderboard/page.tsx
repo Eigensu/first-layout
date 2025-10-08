@@ -32,7 +32,7 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
       {/* Navigation */}
       <div className="pt-6 pb-4">
         <PillNavbar activeId="leaderboard" />
@@ -43,7 +43,7 @@ export default function LeaderboardPage() {
           {/* Header */}
           <div className="text-center mb-12">
             <div className="flex items-center justify-center gap-3 mb-4">
-              <Trophy className="w-10 h-10 text-orange-600" />
+              <Trophy className="w-10 h-10 text-primary-600" />
               <h1 className="text-4xl md:text-5xl font-bold text-gray-900">
                 Global Leaderboard
               </h1>

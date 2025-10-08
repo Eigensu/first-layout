@@ -199,7 +199,7 @@ export default function DemoPage() {
       {/* Hero Section */}
       <div className="px-4 mb-10">
         <div className="text-center max-w-3xl mx-auto mt-6">
-          <h1 className="text-3xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-orange-500 to-red-500">
+          <h1 className="text-3xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-red-500">
             Build Your Dream Team
           </h1>
           <p className="mt-2 text-gray-600 text-base md:text-lg">

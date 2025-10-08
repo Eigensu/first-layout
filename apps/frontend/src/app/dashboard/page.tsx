@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -27,20 +28,20 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M13 2L3 14h8l-2 8 10-12h-8l2-8z" />
-                </svg>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg overflow-hidden">
+                <Image
+                  src="/logo.jpeg"
+                  alt="WalleFantasy Logo"
+                  width={48}
+                  height={48}
+                  className="object-cover"
+                />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -76,7 +77,7 @@ function DashboardContent() {
         {/* User Info Card */}
         <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
           <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-            <User className="w-5 h-5 mr-2 text-orange-600" />
+            <User className="w-5 h-5 mr-2 text-primary-600" />
             Your Profile
           </h3>
 
@@ -152,7 +153,7 @@ function DashboardContent() {
         <div className="bg-white rounded-3xl shadow-xl p-8">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Coming Soon</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-6 text-center">
+            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-6 text-center">
               <div className="text-4xl mb-3">🏏</div>
               <h4 className="font-semibold text-gray-900 mb-2">Create Teams</h4>
               <p className="text-sm text-gray-600">
