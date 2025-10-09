@@ -23,14 +23,14 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
 }) => {
   return (
     <nav
-      className={`bg-white shadow-lg rounded-2xl mx-4 mt-4 p-2 ${className}`}
+      className={`bg-white shadow-lg rounded-2xl mx-2 sm:mx-4 mt-4 p-1.5 sm:p-2 ${className}`}
     >
-      <div className="flex space-x-1 overflow-x-auto">
+      <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             className={`
-              flex items-center space-x-2 px-4 py-3 rounded-xl font-medium transition-all relative whitespace-nowrap
+              flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 sm:py-3 rounded-xl font-medium transition-all relative whitespace-nowrap text-sm sm:text-base
               ${
                 activeTab === tab.id
                   ? "bg-gradient-primary text-white shadow-lg transform scale-105"
@@ -41,18 +41,19 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
           >
             {tab.icon && (
               <span
-                className={
+                className={`${
                   activeTab === tab.id ? "text-white" : "text-gray-500"
-                }
+                } w-4 h-4 sm:w-5 sm:h-5`}
               >
                 {tab.icon}
               </span>
             )}
-            <span>{tab.label}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.label.split(" ")[0]}</span>
             {tab.badge && tab.badge > 0 && (
               <span
                 className={`
-                inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full
+                inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 text-xs font-bold rounded-full
                 ${
                   activeTab === tab.id
                     ? "bg-white/20 text-white"

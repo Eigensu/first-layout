@@ -32,14 +32,24 @@ function UserMenuComp() {
         U
       </button>
 
-      {/* Account dropdown toggle */}
+      {/* Account dropdown toggle - Hidden on mobile, shown on desktop */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
+        className="hidden sm:inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
         aria-haspopup="menu"
         aria-expanded={open}
       >
         <span className="text-gray-700">Account</span>
+      </button>
+
+      {/* Mobile: Avatar also toggles dropdown */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="sm:hidden text-xs text-gray-600"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        Menu
       </button>
 
       {open && (
@@ -92,4 +102,3 @@ function UserMenuComp() {
 
 export default UserMenuComp;
 export { UserMenuComp as UserMenu };
-

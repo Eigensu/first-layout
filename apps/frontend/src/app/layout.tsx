@@ -24,11 +24,11 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WalleFantasy - Build Your Dream Team",
+  title: "Wall-E Arena - Build Your Dream Team",
   description:
     "The ultimate fantasy cricket platform with modern UI and real-time updates",
   keywords: "fantasy cricket, sports, gaming, team building",
-  authors: [{ name: "WalleFantasy Team" }],
+  authors: [{ name: "Wall-E Arena Team" }],
   icons: {
     icon: "/logo.jpeg",
     shortcut: "/logo.jpeg",

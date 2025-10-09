@@ -8,8 +8,11 @@ module.exports = {
   ],
   theme: {
     extend: {
+      screens: {
+        xs: "475px", // Extra small devices
+      },
       colors: {
-        // WalleFantasy Color Palette - Golden Beige Theme (Logo-Inspired)
+        // Wall-E Arena Color Palette - Golden Beige Theme (Logo-Inspired)
         primary: {
           50: "#fdfcfa",
           100: "#f9f7f3", // Background ivory

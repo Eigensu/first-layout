@@ -70,20 +70,24 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
   if (showTopThree && entry.rank <= 3) {
     return (
       <div
-        className={`${getBackgroundClass()} rounded-3xl p-6 transition-all duration-300 hover:shadow-xl relative overflow-hidden`}
+        className={`${getBackgroundClass()} rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all duration-300 hover:shadow-xl relative overflow-hidden`}
       >
         {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-200/30 to-transparent rounded-full -mr-16 -mt-16" />
+        <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-primary-200/30 to-transparent rounded-full -mr-12 sm:-mr-16 -mt-12 sm:-mt-16" />
 
         <div className="relative flex flex-col items-center text-center">
           {/* Rank badge */}
-          <div className="mb-4">{getRankIcon(entry.rank)}</div>
+          <div className="mb-3 sm:mb-4">{getRankIcon(entry.rank)}</div>
 
           {/* Avatar */}
-          <div className="relative mb-4">
-            <Avatar name={entry.displayName} size="xl" />
+          <div className="relative mb-3 sm:mb-4">
+            <Avatar
+              name={entry.displayName}
+              size="lg"
+              className="sm:w-20 sm:h-20"
+            />
             {entry.rank === 1 && (
-              <div className="absolute -top-2 -right-2 bg-yellow-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shadow-lg">
+              <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 bg-yellow-500 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs sm:text-sm font-bold shadow-lg">
                 1
               </div>
             )}
@@ -91,22 +95,24 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
           {/* User info */}
           <div className="mb-2">
-            <h3 className="font-bold text-xl text-gray-900">
+            <h3 className="font-bold text-base sm:text-xl text-gray-900 line-clamp-1">
               {entry.displayName}
             </h3>
-            <p className="text-sm text-gray-600">{entry.teamName}</p>
+            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
+              {entry.teamName}
+            </p>
           </div>
 
           {/* Points */}
-          <div className="mt-3">
-            <p className="text-3xl font-bold text-primary-600">
+          <div className="mt-2 sm:mt-3">
+            <p className="text-2xl sm:text-3xl font-bold text-primary-600">
               {entry.points.toLocaleString()}
             </p>
-            <p className="text-xs text-gray-500 mt-1">points</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">points</p>
           </div>
 
           {/* Rank change */}
-          {getRankChangeIndicator(entry.rankChange)}
+          <div className="mt-2">{getRankChangeIndicator(entry.rankChange)}</div>
         </div>
       </div>
     );
@@ -115,41 +121,57 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
   // Standard leaderboard row
   return (
     <div
-      className={`${getBackgroundClass()} rounded-2xl p-4 transition-all duration-300 hover:shadow-md flex items-center justify-between`}
+      className={`${getBackgroundClass()} rounded-2xl p-3 sm:p-4 transition-all duration-300 hover:shadow-md`}
     >
-      <div className="flex items-center gap-4 flex-1">
-        {/* Rank */}
-        <div className="flex items-center justify-center w-12 h-12 bg-gray-50 rounded-full font-bold text-gray-700">
-          {entry.rank <= 3 ? getRankIcon(entry.rank) : `#${entry.rank}`}
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        {/* Left side: Rank, Avatar, and Info */}
+        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+          {/* Rank */}
+          <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 bg-gray-50 rounded-full font-bold text-gray-700 text-sm sm:text-base flex-shrink-0">
+            {entry.rank <= 3 ? getRankIcon(entry.rank) : `#${entry.rank}`}
+          </div>
+
+          {/* Avatar and Info */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <Avatar
+              name={entry.displayName}
+              size="md"
+              className="flex-shrink-0 hidden xs:block"
+            />
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                {entry.displayName}
+              </h4>
+              <p className="text-xs sm:text-sm text-gray-600 truncate">
+                {entry.teamName}
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Avatar and Info */}
-        <div className="flex items-center gap-3 flex-1">
-          <Avatar
-            name={entry.displayName}
-            size="md"
-            className="flex-shrink-0"
-          />
-          <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-gray-900 truncate">
-              {entry.displayName}
-            </h4>
-            <p className="text-sm text-gray-600 truncate">{entry.teamName}</p>
+        {/* Right side: Points and rank change */}
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-3 flex-shrink-0">
+          {/* Rank change indicator - hide on very small screens */}
+          <div className="hidden sm:block">
+            {getRankChangeIndicator(entry.rankChange)}
+          </div>
+
+          {/* Points */}
+          <div className="text-right">
+            <p className="text-lg sm:text-2xl font-bold text-primary-600 leading-tight">
+              {entry.points.toLocaleString()}
+            </p>
+            <p className="text-[10px] sm:text-xs text-gray-500">points</p>
           </div>
         </div>
       </div>
 
-      {/* Right side: Points and rank change */}
-      <div className="flex items-center gap-3">
-        {getRankChangeIndicator(entry.rankChange)}
-
-        <div className="text-right">
-          <p className="text-2xl font-bold text-primary-600">
-            {entry.points.toLocaleString()}
-          </p>
-          <p className="text-xs text-gray-500">points</p>
+      {/* Rank change indicator - show on small screens below */}
+      {entry.rankChange !== undefined && entry.rankChange !== 0 && (
+        <div className="sm:hidden mt-2 flex justify-end">
+          {getRankChangeIndicator(entry.rankChange)}
         </div>
-      </div>
+      )}
     </div>
   );
 };

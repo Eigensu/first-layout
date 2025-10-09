@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Trophy, Users, TrendingUp, Shield, ArrowRight } from "lucide-react";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { UserMenu } from "@/components/navigation/UserMenu";
+import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spinner } from "@/components/ui/Loading";
 
@@ -46,17 +47,33 @@ export default function HomePage() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
           <div className="text-center">
             <Spinner size="lg" />
-            <p className="mt-4 text-gray-600">Loading WalleFantasy...</p>
+            <p className="mt-4 text-gray-600">Loading Wall-E Arena...</p>
           </div>
         </div>
       ) : (
         <>
-          {/* Top Navbar with standalone Join Us button on the right - Use default items so icons appear */}
+          {/* Top Navbar with standalone Join Us button on the right */}
           <div className="relative z-50 mt-4 mb-6">
             <div className="max-w-screen-xl mx-auto px-4 sm:px-6">
-              <div className="relative">
-                <PillNavbar className="" />
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden md:block">
+              <div className="sm:block sm:relative">
+                <PillNavbar
+                  className=""
+                  mobileMenuContent={
+                    isAuthenticated ? (
+                      <MobileUserMenu />
+                    ) : (
+                      <Link
+                        href="/auth/login"
+                        className="block w-full text-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)] transition"
+                      >
+                        Join Us
+                      </Link>
+                    )
+                  }
+                />
+
+                {/* Desktop: Show UserMenu/Join absolutely positioned */}
+                <div className="hidden sm:block absolute right-0 top-1/2 -translate-y-1/2">
                   {isAuthenticated ? (
                     <UserMenu />
                   ) : (
@@ -130,14 +147,14 @@ export default function HomePage() {
                     <div className="text-center">
                       <Image
                         src="/logo.jpeg"
-                        alt="WalleFantasy"
+                        alt="Wall-E Arena"
                         width={200}
                         height={200}
                         className="rounded-3xl shadow-2xl object-cover mx-auto mb-4"
                         priority
                       />
                       <p className="text-primary-700 text-2xl font-bold">
-                        WalleFantasy
+                        Wall-E Arena
                       </p>
                       <p className="text-sm text-primary-600 mt-2">
                         Your Fantasy Cricket Partner

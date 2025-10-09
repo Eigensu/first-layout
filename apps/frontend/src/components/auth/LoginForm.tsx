@@ -55,14 +55,14 @@ export function LoginForm() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
             <Image
               src="/logo.jpeg"
-              alt="WalleFantasy Logo"
+              alt="Wall-E Arena Logo"
               width={64}
               height={64}
               className="object-cover"
             />
           </div>
           <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">
-            WalleFantasy
+            Wall-E Arena
           </h1>
         </div>
         <p className="text-gray-600">Welcome back! Ready to play?</p>

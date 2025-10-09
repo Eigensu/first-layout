@@ -14,6 +14,7 @@ import {
 } from "@/components";
 import type { Player } from "@/components";
 import { UserMenu } from "@/components/navigation/UserMenu";
+import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 
 const mockPlayers: Player[] = [
@@ -82,12 +83,17 @@ export default function DemoPage() {
   const [activeRole, setActiveRole] = useState<string>("Batsman");
 
   // Progress through categories in order
-  const ROLE_SEQUENCE = ["Batsman", "Bowler", "All-Rounder", "Wicket-Keeper"] as const;
+  const ROLE_SEQUENCE = [
+    "Batsman",
+    "Bowler",
+    "All-Rounder",
+    "Wicket-Keeper",
+  ] as const;
 
   const ROLE_LIMITS = useMemo(
     () => ({
-      "Batsman": 4,
-      "Bowler": 4,
+      Batsman: 4,
+      Bowler: 4,
       "All-Rounder": 4,
       "Wicket-Keeper": 4,
     }),
@@ -125,29 +131,37 @@ export default function DemoPage() {
   );
 
   const goToNextRole = () => {
-    const idx = ROLE_SEQUENCE.indexOf(activeRole as typeof ROLE_SEQUENCE[number]);
+    const idx = ROLE_SEQUENCE.indexOf(
+      activeRole as (typeof ROLE_SEQUENCE)[number]
+    );
     const next = ROLE_SEQUENCE[Math.min(idx + 1, ROLE_SEQUENCE.length - 1)];
     setActiveRole(next);
   };
 
   const goToPrevRole = () => {
-    const idx = ROLE_SEQUENCE.indexOf(activeRole as typeof ROLE_SEQUENCE[number]);
+    const idx = ROLE_SEQUENCE.indexOf(
+      activeRole as (typeof ROLE_SEQUENCE)[number]
+    );
     const prev = ROLE_SEQUENCE[Math.max(idx - 1, 0)];
     setActiveRole(prev);
   };
 
   const isFirstRole = useMemo(
-    () => ROLE_SEQUENCE.indexOf(activeRole as typeof ROLE_SEQUENCE[number]) === 0,
+    () =>
+      ROLE_SEQUENCE.indexOf(activeRole as (typeof ROLE_SEQUENCE)[number]) === 0,
     [activeRole]
   );
 
   // Gradient helper for Step 3 avatars (persist category colors across steps)
   const getRoleAvatarGradient = (role: string) => {
     const r = role.toLowerCase();
-    if (r === "batsman" || r === "batsmen") return "bg-gradient-to-br from-amber-400 to-yellow-600";
+    if (r === "batsman" || r === "batsmen")
+      return "bg-gradient-to-br from-amber-400 to-yellow-600";
     if (r === "bowler") return "bg-gradient-to-br from-blue-500 to-indigo-600";
-    if (r === "all-rounder" || r === "allrounder") return "bg-gradient-to-br from-emerald-400 to-teal-600";
-    if (r === "wicket-keeper" || r === "wicketkeeper") return "bg-gradient-to-br from-purple-500 to-pink-600";
+    if (r === "all-rounder" || r === "allrounder")
+      return "bg-gradient-to-br from-emerald-400 to-teal-600";
+    if (r === "wicket-keeper" || r === "wicketkeeper")
+      return "bg-gradient-to-br from-purple-500 to-pink-600";
     return undefined;
   };
 
@@ -186,13 +200,21 @@ export default function DemoPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
       {/* Header: Navbar + User menu */}
       <div className="relative z-50 py-5">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 relative">
-          <PillNavbar />
-          {isAuthenticated && (
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden md:block">
-              <UserMenu />
-            </div>
-          )}
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6">
+          <div className="sm:block sm:relative">
+            <PillNavbar
+              mobileMenuContent={
+                isAuthenticated ? <MobileUserMenu /> : undefined
+              }
+            />
+
+            {/* Desktop: Show UserMenu absolutely positioned */}
+            {isAuthenticated && (
+              <div className="hidden sm:block absolute right-0 top-1/2 -translate-y-1/2">
+                <UserMenu />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -220,11 +242,7 @@ export default function DemoPage() {
                   className=""
                 />
               </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleClearAll}
-              >
+              <Button variant="primary" size="sm" onClick={handleClearAll}>
                 Clear All
               </Button>
             </div>
@@ -251,29 +269,29 @@ export default function DemoPage() {
 
               {/* Role Filter Tabs */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {(["Batsman", "Bowler", "All-Rounder", "Wicket-Keeper"] as const).map(
-                  (role) => {
-                    const limit = ROLE_LIMITS[role as keyof typeof ROLE_LIMITS];
-                    const count = selectedCountByRole[role] || 0;
-                    const isActive = activeRole === role;
-                    return (
-                      <Button
-                        key={role}
-                        variant={isActive ? "primary" : "ghost"}
-                        size="sm"
-                        onClick={() => setActiveRole(role)}
-                        className="rounded-full"
-                      >
-                        {role}
-                        {limit !== undefined && (
-                          <span className="ml-2 text-xs text-gray-600">
-                            {(count || 0)}/{limit}
-                          </span>
-                        )}
-                      </Button>
-                    );
-                  }
-                )}
+                {(
+                  ["Batsman", "Bowler", "All-Rounder", "Wicket-Keeper"] as const
+                ).map((role) => {
+                  const limit = ROLE_LIMITS[role as keyof typeof ROLE_LIMITS];
+                  const count = selectedCountByRole[role] || 0;
+                  const isActive = activeRole === role;
+                  return (
+                    <Button
+                      key={role}
+                      variant={isActive ? "primary" : "ghost"}
+                      size="sm"
+                      onClick={() => setActiveRole(role)}
+                      className="rounded-full"
+                    >
+                      {role}
+                      {limit !== undefined && (
+                        <span className="ml-2 text-xs text-gray-600">
+                          {count || 0}/{limit}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
 
               {/* Player List with constraints */}
@@ -402,105 +420,141 @@ export default function DemoPage() {
                 {selectedPlayers.length > 0 ? (
                   <>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                    <div className={`${selectedPlayers.length > 0 ? "bg-gradient-to-br from-success-50 to-success-100 border-success-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}>
-                      <div className={`text-2xl font-bold mb-1 ${selectedPlayers.length > 0 ? "text-success-700" : "text-gray-700"}`}>
-                        {selectedPlayers.length}
+                      <div
+                        className={`${selectedPlayers.length > 0 ? "bg-gradient-to-br from-success-50 to-success-100 border-success-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
+                      >
+                        <div
+                          className={`text-2xl font-bold mb-1 ${selectedPlayers.length > 0 ? "text-success-700" : "text-gray-700"}`}
+                        >
+                          {selectedPlayers.length}
+                        </div>
+                        <div
+                          className={`text-sm ${selectedPlayers.length > 0 ? "text-success-600" : "text-gray-500"}`}
+                        >
+                          Players Selected
+                        </div>
                       </div>
-                      <div className={`text-sm ${selectedPlayers.length > 0 ? "text-success-600" : "text-gray-500"}`}>
-                        Players Selected
+
+                      <div
+                        className={`${captainId ? "bg-gradient-to-br from-warning-50 to-warning-100 border-warning-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
+                      >
+                        <div
+                          className={`text-2xl font-bold mb-1 ${captainId ? "text-warning-700" : "text-gray-700"}`}
+                        >
+                          {captainId ? "1" : "0"}
+                        </div>
+                        <div
+                          className={`text-sm ${captainId ? "text-warning-600" : "text-gray-500"}`}
+                        >
+                          Captain
+                        </div>
+                      </div>
+
+                      <div
+                        className={`${viceCaptainId ? "bg-gradient-to-br from-secondary-50 to-secondary-100 border-secondary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
+                      >
+                        <div
+                          className={`text-2xl font-bold mb-1 ${viceCaptainId ? "text-secondary-700" : "text-gray-700"}`}
+                        >
+                          {viceCaptainId ? "1" : "0"}
+                        </div>
+                        <div
+                          className={`text-sm ${viceCaptainId ? "text-secondary-600" : "text-gray-500"}`}
+                        >
+                          Vice-Captain
+                        </div>
+                      </div>
+
+                      <div
+                        className={`${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
+                      >
+                        <div
+                          className={`text-2xl font-bold mb-1 ${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "text-primary-700" : "text-gray-700"}`}
+                        >
+                          ₹
+                          {mockPlayers
+                            .filter((p) => selectedPlayers.includes(p.id))
+                            .reduce((sum, p) => sum + p.price, 0)
+                            .toFixed(1)}
+                          M
+                        </div>
+                        <div
+                          className={`text-sm ${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "text-primary-600" : "text-gray-500"}`}
+                        >
+                          Team Value
+                        </div>
                       </div>
                     </div>
 
-                    <div className={`${captainId ? "bg-gradient-to-br from-warning-50 to-warning-100 border-warning-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}>
-                      <div className={`text-2xl font-bold mb-1 ${captainId ? "text-warning-700" : "text-gray-700"}`}>
-                        {captainId ? "1" : "0"}
-                      </div>
-                      <div className={`text-sm ${captainId ? "text-warning-600" : "text-gray-500"}`}>Captain</div>
-                    </div>
-
-                    <div className={`${viceCaptainId ? "bg-gradient-to-br from-secondary-50 to-secondary-100 border-secondary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}>
-                      <div className={`text-2xl font-bold mb-1 ${viceCaptainId ? "text-secondary-700" : "text-gray-700"}`}>
-                        {viceCaptainId ? "1" : "0"}
-                      </div>
-                      <div className={`text-sm ${viceCaptainId ? "text-secondary-600" : "text-gray-500"}`}>
-                        Vice-Captain
-                      </div>
-                    </div>
-
-                    <div className={`${(mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0) ? "bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}>
-                      <div className={`text-2xl font-bold mb-1 ${(mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0) ? "text-primary-700" : "text-gray-700"}`}>
-                        ₹
+                    {/* Team Preview */}
+                    <Card className="p-6">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                        Your Dream Team
+                      </h4>
+                      <div className="space-y-3">
                         {mockPlayers
-                          .filter((p) => selectedPlayers.includes(p.id))
-                          .reduce((sum, p) => sum + p.price, 0)
-                          .toFixed(1)}
-                        M
-                      </div>
-                      <div className={`text-sm ${(mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0) ? "text-primary-600" : "text-gray-500"}`}>Team Value</div>
-                    </div>
-                  </div>
-
-                  {/* Team Preview */}
-                  <Card className="p-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4">
-                      Your Dream Team
-                    </h4>
-                    <div className="space-y-3">
-                      {mockPlayers
-                        .filter((player) => selectedPlayers.includes(player.id))
-                        .map((player) => (
-                          <div
-                            key={player.id}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <Avatar name={player.name} size="sm" gradientClassName={getRoleAvatarGradient(player.role)} />
-                              <div>
-                                <div className="font-medium text-gray-900">
-                                  {player.name}
-                                  {player.id === captainId && (
-                                    <Badge
-                                      variant="warning"
-                                      size="sm"
-                                      className="ml-2"
-                                    >
-                                      Captain
-                                    </Badge>
+                          .filter((player) =>
+                            selectedPlayers.includes(player.id)
+                          )
+                          .map((player) => (
+                            <div
+                              key={player.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex items-center space-x-3">
+                                <Avatar
+                                  name={player.name}
+                                  size="sm"
+                                  gradientClassName={getRoleAvatarGradient(
+                                    player.role
                                   )}
-                                  {player.id === viceCaptainId && (
-                                    <Badge
-                                      variant="secondary"
-                                      size="sm"
-                                      className="ml-2"
-                                    >
-                                      Vice-Captain
-                                    </Badge>
-                                  )}
+                                />
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {player.name}
+                                    {player.id === captainId && (
+                                      <Badge
+                                        variant="warning"
+                                        size="sm"
+                                        className="ml-2"
+                                      >
+                                        Captain
+                                      </Badge>
+                                    )}
+                                    {player.id === viceCaptainId && (
+                                      <Badge
+                                        variant="secondary"
+                                        size="sm"
+                                        className="ml-2"
+                                      >
+                                        Vice-Captain
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {player.role} • {player.team}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium text-success-600">
+                                  {player.points} pts
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                  {player.role} • {player.team}
+                                  ₹{player.price}M
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="font-medium text-success-600">
-                                {player.points} pts
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                ₹{player.price}M
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </Card>
-                </>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No team selected
-                </div>
-              )}
-            </div>
+                          ))}
+                      </div>
+                    </Card>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No team selected
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-center py-8 text-gray-400 text-sm">
                 Finalize team in Step 2 to view summary

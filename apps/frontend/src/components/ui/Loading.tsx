@@ -48,7 +48,7 @@ const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
     <div className="text-center">
       <Spinner size="lg" className="mb-4 mx-auto" />
-      <p className="text-gray-600">Loading WalleFantasy...</p>
+      <p className="text-gray-600">Loading Wall-E Arena...</p>
     </div>
   </div>
 );

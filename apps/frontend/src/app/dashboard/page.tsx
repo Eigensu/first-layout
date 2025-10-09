@@ -37,7 +37,7 @@ function DashboardContent() {
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg overflow-hidden">
                 <Image
                   src="/logo.jpeg"
-                  alt="WalleFantasy Logo"
+                  alt="Wall-E Arena Logo"
                   width={48}
                   height={48}
                   className="object-cover"
@@ -45,7 +45,7 @@ function DashboardContent() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  WalleFantasy
+                  Wall-E Arena
                 </h1>
                 <p className="text-sm text-gray-500">Dashboard</p>
               </div>
@@ -70,7 +70,7 @@ function DashboardContent() {
             Welcome back, {user?.full_name || user?.username}! 👋
           </h2>
           <p className="text-gray-600">
-            You&apos;re successfully logged in to your WalleFantasy account.
+            You&apos;re successfully logged in to your Wall-E Arena account.
           </p>
         </div>
 
