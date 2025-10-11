@@ -125,8 +125,8 @@ export default function SponsorsPage() {
               Meet Our Sponsors
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              We're proud to partner with leading brands that share our vision
-              of creating the ultimate fantasy cricket experience.
+              We&apos;re proud to partner with leading brands that share our
+              vision of creating the ultimate fantasy cricket experience.
             </p>
           </motion.div>
         </div>

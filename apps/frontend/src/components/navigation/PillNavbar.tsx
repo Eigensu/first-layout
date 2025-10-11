@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Settings,
   LogOut,
+  Info,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -51,6 +52,12 @@ const DEFAULT_ITEMS: PillNavItem[] = [
     label: "Sponsors",
     href: "/sponsors",
     icon: <Star className="w-4 h-4" />,
+  },
+  {
+    id: "about",
+    label: "About",
+    href: "/about",
+    icon: <Info className="w-4 h-4" />,
   },
 ];
 
