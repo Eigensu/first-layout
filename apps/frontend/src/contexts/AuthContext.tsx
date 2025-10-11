@@ -39,11 +39,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(freshUser);
             localStorage.setItem("user", JSON.stringify(freshUser));
           } catch (error) {
-            console.error("Failed to fetch user data:", error);
+            // Silently fail if token is invalid
           }
         }
       } catch (error) {
-        console.error("Error loading user:", error);
+        // Silently fail
       } finally {
         setIsLoading(false);
       }
@@ -55,9 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(
     async (credentials: LoginCredentials, rememberMe: boolean = false) => {
       try {
-        setIsLoading(true);
-
-        // Call login API
         const tokens = await authApi.login(credentials);
 
         // Store tokens
@@ -80,8 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         const message = getErrorMessage(error);
         throw new Error(message);
-      } finally {
-        setIsLoading(false);
       }
     },
     [router]
@@ -90,9 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(
     async (credentials: RegisterCredentials) => {
       try {
-        setIsLoading(true);
-
-        // Call register API
         const tokens = await authApi.register(credentials);
 
         // Store tokens
@@ -109,8 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         const message = getErrorMessage(error);
         throw new Error(message);
-      } finally {
-        setIsLoading(false);
       }
     },
     [router]
@@ -126,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           await authApi.logout(refreshToken);
         } catch (error) {
-          console.error("Logout API error:", error);
+          // Silently fail
         }
       }
 
@@ -139,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       router.push("/auth/login");
     } catch (error) {
-      console.error("Logout error:", error);
+      // Silently fail
     }
   }, [router]);
 
@@ -163,7 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionStorage.setItem("refresh_token", tokens.refresh_token);
       }
     } catch (error) {
-      console.error("Token refresh error:", error);
       await logout();
     }
   }, [logout]);

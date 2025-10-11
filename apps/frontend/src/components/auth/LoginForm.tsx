@@ -37,11 +37,12 @@ export function LoginForm() {
     try {
       setIsLoading(true);
       setError(null);
+
       await login(data, rememberMe);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Login failed. Please try again."
-      );
+      const errorMessage =
+        err instanceof Error ? err.message : "Login failed. Please try again.";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

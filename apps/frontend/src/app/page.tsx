@@ -117,21 +117,13 @@ export default function HomePage() {
                         <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                       </Link>
                     ) : (
-                      <>
-                        <Link
-                          href="/auth/login"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
-                        >
-                          Get Started
-                          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Link>
-                        <Link
-                          href="/auth/login"
-                          className="inline-flex items-center border-2 border-white/30 bg-white/10 text-white hover:bg-white/20 px-8 py-3 rounded-full text-lg backdrop-blur-sm"
-                        >
-                          Sign In
-                        </Link>
-                      </>
+                      <Link
+                        href="/auth/login"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
+                      >
+                        Get Started
+                        <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                      </Link>
                     )}
                   </div>
                 </motion.div>

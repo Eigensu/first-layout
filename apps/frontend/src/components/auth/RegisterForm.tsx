@@ -59,12 +59,13 @@ export function RegisterForm() {
 
       const { confirmPassword, ...registerData } = data;
       await registerUser(registerData);
+      // No need to redirect here - AuthContext handles it
     } catch (err) {
-      setError(
+      const errorMessage =
         err instanceof Error
           ? err.message
-          : "Registration failed. Please try again."
-      );
+          : "Registration failed. Please try again.";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

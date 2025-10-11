@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, ChevronDown } from "lucide-react";
 
 function UserMenuComp() {
   const { logout } = useAuth();
@@ -22,34 +22,21 @@ function UserMenuComp() {
   }, []);
 
   return (
-    <div ref={ref} className="relative flex items-center gap-2">
-      {/* Avatar button navigates to /user */}
-      <button
-        onClick={() => router.push("/user")}
-        aria-label="User profile"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm shadow hover:brightness-110"
-      >
-        U
-      </button>
-
-      {/* Account dropdown toggle - Hidden on mobile, shown on desktop */}
+    <div ref={ref} className="relative">
+      {/* Single unified button with avatar and dropdown */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="hidden sm:inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
+        className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span className="text-gray-700">Account</span>
-      </button>
-
-      {/* Mobile: Avatar also toggles dropdown */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="sm:hidden text-xs text-gray-600"
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        Menu
+        <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm shadow">
+          U
+        </div>
+        <span className="hidden sm:inline text-gray-700">Account</span>
+        <ChevronDown
+          className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open && (
