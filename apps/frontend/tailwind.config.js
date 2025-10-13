@@ -137,14 +137,14 @@ module.exports = {
           "0 4px 25px -2px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
         large:
           "0 10px 40px -4px rgba(0, 0, 0, 0.1), 0 4px 25px -5px rgba(0, 0, 0, 0.1)",
-        glow: "0 0 20px rgba(255, 107, 53, 0.3)",
-        "glow-lg": "0 0 40px rgba(255, 107, 53, 0.2)",
+        glow: "0 0 20px rgba(191, 171, 121, 0.3)",
+        "glow-lg": "0 0 40px rgba(191, 171, 121, 0.25)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-conic":
           "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
-        "gradient-primary": "linear-gradient(135deg, #FF6B35 0%, #F7931E 100%)",
+        "gradient-primary": "linear-gradient(135deg, #bfab79 0%, #a89363 100%)",
         "gradient-secondary":
           "linear-gradient(135deg, #1E3A8A 0%, #0F172A 100%)",
         glass:

@@ -44,7 +44,7 @@ const DEFAULT_ITEMS: PillNavItem[] = [
   {
     id: "my-team",
     label: "My Team",
-    href: "/demo",
+    href: "/myteam",
     icon: <Users className="w-4 h-4" />,
   },
   {
@@ -157,7 +157,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                     ${isScrolled ? "px-4 py-2" : "px-6 py-2.5"}
                     ${
                       isActive
-                        ? "bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md"
+                        ? "bg-gradient-primary text-white shadow-md"
                         : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }
                   `}
@@ -183,7 +183,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   aria-haspopup="menu"
                   aria-expanded={userMenuOpen}
                 >
-                  <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm shadow">
+                  <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-primary text-white text-sm shadow">
                     U
                   </div>
                   <span className="text-gray-700">Account</span>
@@ -240,7 +240,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             ) : (
               <Link
                 href="/auth/login"
-                className="inline-flex items-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)] transition"
+                className="inline-flex items-center rounded-full bg-gradient-primary text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)] transition"
               >
                 Join Us
               </Link>
@@ -329,7 +329,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                     w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all
                     ${
                       isActive
-                        ? "bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md"
+                        ? "bg-gradient-primary text-white shadow-md"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     }
                   `}

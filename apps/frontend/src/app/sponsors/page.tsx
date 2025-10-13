@@ -100,7 +100,7 @@ export default function SponsorsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
       {/* Navigation */}
       <PillNavbar />
 
@@ -109,7 +109,7 @@ export default function SponsorsPage() {
 
       {/* Hero Section */}
       <section className="relative py-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-purple-500/10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-500/10 via-transparent to-primary-700/10" />
         <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -117,11 +117,11 @@ export default function SponsorsPage() {
             transition={{ duration: 0.6 }}
             className="text-center max-w-4xl mx-auto"
           >
-            <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-600 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
               Our Partners
             </div>
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-orange-600 via-purple-600 to-orange-600 bg-clip-text text-transparent">
+            <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-700 bg-clip-text text-transparent">
               Meet Our Sponsors
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
@@ -188,7 +188,7 @@ export default function SponsorsPage() {
                 onClick={() => setSelectedTier(tier.value)}
                 className={`px-6 py-3 rounded-full font-medium transition-all duration-300 ${
                   selectedTier === tier.value
-                    ? "bg-gradient-to-r from-orange-500 to-purple-500 text-white shadow-lg scale-105"
+                    ? "bg-gradient-primary text-white shadow-lg scale-105"
                     : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
                 }`}
               >
@@ -239,7 +239,7 @@ export default function SponsorsPage() {
       </section>
 
       {/* Call to Action */}
-      <section className="py-20 bg-gradient-to-r from-orange-500 to-purple-600">
+      <section className="py-20 bg-gradient-primary">
         <div className="container mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -256,7 +256,7 @@ export default function SponsorsPage() {
               Join our growing network of sponsors and reach millions of cricket
               enthusiasts worldwide.
             </p>
-            <button className="bg-white text-orange-600 px-8 py-4 rounded-full font-semibold text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300">
+            <button className="bg-white text-primary-700 px-8 py-4 rounded-full font-semibold text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300">
               Contact Us
             </button>
           </motion.div>

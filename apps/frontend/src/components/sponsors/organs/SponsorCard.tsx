@@ -103,7 +103,7 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
           href={sponsor.website}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-orange-600 hover:text-orange-700 font-medium text-sm group transition-colors duration-200"
+          className="inline-flex items-center gap-2 text-primary-700 hover:text-primary-800 font-medium text-sm group transition-colors duration-200"
         >
           Visit Website
           <ExternalLink className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-200" />

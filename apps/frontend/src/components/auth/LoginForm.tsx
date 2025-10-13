@@ -62,7 +62,7 @@ export function LoginForm() {
               className="object-cover"
             />
           </div>
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
             Wall-E Arena
           </h1>
         </div>
@@ -122,7 +122,7 @@ export function LoginForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            className="w-full bg-gradient-primary text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             disabled={isLoading}
           >
             {isLoading ? "Signing in..." : "Sign In"}

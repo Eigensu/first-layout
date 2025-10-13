@@ -30,6 +30,8 @@ interface PlayerCardProps {
   showActions?: boolean;
   compact?: boolean;
   className?: string;
+  displayRoleMap?: (role: string) => string;
+  compactShowPrice?: boolean;
 }
 
 const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -43,6 +45,8 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
   showActions = false,
   compact = false,
   className = "",
+  displayRoleMap,
+  compactShowPrice = false,
 }) => {
   const getRoleBadgeVariant = (role: string) => {
     switch (role.toLowerCase()) {
@@ -95,7 +99,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
           </div>
           <div className="flex items-center space-x-2 mt-1">
             <Badge variant={getRoleBadgeVariant(player.role)} size="sm">
-              {player.role}
+              {displayRoleMap ? displayRoleMap(player.role) : player.role}
             </Badge>
             <span className="text-xs text-gray-500">{player.team}</span>
           </div>
@@ -103,9 +107,15 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
         {/* Right: Points then select radio aligned on the same line */}
         <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-success-600 whitespace-nowrap">
-            {player.points} pts
-          </span>
+          {compactShowPrice ? (
+            <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
+              ₹{player.price.toFixed(1)}M
+            </span>
+          ) : (
+            <span className="text-sm font-medium text-success-600 whitespace-nowrap">
+              {player.points} pts
+            </span>
+          )}
           <div
             className={`
               w-5 h-5 rounded-full border-2 flex items-center justify-center
@@ -167,7 +177,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
               <h4 className="font-semibold text-gray-900">{player.name}</h4>
               <div className="flex items-center space-x-2 mt-1">
                 <Badge variant={getRoleBadgeVariant(player.role)} size="sm">
-                  {player.role}
+                  {displayRoleMap ? displayRoleMap(player.role) : player.role}
                 </Badge>
                 <span className="text-sm text-gray-500">{player.team}</span>
               </div>
@@ -288,6 +298,8 @@ interface PlayerListProps {
   roleLimits?: Record<string, number>;
   /** Optional active role filter. Use "All" or undefined for no filter */
   filterRole?: string;
+  /** Optional active slot filter. If provided, overrides filterRole */
+  filterSlot?: number;
   /** Sort players by role category order */
   sortByRole?: boolean;
   /** Called if a selection is blocked due to limits */
@@ -295,6 +307,10 @@ interface PlayerListProps {
   showActions?: boolean;
   compact?: boolean;
   className?: string;
+  /** Optional mapper to override the displayed role label for child cards */
+  displayRoleMap?: (role: string) => string;
+  /** When compact, show price instead of points on the right */
+  compactShowPrice?: boolean;
 }
 
 const PlayerList: React.FC<PlayerListProps> = ({
@@ -308,11 +324,14 @@ const PlayerList: React.FC<PlayerListProps> = ({
   maxSelections = 16,
   roleLimits,
   filterRole,
+  filterSlot,
   sortByRole = true,
   onBlockedSelect,
   showActions = false,
   compact = false,
   className = "",
+  displayRoleMap,
+  compactShowPrice = false,
 }) => {
   // Normalize role names to canonical categories
   const normalizeRole = (role: string): string => {
@@ -350,7 +369,9 @@ const PlayerList: React.FC<PlayerListProps> = ({
 
   const playersPrepared = React.useMemo(() => {
     let list = players.slice();
-    if (filterRole && filterRole !== "All") {
+    if (typeof filterSlot === "number") {
+      list = list.filter((p) => (p as any).slot === filterSlot);
+    } else if (filterRole && filterRole !== "All") {
       list = list.filter((p) => normalizeRole(p.role) === filterRole);
     }
     if (sortByRole) {
@@ -361,7 +382,7 @@ const PlayerList: React.FC<PlayerListProps> = ({
       });
     }
     return list;
-  }, [players, filterRole, sortByRole]);
+  }, [players, filterRole, filterSlot, sortByRole]);
 
   const handleSelect = (playerId: string) => {
     const isAlreadySelected = selectedPlayers.includes(playerId);
@@ -407,6 +428,8 @@ const PlayerList: React.FC<PlayerListProps> = ({
           onSetViceCaptain={onSetViceCaptain}
           showActions={showActions}
           compact={compact}
+          displayRoleMap={displayRoleMap}
+          compactShowPrice={compactShowPrice}
         />
       ))}
     </div>

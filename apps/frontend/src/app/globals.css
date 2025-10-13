@@ -38,7 +38,7 @@
   --text-tertiary: #8a8a8a;
 
   /* Custom Properties for Dynamic Theming */
-  --primary-gradient: linear-gradient(135deg, #bfab79 0%, #8c7853 100%);
+  --primary-gradient: linear-gradient(135deg, #bfab79 0%, #a89363 100%);
   --secondary-gradient: linear-gradient(135deg, #d9cba3 0%, #bfab79 100%);
   --glass-bg: linear-gradient(
     135deg,

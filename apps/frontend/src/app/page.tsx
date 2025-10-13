@@ -82,8 +82,8 @@ export default function HomePage() {
                   <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start items-center">
                     {isAuthenticated ? (
                       <Link
-                        href="/demo"
-                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
+                        href="/myteam"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
                       >
                         Make Your Team Now
                         <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
@@ -91,7 +91,7 @@ export default function HomePage() {
                     ) : (
                       <Link
                         href="/auth/login"
-                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-to-r from-primary-500 via-accent-500 to-accent-400 shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
                       >
                         Get Started
                         <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
@@ -134,7 +134,7 @@ export default function HomePage() {
           <section className="py-16 bg-gradient-to-br from-primary-200 via-primary-100 to-primary-300 relative rounded-3xl mx-4 mb-10 sm:mb-12">
             <div className="container mx-auto px-4 sm:px-6 max-w-screen-xl">
               <div className="text-center mb-10 sm:mb-14">
-                <h2 className="text-5xl font-extrabold text-center bg-gradient-to-r from-primary-500 to-accent-600 bg-clip-text text-transparent leading-tight pb-1 mb-8">
+                <h2 className="text-5xl font-extrabold text-center bg-gradient-primary bg-clip-text text-transparent leading-tight pb-1 mb-8">
                   Why Choose Us?
                 </h2>
                 <p className="text-lg text-gray-600 max-w-2xl mx-auto">
@@ -153,7 +153,7 @@ export default function HomePage() {
                       key={feature.title}
                       className="relative bg-white/70 backdrop-blur-lg border border-primary-100 rounded-2xl p-8 shadow-md"
                     >
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-400 to-accent-500 flex items-center justify-center mb-4 shadow-inner">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-primary flex items-center justify-center mb-4 shadow-inner">
                         <Icon className="w-7 h-7 text-white" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -168,7 +168,7 @@ export default function HomePage() {
           </section>
 
           {/* CTA Section */}
-          <section className="relative py-20 bg-gradient-to-br from-primary-600 via-accent-500 to-accent-400 text-white overflow-hidden rounded-3xl mx-4 mb-8 sm:mb-10">
+          <section className="relative py-20 bg-gradient-primary text-white overflow-hidden rounded-3xl mx-4 mb-8 sm:mb-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.1),transparent_60%)]" />
             <div className="container mx-auto px-6 text-center relative z-10 max-w-screen-xl">
               <motion.div

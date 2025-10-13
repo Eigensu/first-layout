@@ -101,7 +101,7 @@ export default function AboutPage() {
               <Sparkles className="w-4 h-4" />
               About Wall-E Arena
             </div>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-700 bg-clip-text text-transparent">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 bg-gradient-primary bg-clip-text text-transparent">
               Building the Future of Fantasy Cricket
             </h1>
             <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
@@ -125,7 +125,7 @@ export default function AboutPage() {
                 transition={{ duration: 0.6, delay: index * 0.1 }}
                 className="bg-white rounded-2xl p-6 sm:p-8 text-center shadow-md hover:shadow-xl transition-all"
               >
-                <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent mb-2">
+                <div className="text-3xl sm:text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
                   {stat.value}
                 </div>
                 <div className="text-gray-600 text-sm sm:text-base">
@@ -229,7 +229,7 @@ export default function AboutPage() {
                 viewport={{ once: true }}
                 className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-xl transition-all group"
               >
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-primary rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <value.icon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-3 text-gray-900">
@@ -308,7 +308,7 @@ export default function AboutPage() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
-            className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-3xl p-8 sm:p-12 text-center shadow-2xl"
+            className="bg-gradient-primary rounded-3xl p-8 sm:p-12 text-center shadow-2xl"
           >
             <div className="max-w-3xl mx-auto">
               <Award className="w-16 h-16 text-white mx-auto mb-6" />

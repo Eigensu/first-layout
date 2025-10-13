@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   PlayerCard,
   PlayerList,
@@ -13,92 +13,36 @@ import {
   Avatar,
 } from "@/components";
 import type { Player } from "@/components";
-import { UserMenu } from "@/components/navigation/UserMenu";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { useAuth } from "@/contexts/AuthContext";
+import { NEXT_PUBLIC_API_URL } from "@/config/env";
 
-const mockPlayers: Player[] = [
-  {
-    id: "1",
-    name: "Virat Kohli",
-    role: "Batsman",
-    team: "RCB",
-    points: 287,
-    price: 15.0,
-    stats: { matches: 12, runs: 543, average: 45.25 },
-  },
-  {
-    id: "2",
-    name: "MS Dhoni",
-    role: "Wicket-Keeper",
-    team: "CSK",
-    points: 234,
-    price: 14.5,
-    stats: { matches: 11, runs: 321, average: 35.67 },
-  },
-  {
-    id: "3",
-    name: "Jasprit Bumrah",
-    role: "Bowler",
-    team: "MI",
-    points: 195,
-    price: 11.5,
-    stats: { matches: 10, wickets: 18, average: 1.8 },
-  },
-  {
-    id: "4",
-    name: "Hardik Pandya",
-    role: "All-Rounder",
-    team: "MI",
-    points: 276,
-    price: 13.0,
-    stats: { matches: 12, runs: 298, wickets: 8, average: 24.83 },
-  },
-  {
-    id: "5",
-    name: "Rashid Khan",
-    role: "Bowler",
-    team: "GT",
-    points: 189,
-    price: 10.5,
-    stats: { matches: 11, wickets: 15, average: 1.36 },
-  },
-  {
-    id: "6",
-    name: "Shikhar Dhawan",
-    role: "Batsman",
-    team: "PBKS",
-    points: 198,
-    price: 9.5,
-    stats: { matches: 13, runs: 467, average: 35.92 },
-  },
-];
+type ApiPlayer = {
+  id: string;
+  name: string;
+  team?: string;
+  role?: string;
+  price: number;
+  slot: number;
+  points?: number;
+  image_url?: string | null;
+};
 
-export default function DemoPage() {
+export default function MyTeamPage() {
   const { isAuthenticated } = useAuth();
+  const [players, setPlayers] = useState<(Player & { slot: number })[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [captainId, setCaptainId] = useState<string>("");
   const [viceCaptainId, setViceCaptainId] = useState<string>("");
   const [currentStep, setCurrentStep] = useState(1);
-  const [activeRole, setActiveRole] = useState<string>("Batsman");
+  const [activeSlot, setActiveSlot] = useState<number>(1);
 
-  // Progress through categories in order
-  const ROLE_SEQUENCE = [
-    "Batsman",
-    "Bowler",
-    "All-Rounder",
-    "Wicket-Keeper",
-  ] as const;
+  // Slots order for Step 1
+  const SLOT_SEQUENCE = [1, 2, 3, 4] as const;
 
-  const ROLE_LIMITS = useMemo(
-    () => ({
-      Batsman: 4,
-      Bowler: 4,
-      "All-Rounder": 4,
-      "Wicket-Keeper": 4,
-    }),
-    []
-  );
+  const SLOT_LIMITS = useMemo(() => ({ 1: 4, 2: 4, 3: 4, 4: 4 }), []);
 
   const normalizeRole = (role: string): string => {
     const r = role.toLowerCase();
@@ -109,50 +53,90 @@ export default function DemoPage() {
     return role;
   };
 
-  const selectedCountByRole = useMemo(() => {
-    const counts: Record<string, number> = {};
+  // Display-only: map canonical role to Slot label
+  const roleToSlotLabel = (role: string): string => {
+    const r = normalizeRole(role);
+    if (r === "Batsman") return "Slot 1";
+    if (r === "Bowler") return "Slot 2";
+    if (r === "All-Rounder") return "Slot 3";
+    if (r === "Wicket-Keeper") return "Slot 4";
+    return r;
+  };
+
+  // Slot to internal canonical role mapping (for selection logic)
+  const slotToRole = (slot: number): string => {
+    if (slot === 1) return "Batsman";
+    if (slot === 2) return "Bowler";
+    if (slot === 3) return "All-Rounder";
+    if (slot === 4) return "Wicket-Keeper";
+    return "Batsman";
+  };
+
+  // Fetch players from backend
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${NEXT_PUBLIC_API_URL}/api/players`);
+        if (!res.ok) throw new Error(`Failed to load players (${res.status})`);
+        const data: ApiPlayer[] = await res.json();
+        const mapped: (Player & { slot: number })[] = data.map((p) => ({
+          id: p.id,
+          name: p.name,
+          team: p.team || "",
+          role: slotToRole(p.slot),
+          price: Number(p.price) || 0,
+          points: Number(p.points || 0),
+          image: p.image_url || undefined,
+          slot: p.slot,
+          stats: { matches: 0 },
+        }));
+        if (!cancelled) setPlayers(mapped);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || "Failed to load players");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedCountBySlot = useMemo(() => {
+    const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
     selectedPlayers.forEach((id) => {
-      const p = mockPlayers.find((mp) => mp.id === id);
+      const p = players.find((mp) => mp.id === id);
       if (!p) return;
-      const role = normalizeRole(p.role);
-      counts[role] = (counts[role] || 0) + 1;
+      counts[p.slot] = (counts[p.slot] || 0) + 1;
     });
     return counts;
-  }, [selectedPlayers]);
+  }, [selectedPlayers, players]);
 
-  const allRolesExactlyFour = useMemo(
-    () => ROLE_SEQUENCE.every((r) => (selectedCountByRole[r] || 0) === 4),
-    [selectedCountByRole]
+  const canNextForActiveSlot = useMemo(
+    () => (selectedCountBySlot[activeSlot] || 0) >= 4,
+    [selectedCountBySlot, activeSlot]
   );
 
-  const canNextForActiveRole = useMemo(
-    () => (selectedCountByRole[activeRole] || 0) >= 1,
-    [selectedCountByRole, activeRole]
-  );
-
-  const goToNextRole = () => {
-    const idx = ROLE_SEQUENCE.indexOf(
-      activeRole as (typeof ROLE_SEQUENCE)[number]
-    );
-    const next = ROLE_SEQUENCE[Math.min(idx + 1, ROLE_SEQUENCE.length - 1)];
-    setActiveRole(next);
+  const goToNextSlot = () => {
+    const idx = SLOT_SEQUENCE.indexOf(activeSlot as (typeof SLOT_SEQUENCE)[number]);
+    const next = SLOT_SEQUENCE[Math.min(idx + 1, SLOT_SEQUENCE.length - 1)];
+    setActiveSlot(next);
   };
 
-  const goToPrevRole = () => {
-    const idx = ROLE_SEQUENCE.indexOf(
-      activeRole as (typeof ROLE_SEQUENCE)[number]
-    );
-    const prev = ROLE_SEQUENCE[Math.max(idx - 1, 0)];
-    setActiveRole(prev);
+  const goToPrevSlot = () => {
+    const idx = SLOT_SEQUENCE.indexOf(activeSlot as (typeof SLOT_SEQUENCE)[number]);
+    const prev = SLOT_SEQUENCE[Math.max(idx - 1, 0)];
+    setActiveSlot(prev);
   };
 
-  const isFirstRole = useMemo(
-    () =>
-      ROLE_SEQUENCE.indexOf(activeRole as (typeof ROLE_SEQUENCE)[number]) === 0,
-    [activeRole]
+  const isFirstSlot = useMemo(
+    () => SLOT_SEQUENCE.indexOf(activeSlot as (typeof SLOT_SEQUENCE)[number]) === 0,
+    [activeSlot]
   );
 
-  // Gradient helper for Step 3 avatars (persist category colors across steps)
   const getRoleAvatarGradient = (role: string) => {
     const r = role.toLowerCase();
     if (r === "batsman" || r === "batsmen")
@@ -170,11 +154,10 @@ export default function DemoPage() {
     setCaptainId("");
     setViceCaptainId("");
     setCurrentStep(1);
-    setActiveRole("Batsman");
+    setActiveSlot(1);
   };
 
   const handlePlayerSelect = (playerId: string) => {
-    // Toggle selection; limits are enforced inside PlayerList via onBlockedSelect
     setSelectedPlayers((prev) =>
       prev.includes(playerId)
         ? prev.filter((id) => id !== playerId)
@@ -209,7 +192,7 @@ export default function DemoPage() {
       {/* Hero Section */}
       <div className="px-4 mb-10">
         <div className="text-center max-w-3xl mx-auto mt-6">
-          <h1 className="text-3xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-red-500">
+          <h1 className="text-3xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-primary">
             Build Your Dream Team
           </h1>
           <p className="mt-2 text-gray-600 text-base md:text-lg">
@@ -225,7 +208,7 @@ export default function DemoPage() {
             <div className="flex items-center justify-between">
               <div className="flex-1 mr-4">
                 <ProgressIndicator
-                  currentStep={currentStep}
+                  currentStep={currentStep === 1 ? 0 : currentStep - 1}
                   totalSteps={3}
                   className=""
                 />
@@ -253,25 +236,26 @@ export default function DemoPage() {
                 {/* Continue moved to bottom center */}
               </div>
 
-              {/* Clear All moved to progress bar area */}
+              {/* Caution banner */}
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-sm">
+                Select at least 4 players in each Slot and press Next to proceed.
+              </div>
 
-              {/* Role Filter Tabs */}
+              {/* Slot Filter Tabs */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {(
-                  ["Batsman", "Bowler", "All-Rounder", "Wicket-Keeper"] as const
-                ).map((role) => {
-                  const limit = ROLE_LIMITS[role as keyof typeof ROLE_LIMITS];
-                  const count = selectedCountByRole[role] || 0;
-                  const isActive = activeRole === role;
+                {(SLOT_SEQUENCE).map((slot) => {
+                  const limit = SLOT_LIMITS[slot as keyof typeof SLOT_LIMITS];
+                  const count = selectedCountBySlot[slot] || 0;
+                  const isActive = activeSlot === slot;
                   return (
                     <Button
-                      key={role}
+                      key={slot}
                       variant={isActive ? "primary" : "ghost"}
                       size="sm"
-                      onClick={() => setActiveRole(role)}
+                      onClick={() => setActiveSlot(slot)}
                       className="rounded-full"
                     >
-                      {role}
+                      {`Slot ${slot}`}
                       {limit !== undefined && (
                         <span className="ml-2 text-xs text-gray-600">
                           {count || 0}/{limit}
@@ -283,27 +267,34 @@ export default function DemoPage() {
               </div>
 
               {/* Player List with constraints */}
+              {loading ? (
+                <div className="text-center text-gray-500 py-6">Loading players...</div>
+              ) : error ? (
+                <div className="text-center text-red-600 py-6">{error}</div>
+              ) : (
               <PlayerList
-                players={mockPlayers}
+                players={players as unknown as Player[]}
                 selectedPlayers={selectedPlayers}
                 onPlayerSelect={handlePlayerSelect}
                 maxSelections={16}
-                roleLimits={ROLE_LIMITS}
-                filterRole={activeRole}
+                filterSlot={activeSlot}
                 sortByRole={true}
                 onBlockedSelect={(reason) => alert(reason)}
                 compact={true}
+                displayRoleMap={roleToSlotLabel}
+                compactShowPrice={true}
               />
+              )}
 
               {/* Bottom actions: Previous + (Next or Continue) centered */}
-              {activeRole === ROLE_SEQUENCE[ROLE_SEQUENCE.length - 1] ? (
+              {activeSlot === SLOT_SEQUENCE[SLOT_SEQUENCE.length - 1] ? (
                 <div className="flex items-center justify-center mt-4">
                   <div className="flex gap-3">
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={goToPrevRole}
-                      disabled={isFirstRole}
+                      onClick={goToPrevSlot}
+                      disabled={isFirstSlot}
                     >
                       Previous
                     </Button>
@@ -311,7 +302,7 @@ export default function DemoPage() {
                       variant="primary"
                       size="sm"
                       onClick={() => setCurrentStep(2)}
-                      disabled={!((selectedCountByRole[activeRole] || 0) >= 1)}
+                      disabled={!((selectedCountBySlot[activeSlot] || 0) >= 1)}
                     >
                       Continue
                     </Button>
@@ -323,16 +314,16 @@ export default function DemoPage() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={goToPrevRole}
-                      disabled={isFirstRole}
+                      onClick={goToPrevSlot}
+                      disabled={isFirstSlot}
                     >
                       Previous
                     </Button>
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={goToNextRole}
-                      disabled={!canNextForActiveRole}
+                      onClick={goToNextSlot}
+                      disabled={!canNextForActiveSlot}
                     >
                       Next
                     </Button>
@@ -355,9 +346,9 @@ export default function DemoPage() {
                 {selectedPlayers.length > 0 ? (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {mockPlayers
+                      {players
                         .filter((player) => selectedPlayers.includes(player.id))
-                        .map((player) => (
+                        .map((player: Player & { slot: number }) => (
                           <PlayerCard
                             key={player.id}
                             player={player}
@@ -368,6 +359,7 @@ export default function DemoPage() {
                             onSetCaptain={handleSetCaptain}
                             onSetViceCaptain={handleSetViceCaptain}
                             showActions={true}
+                            displayRoleMap={roleToSlotLabel}
                           />
                         ))}
                     </div>
@@ -454,20 +446,20 @@ export default function DemoPage() {
                       </div>
 
                       <div
-                        className={`${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
+                        className={`${players.filter((p) => selectedPlayers.includes(p.id)).reduce((sum: number, p: Player & { slot: number }) => sum + p.price, 0) > 0 ? "bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200" : "bg-gray-50 border-gray-200"} rounded-xl p-4 border`}
                       >
                         <div
-                          className={`text-2xl font-bold mb-1 ${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "text-primary-700" : "text-gray-700"}`}
+                          className={`text-2xl font-bold mb-1 ${players.filter((p) => selectedPlayers.includes(p.id)).reduce((sum: number, p: Player & { slot: number }) => sum + p.price, 0) > 0 ? "text-primary-700" : "text-gray-700"}`}
                         >
                           ₹
-                          {mockPlayers
+                          {players
                             .filter((p) => selectedPlayers.includes(p.id))
-                            .reduce((sum, p) => sum + p.price, 0)
+                            .reduce((sum: number, p: Player & { slot: number }) => sum + p.price, 0)
                             .toFixed(1)}
                           M
                         </div>
                         <div
-                          className={`text-sm ${mockPlayers.filter((p) => selectedPlayers.includes(p.id)).reduce((sum, p) => sum + p.price, 0) > 0 ? "text-primary-600" : "text-gray-500"}`}
+                          className={`text-sm ${players.filter((p) => selectedPlayers.includes(p.id)).reduce((sum: number, p: Player & { slot: number }) => sum + p.price, 0) > 0 ? "text-primary-600" : "text-gray-500"}`}
                         >
                           Team Value
                         </div>
@@ -480,11 +472,11 @@ export default function DemoPage() {
                         Your Dream Team
                       </h4>
                       <div className="space-y-3">
-                        {mockPlayers
+                        {players
                           .filter((player) =>
                             selectedPlayers.includes(player.id)
                           )
-                          .map((player) => (
+                          .map((player: Player & { slot: number }) => (
                             <div
                               key={player.id}
                               className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -520,7 +512,7 @@ export default function DemoPage() {
                                     )}
                                   </div>
                                   <div className="text-sm text-gray-500">
-                                    {player.role} • {player.team}
+                                    {roleToSlotLabel(player.role)} • {player.team}
                                   </div>
                                 </div>
                               </div>

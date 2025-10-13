@@ -9,6 +9,7 @@ from datetime import datetime
 from config.settings import settings
 from config.database import connect_to_mongo, close_mongo_connection
 from app.routes import auth_router, users_router, sponsors_router, leaderboard_router
+from app.routes.players import router as players_router
 
 
 @asynccontextmanager
@@ -43,15 +44,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(sponsors_router)
 app.include_router(leaderboard_router)
-
-# Pydantic models
-class Player(BaseModel):
-    id: int
-    name: str
-    team: str
-    role: str
-    points: float
-    price: float
+app.include_router(players_router)
 
 class Team(BaseModel):
     id: Optional[int] = None
@@ -66,15 +59,6 @@ class Match(BaseModel):
     team2: str
     start_time: datetime
     status: str
-
-# Sample data
-sample_players = [
-    {"id": 1, "name": "Virat Kohli", "team": "RCB", "role": "Batsman", "points": 85.5, "price": 12.0},
-    {"id": 2, "name": "MS Dhoni", "team": "CSK", "role": "Wicket-keeper", "points": 78.2, "price": 11.5},
-    {"id": 3, "name": "Rohit Sharma", "team": "MI", "role": "Batsman", "points": 82.1, "price": 11.0},
-    {"id": 4, "name": "Jasprit Bumrah", "team": "MI", "role": "Bowler", "points": 89.3, "price": 10.5},
-    {"id": 5, "name": "Hardik Pandya", "team": "MI", "role": "All-rounder", "points": 76.8, "price": 9.5},
-]
 
 sample_matches = [
     {"id": 1, "team1": "MI", "team2": "CSK", "start_time": "2024-04-01T19:30:00", "status": "upcoming"},
@@ -97,18 +81,7 @@ async def health_check():
         "timestamp": datetime.now()
     }
 
-@app.get("/api/players", response_model=List[Player])
-async def get_players():
-    """Get all available players"""
-    return sample_players
-
-@app.get("/api/players/{player_id}", response_model=Player)
-async def get_player(player_id: int):
-    """Get a specific player by ID"""
-    for player in sample_players:
-        if player["id"] == player_id:
-            return player
-    return JSONResponse(status_code=404, content={"message": "Player not found"})
+# Real players endpoints are provided via players_router
 
 @app.get("/api/matches", response_model=List[Match])
 async def get_matches():
@@ -126,7 +99,8 @@ async def get_match(match_id: int):
 @app.post("/api/teams", response_model=Team)
 async def create_team(team: Team):
     """Create a new team"""
-    team.id = len(sample_players) + 1  # Simple ID generation
+    # Simple ID generation without relying on sample data
+    team.id = int(datetime.now().timestamp())
     team.created_at = datetime.now()
     return team
 
