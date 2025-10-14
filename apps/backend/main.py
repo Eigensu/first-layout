@@ -11,6 +11,7 @@ from config.database import connect_to_mongo, close_mongo_connection
 from app.routes import auth_router, users_router, sponsors_router, leaderboard_router
 from app.routes.players import router as players_router
 from app.routes.teams import router as teams_router
+from app.routes.admin import players_router as admin_players_router, slots_router as admin_slots_router
 
 
 @asynccontextmanager
@@ -45,9 +46,12 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(sponsors_router)
 app.include_router(leaderboard_router)
+app.include_router(admin_players_router)
+app.include_router(admin_slots_router)
 app.include_router(players_router)
 app.include_router(teams_router)
 
+# Pydantic models
 class Team(BaseModel):
     id: Optional[int] = None
     user_id: int
@@ -61,11 +65,6 @@ class Match(BaseModel):
     team2: str
     start_time: datetime
     status: str
-
-sample_matches = [
-    {"id": 1, "team1": "MI", "team2": "CSK", "start_time": "2024-04-01T19:30:00", "status": "upcoming"},
-    {"id": 2, "team1": "RCB", "team2": "KKR", "start_time": "2024-04-02T19:30:00", "status": "upcoming"},
-]
 
 @app.get("/")
 async def root():
@@ -84,19 +83,6 @@ async def health_check():
     }
 
 # Real players endpoints are provided via players_router
-
-@app.get("/api/matches", response_model=List[Match])
-async def get_matches():
-    """Get all matches"""
-    return sample_matches
-
-@app.get("/api/matches/{match_id}", response_model=Match)
-async def get_match(match_id: int):
-    """Get a specific match by ID"""
-    for match in sample_matches:
-        if match["id"] == match_id:
-            return match
-    return JSONResponse(status_code=404, content={"message": "Match not found"})
 
 @app.post("/api/teams", response_model=Team)
 async def create_team(team: Team):

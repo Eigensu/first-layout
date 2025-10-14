@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List
+from typing import List, Dict
 from beanie import PydanticObjectId
 from datetime import datetime
 
@@ -8,6 +8,7 @@ from app.models.player import Player
 from app.models.user import User
 from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse
 from app.utils.dependencies import get_current_active_user
+from app.models.admin.slot import Slot
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -59,6 +60,50 @@ async def create_team(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Some player IDs are invalid"
+        )
+
+    # Enforce per-slot constraints
+    # Count players per slot (ignore players without a slot)
+    slot_counts: Dict[str, int] = {}
+    for p in players:
+        if p.slot:
+            slot_counts[p.slot] = slot_counts.get(p.slot, 0) + 1
+
+    # Build validation set: slots present in selection + all slots with min_select > 0
+    present_slot_ids = list(slot_counts.keys())
+    present_slot_oids = []
+    for sid in present_slot_ids:
+        try:
+            present_slot_oids.append(PydanticObjectId(sid))
+        except Exception:
+            # If slot id is malformed, skip; it won't be validated
+            continue
+    slots_present = await Slot.find({"_id": {"$in": present_slot_oids}}).to_list() if present_slot_oids else []
+    slots_with_min = await Slot.find(Slot.min_select > 0).to_list()
+
+    # Merge unique slots by id
+    slots_by_id: Dict[str, Slot] = {str(s.id): s for s in slots_present}
+    for s in slots_with_min:
+        slots_by_id.setdefault(str(s.id), s)
+
+    violations = []
+    for sid, slot in slots_by_id.items():
+        count = slot_counts.get(sid, 0)
+        if count < slot.min_select or count > slot.max_select:
+            violations.append(
+                {
+                    "slot": {"id": sid, "code": slot.code, "name": slot.name},
+                    "expected": {"min_select": slot.min_select, "max_select": slot.max_select},
+                    "actual": count,
+                }
+            )
+    if violations:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Team violates per-slot selection constraints",
+                "violations": violations,
+            },
         )
     
     # Create team document
@@ -232,7 +277,7 @@ async def update_team(
                     detail="Captain and vice-captain must be different players"
                 )
             
-            # Recalculate total value if player_ids changed
+            # Recalculate total value and validate per-slot constraints if player_ids changed
             if "player_ids" in update_data:
                 # Convert string IDs to PydanticObjectId
                 player_object_ids = []
@@ -244,9 +289,47 @@ async def update_team(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"Invalid player ID: {pid}"
                         )
-                
                 players = await Player.find({"_id": {"$in": player_object_ids}}).to_list()
                 update_data["total_value"] = sum(player.price for player in players)
+
+                # Per-slot constraints validation (same as create)
+                slot_counts: Dict[str, int] = {}
+                for p in players:
+                    if p.slot:
+                        slot_counts[p.slot] = slot_counts.get(p.slot, 0) + 1
+                present_slot_ids = list(slot_counts.keys())
+                present_slot_oids = []
+                for sid in present_slot_ids:
+                    try:
+                        present_slot_oids.append(PydanticObjectId(sid))
+                    except Exception:
+                        continue
+                slots_present = await Slot.find({"_id": {"$in": present_slot_oids}}).to_list() if present_slot_oids else []
+                slots_with_min = await Slot.find(Slot.min_select > 0).to_list()
+
+                slots_by_id: Dict[str, Slot] = {str(s.id): s for s in slots_present}
+                for s in slots_with_min:
+                    slots_by_id.setdefault(str(s.id), s)
+
+                violations = []
+                for sid, slot in slots_by_id.items():
+                    count = slot_counts.get(sid, 0)
+                    if count < slot.min_select or count > slot.max_select:
+                        violations.append(
+                            {
+                                "slot": {"id": sid, "code": slot.code, "name": slot.name},
+                                "expected": {"min_select": slot.min_select, "max_select": slot.max_select},
+                                "actual": count,
+                            }
+                        )
+                if violations:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "message": "Team violates per-slot selection constraints",
+                            "violations": violations,
+                        },
+                    )
         
         update_data["updated_at"] = datetime.utcnow()
         

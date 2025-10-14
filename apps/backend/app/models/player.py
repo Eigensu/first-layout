@@ -1,5 +1,5 @@
 from beanie import Document
-from pydantic import Field
+from pydantic import Field, field_validator
 from datetime import datetime
 from typing import Optional, Dict
 
@@ -11,7 +11,7 @@ class Player(Document):
     team: Optional[str] = None
     role: Optional[str] = None  # Batsman, Bowler, All-Rounder, Wicket-Keeper
     price: float = 0.0
-    slot: int = 1  # 1-4 representing different roles
+    slot: Optional[str] = None  # Slot ObjectId string
     points: float = 0.0
     is_available: bool = True
     
@@ -24,6 +24,14 @@ class Player(Document):
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    @field_validator('slot', mode='before')
+    @classmethod
+    def convert_slot_to_string(cls, v):
+        """Convert slot to string if it's not already a string"""
+        if v is not None and not isinstance(v, str):
+            return str(v)
+        return v
     
     class Settings:
         name = "players"
