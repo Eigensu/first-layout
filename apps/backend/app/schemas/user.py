@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     username: str
     email: str
     full_name: Optional[str]
+    mobile: Optional[str]
     is_active: bool
     is_verified: bool
     created_at: datetime

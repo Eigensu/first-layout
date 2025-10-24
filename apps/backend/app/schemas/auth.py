@@ -9,6 +9,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
+    mobile: Optional[str] = None
 
     @validator('username')
     def username_alphanumeric(cls, v):
@@ -26,6 +27,17 @@ class UserRegister(BaseModel):
             raise ValueError('Password must contain at least one uppercase letter')
         if not any(char.islower() for char in v):
             raise ValueError('Password must contain at least one lowercase letter')
+        return v
+
+    @validator('mobile')
+    def mobile_basic_validation(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        # Basic sanity: allow + and digits, length 10-15 digits ignoring non-digits
+        digits = ''.join(ch for ch in v if ch.isdigit())
+        if len(digits) < 10 or len(digits) > 15:
+            raise ValueError('Mobile must be 10-15 digits')
         return v
 
 

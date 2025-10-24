@@ -24,6 +24,7 @@ async def get_current_user_info(
         username=current_user.username,
         email=current_user.email,
         full_name=current_user.full_name,
+        mobile=current_user.mobile,
         is_active=current_user.is_active,
         is_verified=current_user.is_verified,
         created_at=current_user.created_at,
@@ -34,6 +35,7 @@ async def get_current_user_info(
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     full_name: str = None,
+    mobile: str = None,
     avatar_url: str = None,
     current_user: User = Depends(get_current_active_user)
 ):
@@ -41,6 +43,9 @@ async def update_current_user(
 
     if full_name:
         current_user.full_name = full_name
+
+    if mobile:
+        current_user.mobile = mobile
 
     if avatar_url:
         current_user.avatar_url = avatar_url
@@ -53,6 +58,7 @@ async def update_current_user(
         username=current_user.username,
         email=current_user.email,
         full_name=current_user.full_name,
+        mobile=current_user.mobile,
         is_active=current_user.is_active,
         is_verified=current_user.is_verified,
         created_at=current_user.created_at,

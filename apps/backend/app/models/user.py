@@ -11,6 +11,7 @@ class User(Document):
     email: Indexed(EmailStr, unique=True)  # type: ignore
     hashed_password: str
     full_name: Optional[str] = None
+    mobile: Optional[str] = None
     is_active: bool = True
     is_verified: bool = False
     is_admin: bool = False

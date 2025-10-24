@@ -26,13 +26,20 @@ async def register(
     email: EmailStr = Form(...),
     password: str = Form(...),
     full_name: Optional[str] = Form(None),
+    mobile: Optional[str] = Form(None),
     avatar: Optional[UploadFile] = File(None),
 ):
     """Register a new user"""
 
     # Validate fields with existing schema
     try:
-        user_data = UserRegister(username=username, email=email, password=password, full_name=full_name)
+        user_data = UserRegister(
+            username=username,
+            email=email,
+            password=password,
+            full_name=full_name,
+            mobile=mobile,
+        )
     except ValidationError as e:
         # Match FastAPI validation error format
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors())
@@ -60,6 +67,7 @@ async def register(
         email=user_data.email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
+        mobile=user_data.mobile,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
