@@ -66,7 +66,6 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
                 key={p.id}
                 player={p}
                 subtitle={`${p.role || "Slot"} • ${p.team || ""}`}
-                rightText={`₹${Math.floor((p as any).price ?? 0)}`}
                 onClick={() => onSelect(p.id)}
               />
             ))}

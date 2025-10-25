@@ -13,7 +13,6 @@ import {
   Avatar,
 } from "@/components";
 import type { Player } from "@/components";
-import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { LS_KEYS, ROUTES } from "@/common/consts";
 import {
@@ -404,8 +403,7 @@ export default function ContestTeamBuilderPage() {
                     </div>
 
                     <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-2.5 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm">
-                      Select at least 4 players in each Slot and press Next to
-                      proceed.
+                      Select 4 players in each Slot and press Next to proceed.
                     </div>
 
                     <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 pb-2 -mx-2 px-2 scrollbar-hide">
@@ -454,7 +452,7 @@ export default function ContestTeamBuilderPage() {
                         maxSelections={16}
                         onBlockedSelect={(reason) => alert(reason)}
                         compact={true}
-                        compactShowPrice={true}
+                        compactShowPrice={false}
                         isPlayerDisabled={(player) => {
                           if (selectedPlayers.includes(player.id)) {
                             return false;
@@ -668,9 +666,6 @@ export default function ContestTeamBuilderPage() {
                                   <div className="text-right">
                                     <div className="font-medium text-success-600">
                                       {player.points} pts
-                                    </div>
-                                    <div className="text-sm text-gray-500">
-                                      ₹{Math.floor(player.price)}
                                     </div>
                                   </div>
                                 </div>

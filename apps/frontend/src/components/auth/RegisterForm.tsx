@@ -30,7 +30,7 @@ const registerSchema = z
         const digits = v.replace(/\D/g, "");
         return digits.length >= 10 && digits.length <= 15;
       }, "Enter a valid mobile number (10-15 digits)"),
-    full_name: z.string().min(1, "Full name is required").optional(),
+    full_name: z.string().min(1, "Full name is required"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
@@ -51,6 +51,7 @@ export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<File | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const {
     register,
@@ -62,8 +63,16 @@ export function RegisterForm() {
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      setIsLoading(true);
       setError(null);
+      setAvatarError(null);
+
+      // Enforce avatar upload
+      if (!avatar) {
+        setAvatarError("Avatar is required");
+        return;
+      }
+
+      setIsLoading(true);
 
       const { confirmPassword, ...registerData } = data;
       await registerUser({ ...registerData, avatar });
@@ -132,6 +141,17 @@ export function RegisterForm() {
           />
 
           <Input
+            {...register("full_name")}
+            type="text"
+            placeholder="Enter your full name"
+            icon="user"
+            error={errors.full_name?.message}
+            disabled={isLoading}
+            variant="light"
+            className="rounded-2xl"
+          />
+
+          <Input
             {...register("mobile")}
             type="tel"
             placeholder="Enter your mobile number"
@@ -144,22 +164,27 @@ export function RegisterForm() {
             autoComplete="tel"
           />
 
-          {/* Avatar upload */}
+          {/* Avatar upload (required) */}
           <div>
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              required
               disabled={isLoading}
               className="w-full rounded-2xl border border-gray-200 bg-white py-3.5 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               onChange={(e) => {
                 const file = e.target.files?.[0] || null;
                 setAvatar(file);
+                if (file) setAvatarError(null);
               }}
             />
-            <p className="mt-1.5 text-xs text-gray-500">Optional. Max 5MB. PNG, JPG, WEBP, SVG.</p>
+            <p className="mt-1.5 text-xs text-gray-500">
+              Max 5MB. PNG, JPG, WEBP, SVG.
+            </p>
+            {avatarError && (
+              <p className="mt-1 text-xs text-red-600">{avatarError}</p>
+            )}
           </div>
-
-          {/* Full name field removed as requested */}
 
           <Input
             {...register("password")}
@@ -174,8 +199,8 @@ export function RegisterForm() {
 
           {/* Password guidance */}
           <p className="text-xs text-gray-500 pl-2 -mt-2">
-            Password should be at least 15 characters OR at least 8 characters
-            including a number and a lowercase letter.
+            Password should be at least 8 characters including a number and an
+            uppercase letter.
           </p>
 
           <Input
