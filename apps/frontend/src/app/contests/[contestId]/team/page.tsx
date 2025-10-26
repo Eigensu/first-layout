@@ -251,6 +251,11 @@ export default function ContestTeamBuilderPage() {
   // If a team exists show minimal view instead of builder
   const showViewOnly = !!existingTeam;
 
+  // Prepare selected player objects for quick rendering in the Selected panel
+  const selectedPlayerObjs = players.filter((p) =>
+    selectedPlayers.includes(p.id)
+  ) as unknown as Player[];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
       {/* Enrolled banner */}
@@ -406,127 +411,178 @@ export default function ContestTeamBuilderPage() {
                       Select 4 players in each Slot and press Next to proceed.
                     </div>
 
-                    <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 pb-2 -mx-2 px-2 scrollbar-hide">
-                      {slots.map((s) => {
-                        const limit = SLOT_LIMITS[s.id];
-                        const count = selectedCountBySlot[s.id] || 0;
-                        const isActive = activeSlotId === s.id;
-                        return (
-                          <Button
-                            key={s.id}
-                            variant={isActive ? "primary" : "ghost"}
-                            size="sm"
-                            onClick={() => setActiveSlotId(s.id)}
-                            className="rounded-full flex-shrink-0"
-                          >
-                            {s.name}
-                            {limit !== undefined && (
-                              <span
-                                className={`ml-2 text-xs ${isActive ? "text-white/90" : "text-gray-600"}`}
+                    {/* Two-column on large screens: list (left) and selected panel (right) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <div className="lg:col-span-2">
+                        <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 pb-2 -mx-2 px-2 scrollbar-hide">
+                          {slots.map((s) => {
+                            const limit = SLOT_LIMITS[s.id];
+                            const count = selectedCountBySlot[s.id] || 0;
+                            const isActive = activeSlotId === s.id;
+                            return (
+                              <Button
+                                key={s.id}
+                                variant={isActive ? "primary" : "ghost"}
+                                size="sm"
+                                onClick={() => setActiveSlotId(s.id)}
+                                className="rounded-full flex-shrink-0"
                               >
-                                {count || 0}/{limit}
-                              </span>
-                            )}
-                          </Button>
-                        );
-                      })}
-                    </div>
+                                {s.name}
+                                {limit !== undefined && (
+                                  <span
+                                    className={`ml-2 text-xs ${isActive ? "text-white/90" : "text-gray-600"}`}
+                                  >
+                                    {count || 0}/{limit}
+                                  </span>
+                                )}
+                              </Button>
+                            );
+                          })}
+                        </div>
 
-                    {loading ? (
-                      <div className="text-center text-gray-500 py-6">
-                        Loading players...
-                      </div>
-                    ) : error ? (
-                      <div className="text-center text-red-600 py-6">
-                        {error}
-                      </div>
-                    ) : (
-                      <PlayerList
-                        players={
-                          players.filter(
-                            (p) => p.slotId === activeSlotId
-                          ) as unknown as Player[]
-                        }
-                        selectedPlayers={selectedPlayers}
-                        onPlayerSelect={handlePlayerSelect}
-                        maxSelections={16}
-                        onBlockedSelect={(reason) => alert(reason)}
-                        compact={true}
-                        compactShowPrice={false}
-                        isPlayerDisabled={(player) => {
-                          if (selectedPlayers.includes(player.id)) {
-                            return false;
-                          }
-                          const playerSlotId = (
-                            players.find((p) => p.id === player.id) as any
-                          )?.slotId as string | undefined;
-                          if (!playerSlotId) return false;
-                          const currentSlotCount = selectedPlayers.filter(
-                            (id) => {
-                              const p = players.find(
-                                (mp) => mp.id === id
-                              ) as any;
-                              return p?.slotId === playerSlotId;
+                        {loading ? (
+                          <div className="text-center text-gray-500 py-6">
+                            Loading players...
+                          </div>
+                        ) : error ? (
+                          <div className="text-center text-red-600 py-6">
+                            {error}
+                          </div>
+                        ) : (
+                          <PlayerList
+                            key={`slot-${activeSlotId}`}
+                            players={
+                              players.filter(
+                                (p) => p.slotId === activeSlotId
+                              ) as unknown as Player[]
                             }
-                          ).length;
-                          const slotLimit = SLOT_LIMITS[playerSlotId] || 4;
-                          return currentSlotCount >= slotLimit;
-                        }}
-                      />
-                    )}
-
-                    {slots.findIndex((s) => s.id === activeSlotId) ===
-                    slots.length - 1 ? (
-                      <div className="flex items-center justify-center mt-6">
-                        <div className="flex gap-3 w-full sm:w-auto">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={goToPrevSlot}
-                            disabled={isFirstSlot}
-                            className="flex-1 sm:flex-none"
-                          >
-                            Previous
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              setCurrentStep(2);
-                              setIsStep1Collapsed(true);
-                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            selectedPlayers={selectedPlayers}
+                            onPlayerSelect={handlePlayerSelect}
+                            maxSelections={16}
+                            onBlockedSelect={(reason) => alert(reason)}
+                            compact={true}
+                            compactShowPrice={false}
+                            isPlayerDisabled={(player) => {
+                              if (selectedPlayers.includes(player.id)) {
+                                return false;
+                              }
+                              const playerSlotId = (
+                                players.find((p) => p.id === player.id) as any
+                              )?.slotId as string | undefined;
+                              if (!playerSlotId) return false;
+                              const currentSlotCount = selectedPlayers.filter(
+                                (id) => {
+                                  const p = players.find(
+                                    (mp) => mp.id === id
+                                  ) as any;
+                                  return p?.slotId === playerSlotId;
+                                }
+                              ).length;
+                              const slotLimit = SLOT_LIMITS[playerSlotId] || 4;
+                              return currentSlotCount >= slotLimit;
                             }}
-                            disabled={!canNextForActiveSlot}
-                            className="flex-1 sm:flex-none"
-                          >
-                            Continue
-                          </Button>
-                        </div>
+                          />
+                        )}
+
+                        {slots.findIndex((s) => s.id === activeSlotId) ===
+                        slots.length - 1 ? (
+                          <div className="flex items-center justify-center mt-6">
+                            <div className="flex gap-3 w-full sm:w-auto">
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={goToPrevSlot}
+                                disabled={isFirstSlot}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  setCurrentStep(2);
+                                  setIsStep1Collapsed(true);
+                                  window.scrollTo({
+                                    top: 0,
+                                    behavior: "smooth",
+                                  });
+                                }}
+                                disabled={!canNextForActiveSlot}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Continue
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center mt-6">
+                            <div className="flex gap-3 w-full sm:w-auto">
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={goToPrevSlot}
+                                disabled={isFirstSlot}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={goToNextSlot}
+                                disabled={!canNextForActiveSlot}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Next
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center mt-6">
-                        <div className="flex gap-3 w-full sm:w-auto">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={goToPrevSlot}
-                            disabled={isFirstSlot}
-                            className="flex-1 sm:flex-none"
-                          >
-                            Previous
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={goToNextSlot}
-                            disabled={!canNextForActiveSlot}
-                            className="flex-1 sm:flex-none"
-                          >
-                            Next
-                          </Button>
-                        </div>
+
+                      {/* Selected Players Panel */}
+                      <div className="lg:col-span-1">
+                        <Card className="p-4 lg:sticky lg:top-24">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-semibold text-gray-900 text-sm sm:text-base">
+                              Selected Players ({selectedPlayers.length}/16)
+                            </h5>
+                            <Badge
+                              size="sm"
+                              variant={
+                                selectedPlayers.length >= 16
+                                  ? "success"
+                                  : "secondary"
+                              }
+                            >
+                              {selectedPlayers.length}
+                            </Badge>
+                          </div>
+                          {selectedPlayerObjs.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-2 max-h-[192px] lg:max-h-[384px] overflow-auto pr-1">
+                              {selectedPlayerObjs.map((player) => (
+                                <button
+                                  key={player.id}
+                                  type="button"
+                                  onClick={() => handlePlayerSelect(player.id)}
+                                  className="w-full h-10 flex items-center px-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                                  title="Tap to remove from selection"
+                                >
+                                  <span className="text-sm font-medium text-gray-900 truncate">
+                                    {player.name}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs sm:text-sm text-gray-500 py-4">
+                              No players selected yet. Tap a player to add them.
+                            </div>
+                          )}
+                        </Card>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </StepCard>
@@ -614,7 +670,7 @@ export default function ContestTeamBuilderPage() {
                             value={teamName}
                             onChange={(e) => setTeamName(e.target.value)}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                            placeholder="Enter your team name"
+                            placeholder="Enter your full name"
                             maxLength={50}
                           />
                         </div>
