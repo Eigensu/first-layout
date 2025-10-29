@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { PillNavbar, Card, Button } from "@/components";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AlertDialog } from "@/components/ui/AlertDialog";
@@ -601,7 +600,7 @@ export default function TeamsPage() {
             <div className="text-red-600 mb-4">{error}</div>
             <Button onClick={() => window.location.reload()}>Retry</Button>
           </Card>
-        ) : teams.length === 0 ? (
+        ) : visibleTeams.length === 0 ? (
           <Card className="p-8 sm:p-12 text-center">
             <div className="max-w-md mx-auto">
               <div className="text-6xl sm:text-8xl mb-4">🏏</div>
@@ -617,7 +616,7 @@ export default function TeamsPage() {
                 onClick={handleCreateNewTeam}
                 className="shadow-glow"
               >
-                Create Your First Team
+                Join Contests
               </Button>
             </div>
           </Card>
