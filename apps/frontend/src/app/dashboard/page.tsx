@@ -4,9 +4,11 @@ import Image from "next/image";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/Button";
-import { LogOut, User, Mail, Calendar } from "lucide-react";
+import { LogOut, User, Mail, Calendar, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/common/consts";
+import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
+import { useState } from "react";
 
 export default function DashboardPage() {
   return (
@@ -19,6 +21,7 @@ export default function DashboardPage() {
 function DashboardContent() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -175,6 +178,18 @@ function DashboardContent() {
                 </span>
               </div>
             </div>
+
+            {/* Change Password Button */}
+            <div className="pt-6 border-t border-gray-100">
+              <Button
+                onClick={() => setIsChangePasswordOpen(true)}
+                variant="outline"
+                className="w-full flex items-center justify-center space-x-2"
+              >
+                <KeyRound className="w-4 h-4" />
+                <span>Change Password</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -209,6 +224,12 @@ function DashboardContent() {
           </div>
         </div>
       </main>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
     </div>
   );
 }
