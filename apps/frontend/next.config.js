@@ -35,9 +35,9 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "walle-layout-production.up.railway.app",
+        hostname: "api-mwpl.wallearena.com",
         port: "",
-        pathname: "/api/**",
+        pathname: "/**",
       },
       {
         protocol: "https",

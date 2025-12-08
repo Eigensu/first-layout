@@ -22,7 +22,7 @@
  // API client related config
  export const API = {
    PREFIX: '/api',
-   TIMEOUT_MS: 10_000,
+   TIMEOUT_MS: 30_000,
  } as const;
 
  // App routes referenced across the UI

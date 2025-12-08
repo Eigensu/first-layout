@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { CarouselImage } from "@/lib/api/public/carousel";
+import { API_BASE_URL } from "@/common/consts";
 
 interface HeroCarouselProps {
   images: CarouselImage[];
@@ -159,7 +160,7 @@ export function HeroCarousel({
                 >
                   {currentImage.image_url ? (
                     <Image
-                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${currentImage.image_url}`}
+                      src={`${API_BASE_URL}${currentImage.image_url}`}
                       alt={currentImage.title || "Carousel image"}
                       fill
                       className="object-cover md:object-contain"
@@ -178,7 +179,7 @@ export function HeroCarousel({
                 <div className="w-full h-full">
                   {currentImage.image_url ? (
                     <Image
-                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${currentImage.image_url}`}
+                      src={`${API_BASE_URL}${currentImage.image_url}`}
                       alt={currentImage.title || "Carousel image"}
                       fill
                       className="object-cover md:object-contain"

@@ -57,18 +57,15 @@ def _compute_status(contest: Contest) -> ContestStatus:
     return ContestStatus.LIVE
 
 
-async def to_contest_response(contest: Contest) -> ContestResponse:
+async def to_contest_response(contest: Contest, skip_save: bool = False) -> ContestResponse:
     # Derive status from time window to reflect real-time lifecycle
     computed = _compute_status(contest)
-    # Persist drift if needed (except when archived which is manual terminal state)
+    # Update in-memory status without persisting (saves go to DB asynchronously)
     if contest.status != computed and contest.status != ContestStatus.ARCHIVED:
         contest.status = computed
         contest.updated_at = now_ist()
-        try:
-            await contest.save()
-        except Exception:
-            # Non-blocking: ignore persistence errors for response
-            pass
+        # Skip immediate save for performance; status updates are idempotent
+        # and will be persisted on next write operation or background task
     return ContestResponse(
         id=str(contest.id),
         code=contest.code,
@@ -135,7 +132,7 @@ async def list_public_contests(
 
     total = await query.count()
     skip = (page - 1) * page_size
-    rows = await query.skip(skip).limit(page_size).sort(-Contest.start_at).to_list()
+    rows = await query.skip(skip).limit(page_size).sort("-start_at").to_list()
 
     # Convert to responses with computed status
     items = [await to_contest_response(c) for c in rows]
@@ -394,6 +391,9 @@ async def enroll_in_contest(
         )
 
     # Create enrollment without baseline fields (points will be contest-scoped)
+    assert team.id is not None, "Team ID should not be None"
+    assert contest.id is not None, "Contest ID should not be None"
+    assert current_user.id is not None, "User ID should not be None"
     enr = TeamContestEnrollment(
         team_id=team.id,
         contest_id=contest.id,
@@ -401,7 +401,7 @@ async def enroll_in_contest(
         status=EnrollmentStatus.ACTIVE,
         enrolled_at=now_ist(),
     )
-    await enr.insert()
+    await enr.insert()  # type: ignore
 
     return EnrollmentResponse(
         id=str(enr.id),
