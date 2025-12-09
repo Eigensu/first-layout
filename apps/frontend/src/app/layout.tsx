@@ -52,7 +52,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${poppins.variable} ${jetbrainsMono.variable}`}
     >
-      <body className={`${inter.className} antialiased`}>
+      <body
+        className={`${inter.className} antialiased bg-bg-body text-text-main`}
+      >
         <AuthProvider>
           <AuthGate>
             <div className="min-h-screen">{children}</div>

@@ -27,13 +27,14 @@ export function SponsorsView(props: SponsorsViewProps) {
   // Exclude featured from the smaller grid to avoid duplicates
   const nonFeatured = (sponsors || [])
     .filter((s) => !s.featured)
-    .sort((a: any, b: any) => (a.priority ?? Infinity) - (b.priority ?? Infinity));
+    .sort(
+      (a: any, b: any) => (a.priority ?? Infinity) - (b.priority ?? Infinity)
+    );
 
   return (
     <>
       {/* Hero Section */}
-      <section className="relative py-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-500/10 via-transparent to-primary-700/10" />
+      <section className="relative py-8 md:py-20 overflow-hidden">
         <div className="container mx-auto px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -41,14 +42,14 @@ export function SponsorsView(props: SponsorsViewProps) {
             transition={{ duration: 0.6 }}
             className="text-center max-w-4xl mx-auto"
           >
-            <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-bg-elevated text-accent-pink-500 px-4 py-2 rounded-full text-xs md:text-sm font-medium mb-4 border border-border-subtle">
               <Sparkles className="w-4 h-4" />
               Our Partners
             </div>
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl md:text-6xl font-bold mb-4 bg-gradient-brand bg-clip-text text-transparent">
               Meet Our Sponsors
             </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            <p className="text-base md:text-xl text-text-muted mb-4 max-w-2xl mx-auto">
               We&apos;re proud to partner with leading brands that share our
               vision of creating the ultimate fantasy cricket experience.
             </p>
@@ -58,7 +59,7 @@ export function SponsorsView(props: SponsorsViewProps) {
 
       {/* Featured Sponsors */}
       {featuredSponsors.length > 0 && !loading && (
-        <section className="py-12">
+        <section className="py-4 md:py-12">
           <div className="container mx-auto px-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -66,8 +67,10 @@ export function SponsorsView(props: SponsorsViewProps) {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="flex items-center gap-3 mb-8">
-                <Star className="w-6 h-6 text-yellow-500 fill-yellow-500" />
-                <h2 className="text-3xl font-bold text-gray-900">Featured Partners</h2>
+                <Star className="w-6 h-6 text-accent-orange-500 fill-accent-orange-500" />
+                <h2 className="text-3xl font-bold text-text-main">
+                  Featured Partners
+                </h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {featuredSponsors.map((sponsor, index) => (
@@ -106,7 +109,10 @@ export function SponsorsView(props: SponsorsViewProps) {
               {nonFeatured.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {nonFeatured
-                    .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
+                    .sort(
+                      (a, b) =>
+                        (a.priority ?? Infinity) - (b.priority ?? Infinity)
+                    )
                     .map((sponsor, index) => (
                       <motion.div
                         key={sponsor.id}
@@ -120,7 +126,9 @@ export function SponsorsView(props: SponsorsViewProps) {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-gray-500 text-lg">No sponsors found in this tier.</p>
+                  <p className="text-text-muted text-lg">
+                    No sponsors found in this tier.
+                  </p>
                 </div>
               )}
             </motion.div>
@@ -129,7 +137,7 @@ export function SponsorsView(props: SponsorsViewProps) {
       </section>
 
       {/* Call to Action */}
-      <section className="py-20 bg-gradient-primary">
+      <section className="py-20 bg-gradient-brand">
         <div className="container mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -138,12 +146,15 @@ export function SponsorsView(props: SponsorsViewProps) {
             viewport={{ once: true }}
             className="text-center max-w-3xl mx-auto"
           >
-            <Award className="w-16 h-16 text-white mx-auto mb-6" />
-            <h2 className="text-4xl font-bold text-white mb-6">Become a Partner</h2>
-            <p className="text-xl text-white/90 mb-8">
-              Join our growing network of sponsors and reach millions of cricket enthusiasts worldwide.
+            <Award className="w-16 h-16 text-white mx-auto mb-6 drop-shadow" />
+            <h2 className="text-4xl font-bold text-white mb-6 drop-shadow-md">
+              Become a Partner
+            </h2>
+            <p className="text-xl text-white/90 mb-8 drop-shadow">
+              Join our growing network of sponsors and reach millions of cricket
+              enthusiasts worldwide.
             </p>
-            <button className="bg-white text-primary-700 px-8 py-4 rounded-full font-semibold text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300">
+            <button className="bg-bg-elevated text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-bg-card hover:scale-105 transition-all duration-300 shadow-lg border border-border-subtle">
               Contact Us
             </button>
           </motion.div>

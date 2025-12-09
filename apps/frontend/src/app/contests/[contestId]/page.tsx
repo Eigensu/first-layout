@@ -97,21 +97,21 @@ export default function ContestDetailsPage() {
                   router.push(target);
                 }
               }}
-              className="w-full h-full rounded-3xl bg-gradient-to-br from-white via-white to-primary-50 shadow-lg hover:shadow-xl p-8 sm:p-10 lg:p-14 text-center flex items-center justify-center transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
+              className="w-full h-full rounded-3xl bg-gradient-to-br from-white via-white to-primary-50 shadow-lg hover:shadow-xl p-6 sm:p-8 lg:p-10 text-center flex items-center justify-center transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
             >
-              <div className="flex flex-col items-center justify-center min-h-[320px] sm:min-h-[360px] lg:min-h-[380px]">
-                <div className="mb-6 p-4 rounded-2xl bg-primary-50 inline-flex">
-                  <User className="w-16 h-16 text-primary-600" />
+              <div className="flex flex-col items-center justify-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px]">
+                <div className="mb-5 p-4 rounded-2xl bg-primary-50 inline-flex">
+                  <User className="w-12 h-12 text-primary-600" />
                 </div>
-                <h2 className="text-4xl sm:text-5xl font-black tracking-tight text-primary-700">
+                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-primary-700">
                   {isJoined ? "View Team" : "Make Team"}
                 </h2>
-                <p className="mt-3 text-primary-700/80 text-sm sm:text-base">
+                <p className="mt-2 text-primary-700/80 text-sm sm:text-base">
                   {isJoined
                     ? "Open your registered team"
                     : "Assemble your squad and compete together"}
                 </p>
-                <div className="mt-8 inline-flex items-center px-8 py-3 rounded-full bg-gradient-primary text-white text-sm font-semibold shadow transition">
+                <div className="mt-6 inline-flex items-center px-6 py-2.5 rounded-full bg-gradient-primary text-white text-sm font-semibold shadow transition">
                   {isJoined ? "Go to Team" : "Start Building"}
                 </div>
               </div>
@@ -123,17 +123,17 @@ export default function ContestDetailsPage() {
               className="group w-full h-full rounded-3xl overflow-hidden p-[2px] bg-gradient-primary shadow-lg transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/40"
             >
               <div className="h-full w-full rounded-3xl bg-gradient-primary">
-                <div className="p-8 sm:p-10 lg:p-14 text-white flex flex-col items-center justify-center text-center min-h-[320px] sm:min-h-[360px] lg:min-h-[380px] h-full">
-                  <div className="mb-6 p-4 rounded-2xl bg-white/20 backdrop-blur-sm">
-                    <BarChart3 className="w-16 h-16 text-white" />
+                <div className="p-6 sm:p-8 lg:p-10 text-white flex flex-col items-center justify-center text-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px] h-full">
+                  <div className="mb-5 p-4 rounded-2xl bg-white/20 backdrop-blur-sm">
+                    <BarChart3 className="w-12 h-12 text-white" />
                   </div>
-                  <h2 className="text-4xl sm:text-5xl font-black tracking-tight drop-shadow">
+                  <h2 className="text-3xl sm:text-4xl font-black tracking-tight drop-shadow">
                     Leaderboard
                   </h2>
-                  <p className="mt-3 text-white/90 text-sm sm:text-base">
+                  <p className="mt-2 text-white/90 text-sm sm:text-base">
                     See how you rank against the best
                   </p>
-                  <div className="mt-8 inline-flex items-center px-8 py-3 rounded-full bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition">
+                  <div className="mt-6 inline-flex items-center px-6 py-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition">
                     View Rankings
                   </div>
                 </div>

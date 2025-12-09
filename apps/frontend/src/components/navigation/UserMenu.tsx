@@ -27,21 +27,26 @@ function UserMenuComp() {
       {/* Single unified button with avatar and dropdown */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
+        className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-card-soft px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-bg-card transition-colors"
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <Avatar name={user?.username || "User"} src={user?.avatar_url || undefined} size="sm" className="h-7 w-7" />
-        <span className="hidden sm:inline text-gray-700">Account</span>
+        <Avatar
+          name={user?.username || "User"}
+          src={user?.avatar_url || undefined}
+          size="sm"
+          className="h-7 w-7"
+        />
+        <span className="hidden sm:inline text-text-main">Account</span>
         <ChevronDown
-          className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg z-50"
+          className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-border-subtle bg-bg-card p-1.5 shadow-lg z-50"
         >
           <div
             role="menuitem"
@@ -50,9 +55,9 @@ function UserMenuComp() {
               setOpen(false);
               router.push("/dashboard");
             }}
-            className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main hover:bg-bg-card-soft"
           >
-            <LayoutDashboard className="h-4 w-4 text-primary-600" />
+            <LayoutDashboard className="h-4 w-4 text-accent-pink-500" />
             <span>Dashboard</span>
           </div>
           <div
@@ -62,12 +67,12 @@ function UserMenuComp() {
               setOpen(false);
               router.push("/admin");
             }}
-            className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main hover:bg-bg-card-soft"
           >
-            <Settings className="h-4 w-4 text-primary-600" />
+            <Settings className="h-4 w-4 text-accent-pink-500" />
             <span>Admin</span>
           </div>
-          <div className="my-1 h-px bg-gray-100" />
+          <div className="my-1 h-px bg-border-subtle" />
           <div
             role="menuitem"
             tabIndex={0}

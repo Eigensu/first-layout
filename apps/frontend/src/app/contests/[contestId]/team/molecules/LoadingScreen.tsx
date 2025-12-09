@@ -9,12 +9,12 @@ export function LoadingScreen({
 }) {
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-primary-50"
+      className="min-h-screen flex items-center justify-center bg-bg-body"
       aria-busy
     >
       <div className="flex flex-col items-center gap-3">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
-        <p className="text-sm text-gray-600">{message}</p>
+        <p className="text-sm text-text-muted">{message}</p>
       </div>
     </div>
   );

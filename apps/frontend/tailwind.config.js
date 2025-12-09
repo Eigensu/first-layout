@@ -12,95 +12,58 @@ module.exports = {
         xs: "475px", // Extra small devices
       },
       colors: {
-        // Wall-E Arena Color Palette - Golden Beige Theme (Logo-Inspired)
-        primary: {
-          50: "#fdfcfa",
-          100: "#f9f7f3", // Background ivory
-          200: "#f0ebe0",
-          300: "#e6ddca",
-          400: "#d9cba3", // Light sand (Accent 2)
-          500: "#bfab79", // Main golden beige
-          600: "#a89363",
-          700: "#8c7853", // Muted brown (Accent 1)
-          800: "#6b5d3f",
-          900: "#4a4029",
+        // Backgrounds: classes like bg-bg-body, bg-bg-card
+        bg: {
+          body: "var(--bg-body)",
+          elevated: "var(--bg-elevated)",
+          card: "var(--bg-card)",
+          "card-soft": "var(--bg-card-soft)",
+          chip: "var(--bg-chip)",
         },
+
+        // Accents: text-accent-pink-500, bg-accent-orange-soft, etc.
         accent: {
-          50: "#faf8f5",
-          100: "#f3efe8",
-          200: "#e6ddd0",
-          300: "#d4c4ad",
-          400: "#bfab8a",
-          500: "#8c7853", // Muted brown
-          600: "#756343",
-          700: "#5e4e36",
-          800: "#483a29",
-          900: "#32281d",
+          pink: {
+            50: "var(--accent-pink-faint)",
+            soft: "var(--accent-pink-soft)",
+            500: "var(--accent-pink)",
+            deep: "var(--accent-pink-deep)",
+          },
+          orange: {
+            50: "var(--accent-orange-faint)",
+            soft: "var(--accent-orange-soft)",
+            500: "var(--accent-orange)",
+            deep: "var(--accent-orange-deep)",
+          },
         },
+
         text: {
-          primary: "#2f2f2f", // Charcoal gray
-          secondary: "#5a5a5a",
-          tertiary: "#8a8a8a",
+          main: "var(--text-main)",
+          muted: "var(--text-muted)",
+          subtle: "var(--text-subtle)",
         },
-        secondary: {
-          50: "#EFF6FF",
-          100: "#DBEAFE",
-          200: "#BFDBFE",
-          300: "#93C5FD",
-          400: "#60A5FA",
-          500: "#3B82F6",
-          600: "#2563EB",
-          700: "#1D4ED8",
-          800: "#1E40AF",
-          900: "#1E3A8A",
+
+        border: {
+          subtle: "var(--border-subtle)",
+          strong: "var(--border-strong)",
         },
-        midnight: {
-          50: "#F8FAFC",
-          100: "#F1F5F9",
-          200: "#E2E8F0",
-          300: "#CBD5E1",
-          400: "#94A3B8",
-          500: "#64748B",
-          600: "#475569",
-          700: "#334155",
-          800: "#1E293B",
-          900: "#0F172A",
-        },
-        success: {
-          50: "#ECFDF5",
-          100: "#D1FAE5",
-          200: "#A7F3D0",
-          300: "#6EE7B7",
-          400: "#34D399",
-          500: "#10B981",
-          600: "#059669",
-          700: "#047857",
-          800: "#065F46",
-          900: "#064E3B",
-        },
-        warning: {
-          50: "#FFFBEB",
-          100: "#FEF3C7",
-          200: "#FDE68A",
-          300: "#FCD34D",
-          400: "#FBBF24",
-          500: "#F59E0B",
-          600: "#D97706",
-          700: "#B45309",
-          800: "#92400E",
-          900: "#78350F",
-        },
-        error: {
-          50: "#FEF2F2",
-          100: "#FEE2E2",
-          200: "#FECACA",
-          300: "#FCA5A5",
-          400: "#F87171",
-          500: "#EF4444",
-          600: "#DC2626",
-          700: "#B91C1C",
-          800: "#991B1B",
-          900: "#7F1D1D",
+
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
+
+        // Legacy support - map old primary colors to new system
+        primary: {
+          50: "var(--accent-pink-faint)",
+          100: "var(--bg-card)",
+          200: "var(--bg-card-soft)",
+          300: "var(--bg-chip)",
+          400: "var(--accent-pink-soft)",
+          500: "var(--accent-pink)",
+          600: "var(--accent-pink)",
+          700: "var(--accent-pink-deep)",
+          800: "var(--accent-pink-deep)",
+          900: "var(--bg-elevated)",
         },
       },
       fontFamily: {
@@ -137,16 +100,22 @@ module.exports = {
           "0 4px 25px -2px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
         large:
           "0 10px 40px -4px rgba(0, 0, 0, 0.1), 0 4px 25px -5px rgba(0, 0, 0, 0.1)",
-        glow: "0 0 20px rgba(191, 171, 121, 0.3)",
-        "glow-lg": "0 0 40px rgba(191, 171, 121, 0.25)",
+        "pink-soft": "var(--shadow-soft-pink)",
+        "pink-strong": "var(--shadow-strong-pink)",
+        glow: "0 0 20px rgba(202, 57, 133, 0.3)",
+        "glow-lg": "0 0 40px rgba(202, 57, 133, 0.25)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-conic":
           "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
-        "gradient-primary": "linear-gradient(135deg, #bfab79 0%, #a89363 100%)",
-        "gradient-secondary":
-          "linear-gradient(135deg, #1E3A8A 0%, #0F172A 100%)",
+        "gradient-hero": "var(--gradient-hero)",
+        "gradient-brand": "var(--gradient-brand)",
+        "gradient-card": "var(--gradient-card)",
+        "gradient-button-primary": "var(--gradient-button-primary)",
+        "gradient-button-secondary": "var(--gradient-button-secondary)",
+        "gradient-primary": "var(--gradient-brand)",
+        "gradient-secondary": "var(--gradient-button-secondary)",
         glass:
           "linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)",
       },

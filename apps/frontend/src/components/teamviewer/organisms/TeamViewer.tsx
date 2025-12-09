@@ -123,7 +123,7 @@ export function TeamViewer({
   };
 
   return (
-    <Card className="p-4 sm:p-6 border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-lg">
+    <Card className="p-4 sm:p-6 border-2 border-border-subtle hover:border-accent-pink-500/30 transition-all">
       {/* Header Section */}
       <div className="flex flex-col gap-2 mb-4">
         <div className="flex items-start justify-between gap-3">
@@ -226,7 +226,7 @@ export function TeamViewer({
       ) : (
         <>
           {/* List View (existing) */}
-          <h4 className="text-sm font-semibold text-gray-700 mb-3">
+          <h4 className="text-sm font-semibold text-[#E6E6FA] mb-3">
             Squad ({teamPlayers.length} players)
           </h4>
 

@@ -20,8 +20,8 @@ const Card: React.FC<CardProps> = ({
     ? "hover:shadow-large hover:-translate-y-1 cursor-pointer"
     : "";
   const glassClasses = glassmorphism
-    ? "bg-white/10 backdrop-blur-md border border-white/20"
-    : "bg-white shadow-soft border border-gray-100";
+    ? "bg-white/10 backdrop-blur-md border border-border-subtle/50"
+    : "bg-bg-card shadow-pink-soft border border-border-subtle";
 
   return (
     <div
@@ -49,7 +49,7 @@ const CardFooter: React.FC<{
   children: React.ReactNode;
   className?: string;
 }> = ({ children, className = "" }) => (
-  <div className={`p-6 pt-4 border-t border-gray-100 ${className}`}>
+  <div className={`p-6 pt-4 border-t border-border-subtle ${className}`}>
     {children}
   </div>
 );

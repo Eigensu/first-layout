@@ -30,11 +30,14 @@ export default function ForgotPasswordResetPage() {
     setError(null);
     setMessage(null);
     try {
-      const res = await fetch(`${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reset_token: token, new_password: password }),
-      });
+      const res = await fetch(
+        `${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/reset`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reset_token: token, new_password: password }),
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.detail || "Reset failed");
@@ -54,14 +57,22 @@ export default function ForgotPasswordResetPage() {
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-3 mb-2">
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
-            <Image src="/logo.jpeg" alt="Wall-E Arena Logo" width={64} height={64} className="object-cover" />
+            <Image
+              src="/logo.jpeg"
+              alt="Wall-E Arena Logo"
+              width={64}
+              height={64}
+              className="object-cover"
+            />
           </div>
-          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">Wall-E Arena</h1>
+          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+            Wall-E Arena
+          </h1>
         </div>
-        <p className="text-gray-600">Set a new password</p>
+        <p className="text-text-muted">Set a new password</p>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(191,171,121,0.5)]">
+      <div className="bg-bg-card rounded-3xl p-6 sm:p-8 shadow-pink-soft">
         <form onSubmit={onSubmit} className="space-y-4">
           <Input
             type="password"
@@ -82,10 +93,14 @@ export default function ForgotPasswordResetPage() {
             required
           />
           {message && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">{message}</div>
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
+              {message}
+            </div>
           )}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+              {error}
+            </div>
           )}
           <Button
             type="submit"

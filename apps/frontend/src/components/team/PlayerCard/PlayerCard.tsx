@@ -29,11 +29,12 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
       <div
         className={`
           flex items-center gap-2.5 sm:gap-3 p-3 sm:p-4 rounded-xl border-2 transition-all
-          ${disabled && !isSelected
-            ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
-            : isSelected
-              ? "border-primary-400 bg-primary-50/30 cursor-pointer shadow-sm"
-              : "border-gray-200 hover:border-gray-300 bg-white cursor-pointer hover:shadow-sm"
+          ${
+            disabled && !isSelected
+              ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+              : isSelected
+                ? "border-primary-400 bg-primary-900/90 text-white cursor-pointer shadow-sm"
+                : "border-gray-200 hover:border-gray-300 bg-white cursor-pointer hover:shadow-sm"
           }
           ${className}
         `}
@@ -49,7 +50,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
         {/* Player Info */}
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+          <h4
+            className={`font-semibold text-sm sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
+          >
             {player.name}
           </h4>
           <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
@@ -118,11 +121,12 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     <Card
       className={`
         relative transition-all duration-300
-        ${disabled && !isSelected
-          ? "border-2 border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
-          : isSelected
-            ? "cursor-pointer border-2 border-primary-300 bg-white hover:shadow-medium"
-            : "cursor-pointer border-2 border-gray-200 hover:border-gray-300 hover:shadow-medium"
+        ${
+          disabled && !isSelected
+            ? "border-2 border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+            : isSelected
+              ? "cursor-pointer border-2 border-primary-500 bg-primary-600 hover:shadow-medium"
+              : "cursor-pointer border-2 border-gray-200 hover:border-gray-300 hover:shadow-medium"
         }
         ${className}
       `}
@@ -130,7 +134,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     >
       {/* Captain/Vice-Captain Badges */}
       {isCaptain && (
-        <div className="absolute -top-2 -right-2 z-10">
+        <div className="absolute top-0 right-0 z-10 p-1">
           <Badge
             variant="warning"
             size="sm"
@@ -142,7 +146,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       )}
       {isViceCaptain && (
-        <div className="absolute -top-2 -right-2 z-10">
+        <div className="absolute top-0 right-0 z-10 p-1">
           <Badge
             variant="secondary"
             size="sm"
@@ -169,7 +173,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
             <div>
               <h4
-                className={`font-semibold text-gray-900 ${variant === "captain" ? "text-sm sm:text-base" : "text-sm sm:text-base"}`}
+                className={`font-semibold ${variant === "captain" ? "text-sm sm:text-base" : "text-sm sm:text-base"} ${isSelected ? "text-white" : "text-gray-900"}`}
               >
                 {player.name}
               </h4>
@@ -182,7 +186,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
                     {player.slotLabel}
                   </Badge>
                 )}
-                <span className="text-xs sm:text-sm text-gray-500">
+                <span
+                  className={`text-xs sm:text-sm ${isSelected ? "text-white/80" : "text-gray-500"}`}
+                >
                   {player.team}
                 </span>
                 {player.isHot && (
@@ -245,10 +251,16 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
               </div>
             </div>
             <div className="text-center">
-              <div className="text-base sm:text-lg font-bold text-gray-900">
+              <div
+                className={`text-base sm:text-lg font-bold ${isSelected ? "text-white" : "text-gray-900"}`}
+              >
                 ₹{Math.floor(player.price)}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-500">Price</div>
+              <div
+                className={`text-[10px] sm:text-xs ${isSelected ? "text-white/70" : "text-gray-500"}`}
+              >
+                Price
+              </div>
             </div>
           </div>
         )}
@@ -257,19 +269,29 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         {player.stats && variant !== "captain" && (
           <div className="grid grid-cols-3 gap-2 pt-2 sm:pt-3 border-t border-gray-100">
             <div className="text-center">
-              <div className="text-sm sm:text-base font-medium text-gray-900">
+              <div
+                className={`text-sm sm:text-base font-medium ${isSelected ? "text-white" : "text-gray-900"}`}
+              >
                 {player.stats.matches}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-500">
+              <div
+                className={`text-[10px] sm:text-xs ${isSelected ? "text-white/70" : "text-gray-500"}`}
+              >
                 Matches
               </div>
             </div>
             {player.stats.runs && (
               <div className="text-center">
-                <div className="text-sm sm:text-base font-medium text-gray-900">
+                <div
+                  className={`text-sm sm:text-base font-medium ${isSelected ? "text-white" : "text-gray-900"}`}
+                >
                   {player.stats.runs}
                 </div>
-                <div className="text-[10px] sm:text-xs text-gray-500">Runs</div>
+                <div
+                  className={`text-[10px] sm:text-xs ${isSelected ? "text-white/70" : "text-gray-500"}`}
+                >
+                  Runs
+                </div>
               </div>
             )}
             {player.stats.wickets && (
@@ -306,7 +328,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
                     e.stopPropagation();
                     onSetCaptain(player.id);
                   }}
-                  className="flex-1 px-3 py-2 sm:py-1.5 text-xs sm:text-sm font-medium text-warning-700 bg-warning-50 border border-warning-200 rounded-lg hover:bg-warning-100"
+                  className="flex-1 px-3 py-2 sm:py-1.5 text-xs sm:text-sm font-bold text-orange-600 bg-white border border-orange-300 rounded-lg hover:bg-orange-50 transition-colors shadow-sm"
                 >
                   Make Captain
                 </button>
@@ -317,7 +339,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
                     e.stopPropagation();
                     onSetViceCaptain(player.id);
                   }}
-                  className="flex-1 px-3 py-2 sm:py-1.5 text-xs sm:text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-200 rounded-lg hover:bg-secondary-100"
+                  className="flex-1 px-3 py-2 sm:py-1.5 text-xs sm:text-sm font-bold text-purple-600 bg-white border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors shadow-sm"
                 >
                   Make V.Captain
                 </button>

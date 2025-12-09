@@ -20,10 +20,10 @@ interface SponsorCardProps {
 }
 
 const cardTheme = {
-  gradient: "from-primary-300 via-primary-400 to-primary-500",
-  bg: "bg-gradient-to-br from-primary-50 to-primary-100",
-  badge: "bg-gradient-to-r from-primary-500 to-primary-700",
-  ring: "ring-primary-300",
+  gradient: "from-accent-pink-500 via-accent-orange-500 to-accent-pink-500",
+  bg: "bg-bg-card",
+  badge: "bg-gradient-brand",
+  ring: "ring-accent-pink-500/30",
 };
 
 export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
@@ -39,8 +39,8 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
     <motion.div
       whileHover={{ y: -5, scale: 1.02 }}
       transition={{ duration: 0.2 }}
-      className={`relative bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 ${
-        featured ? "ring-2 " + cardTheme.ring : "border border-gray-200"
+      className={`relative bg-bg-elevated rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 ${
+        featured ? "ring-2 " + cardTheme.ring : "border border-border-subtle"
       }`}
     >
       {/* Featured Badge */}
@@ -77,10 +77,10 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
 
       {/* Content */}
       <div className="p-6 text-center">
-        <h3 className="text-xl font-extrabold text-gray-900 mb-2 tracking-tight line-clamp-1">
+        <h3 className="text-xl font-extrabold text-text-main mb-2 tracking-tight line-clamp-1">
           {sponsor.name}
         </h3>
-        <p className="text-gray-700 text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
+        <p className="text-text-muted text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
           {sponsor.description}
         </p>
 
@@ -90,7 +90,7 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
             href={sponsor.website}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-neutral-800 hover:text-neutral-900 font-semibold text-sm group transition-colors duration-200"
+            className="inline-flex items-center gap-2 text-accent-pink-500 hover:text-accent-pink-400 font-semibold text-sm group transition-colors duration-200"
           >
             Visit Website
             <ExternalLink className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-200" />

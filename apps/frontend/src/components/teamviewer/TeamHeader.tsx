@@ -31,7 +31,7 @@ export function TeamHeader({
     <div className={cn("flex-1 min-w-0", className)}>
       {/* Team Name Row */}
       <div className="flex items-center gap-3 flex-wrap">
-        <h3 className="text-xl sm:text-2xl font-bold text-accent-900 tracking-tight">
+        <h3 className="text-xl sm:text-2xl font-bold text-[#E6E6FA] tracking-tight">
           {teamName}
         </h3>
         <PointsBadge
@@ -42,7 +42,7 @@ export function TeamHeader({
           variant="ghost"
           size="sm"
           onClick={onClickRename}
-          className="p-1.5 text-accent-500 hover:text-primary-600 hover:bg-primary-100 rounded-full transition-colors"
+          className="p-1.5 text-[#D8BFD8] hover:text-[#E6E6FA] hover:bg-white/10 rounded-full transition-colors"
           aria-label="Rename team"
         >
           <svg
@@ -63,7 +63,7 @@ export function TeamHeader({
 
       {/* Meta Row */}
       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-        <span className="text-sm text-accent-500">
+        <span className="text-sm text-[#D8BFD8]">
           Created{" "}
           {new Date(createdAt).toLocaleDateString("en-US", {
             month: "short",
@@ -86,15 +86,15 @@ export function TeamHeader({
             <a
               href={contestLink}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
-                         bg-primary-100 text-primary-800 text-sm font-medium
-                         hover:bg-primary-200 transition-colors whitespace-nowrap"
+                         bg-white/10 text-[#E6E6FA] text-sm font-medium
+                         hover:bg-white/20 transition-colors whitespace-nowrap border border-[#E6E6FA]/20"
             >
               <span>{contestName}</span>
             </a>
           ) : (
             <span
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
-                            bg-primary-100 text-primary-800 text-sm font-medium whitespace-nowrap"
+                            bg-white/10 text-[#E6E6FA] text-sm font-medium whitespace-nowrap border border-[#E6E6FA]/20"
             >
               <span>{contestName}</span>
             </span>

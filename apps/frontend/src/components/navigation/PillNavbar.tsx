@@ -148,7 +148,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
     <>
       <nav className={`fixed top-0 left-0 right-0 z-50 ${className}`}>
         {/* Desktop Navigation */}
-        <div className="hidden md:flex bg-[#f9f7f3] shadow-md border border-gray-200 p-1.5 items-center justify-between gap-1">
+        <div className="hidden md:flex bg-bg-elevated shadow-md border-b border-border-subtle p-1.5 items-center justify-between gap-1 transition-all duration-300">
           {/* Left side: Logo and Nav Items */}
           <div className="flex items-center gap-1">
             {/* Logo */}
@@ -172,17 +172,21 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   key={item.id}
                   onClick={() => handleNavigation(item.href)}
                   className={`
-                    flex items-center justify-center space-x-1.5 rounded-full font-medium whitespace-nowrap px-6 py-2.5
+                    flex items-center justify-center space-x-1.5 rounded-full font-medium whitespace-nowrap px-6 py-2.5 border
                     ${
                       isActive
-                        ? "bg-gradient-primary text-white shadow-md"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                        ? "bg-gradient-brand text-text-main border-accent-pink-soft"
+                        : "text-text-muted hover:text-text-main hover:bg-bg-card-soft border-transparent"
                     }
                     outline-none focus:outline-none focus-visible:outline-none focus:ring-0 active:bg-transparent
                   `}
                 >
                   {item.icon && (
-                    <span className={isActive ? "text-white" : "text-gray-500"}>
+                    <span
+                      className={
+                        isActive ? "text-text-main" : "text-text-muted"
+                      }
+                    >
                       {item.icon}
                     </span>
                   )}
@@ -198,7 +202,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
               <div ref={userMenuRef} className="relative">
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-card px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-bg-card-soft transition-colors"
                   aria-haspopup="menu"
                   aria-expanded={userMenuOpen}
                 >
@@ -208,16 +212,16 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                     size="sm"
                     className="h-7 w-7"
                   />
-                  <span className="text-gray-700">Account</span>
+                  <span className="text-text-main">Account</span>
                   <ChevronDown
-                    className={`h-4 w-4 text-gray-500 ${userMenuOpen ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 text-text-muted transition-transform ${userMenuOpen ? "rotate-180" : ""}`}
                   />
                 </button>
 
                 {userMenuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg z-50"
+                    className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-border-subtle bg-bg-card p-1.5 shadow-lg z-50"
                   >
                     <div
                       role="menuitem"
@@ -226,9 +230,9 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                         setUserMenuOpen(false);
                         router.push("/dashboard");
                       }}
-                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main hover:bg-bg-card-soft"
                     >
-                      <LayoutDashboard className="h-4 w-4 text-primary-600" />
+                      <LayoutDashboard className="h-4 w-4 text-accent-pink-500" />
                       <span>Dashboard</span>
                     </div>
                     <div
@@ -238,12 +242,12 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                         setUserMenuOpen(false);
                         router.push("/admin");
                       }}
-                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main hover:bg-bg-card-soft"
                     >
-                      <Settings className="h-4 w-4 text-primary-600" />
+                      <Settings className="h-4 w-4 text-accent-pink-500" />
                       <span>Admin</span>
                     </div>
-                    <div className="my-1 h-px bg-gray-100" />
+                    <div className="my-1 h-px bg-border-subtle" />
                     <div
                       role="menuitem"
                       tabIndex={0}
@@ -251,7 +255,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                         setUserMenuOpen(false);
                         await logout();
                       }}
-                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                      className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/10"
                     >
                       <LogOut className="h-4 w-4" />
                       <span>Log Out</span>
@@ -262,7 +266,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             ) : (
               <Link
                 href="/auth/login"
-                className="inline-flex items-center rounded-full bg-gradient-primary text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)]"
+                className="inline-flex items-center rounded-full bg-gradient-brand text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-pink-soft transition"
               >
                 Join Us
               </Link>
@@ -270,7 +274,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
           </div>
         </div>
         {/* Mobile Navigation Header */}
-        <div className="md:hidden bg-[#f9f7f3] shadow-md border border-gray-200">
+        <div className="md:hidden bg-bg-elevated shadow-md border border-border-subtle">
           <div className="flex items-center justify-between p-3">
             {/* Logo */}
             <Link
@@ -285,20 +289,20 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                 height={32}
                 className="rounded-full object-cover"
               />
-              <span className="font-semibold text-gray-900 text-sm">
+              <span className="font-semibold text-text-main text-sm">
                 Wall-E Arena
               </span>
             </Link>{" "}
             {/* Hamburger Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 z-50 relative"
+              className="p-2 rounded-lg hover:bg-bg-card-soft transition-colors z-50 relative"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
-                <X className="w-6 h-6 text-gray-600" />
+                <X className="w-6 h-6 text-text-muted" />
               ) : (
-                <Menu className="w-6 h-6 text-gray-600" />
+                <Menu className="w-6 h-6 text-text-muted" />
               )}
             </button>
           </div>
@@ -316,12 +320,12 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
       {/* Side Menu Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 md:hidden ${
+        className={`fixed top-0 right-0 h-full w-80 bg-bg-card shadow-2xl z-50 md:hidden transform transition-transform duration-300 ease-in-out ${
           mobileMenuOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Menu Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-border-subtle">
           <Link
             href="/"
             aria-label="Go to Home"
@@ -334,14 +338,14 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
               height={32}
               className="rounded-full object-cover"
             />
-            <span className="font-semibold text-gray-900">Wall-E Arena</span>
+            <span className="font-semibold text-text-main">Wall-E Arena</span>
           </Link>
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="p-2 rounded-lg hover:bg-gray-100"
+            className="p-2 rounded-lg hover:bg-bg-card-soft transition-colors"
             aria-label="Close menu"
           >
-            <X className="w-6 h-6 text-gray-600" />
+            <X className="w-6 h-6 text-text-muted" />
           </button>
         </div>
 
@@ -359,13 +363,17 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                     ${
                       isActive
                         ? "bg-gradient-primary text-white shadow-md"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        : "text-text-muted hover:bg-bg-card-soft hover:text-text-main"
                     }
                     outline-none focus:outline-none focus-visible:outline-none focus:ring-0 active:bg-transparent
                   `}
                 >
                   {item.icon && (
-                    <span className={isActive ? "text-white" : "text-gray-500"}>
+                    <span
+                      className={
+                        isActive ? "text-text-main" : "text-text-muted"
+                      }
+                    >
                       {item.icon}
                     </span>
                   )}
@@ -377,7 +385,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
           {/* Additional mobile menu content (e.g., UserMenu) */}
           {mobileMenuContent && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-border-subtle">
               {mobileMenuContent}
             </div>
           )}

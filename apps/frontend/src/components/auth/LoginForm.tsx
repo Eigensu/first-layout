@@ -76,15 +76,15 @@ export function LoginForm() {
               className="object-cover"
             />
           </div>
-          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+          <h1 className="text-4xl font-extrabold text-accent-pink-soft">
             Wall-E Arena
           </h1>
         </div>
-        <p className="text-gray-600">Welcome back! Ready to play?</p>
+        <p className="text-text-muted">Welcome back! Ready to play?</p>
       </div>
 
       {/* Login Form */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(191,171,121,0.5)]">
+      <div className="bg-bg-card rounded-3xl p-6 sm:p-8 shadow-pink-soft">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
@@ -122,11 +122,11 @@ export function LoginForm() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
               />
-              <span className="ml-2 text-sm text-gray-700">Remember me</span>
+              <span className="ml-2 text-sm text-text-muted">Remember me</span>
             </label>
             <button
               type="button"
-              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              className="text-sm text-text-muted hover:text-accent-pink-soft font-medium"
               onClick={() => router.push("/auth/forgot-password")}
             >
               Forgot password?
@@ -144,11 +144,11 @@ export function LoginForm() {
 
           {/* Register Link */}
           <div className="text-center pt-4">
-            <p className="text-gray-600">
+            <p className="text-text-muted">
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/register"
-                className="text-primary-600 hover:text-primary-700 font-semibold transition-colors"
+                className="text-accent-pink-soft hover:text-accent-pink font-semibold transition-colors"
               >
                 Create Account
               </Link>
@@ -157,7 +157,7 @@ export function LoginForm() {
         </form>
       </div>
       {/* Legacy modal removed */}
-      <p className="text-center text-xs text-gray-500 mt-4">
+      <p className="text-center text-xs text-text-muted mt-4">
         By continuing, you agree to our Terms of Service and Privacy Policy
       </p>
     </div>

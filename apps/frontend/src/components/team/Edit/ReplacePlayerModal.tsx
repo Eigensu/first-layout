@@ -36,7 +36,9 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
     if (query.trim()) {
       const q = query.toLowerCase();
       arr = arr.filter(
-        (p) => p.name.toLowerCase().includes(q) || (p.team || "").toLowerCase().includes(q)
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.team || "").toLowerCase().includes(q)
       );
     }
     return arr;
@@ -48,16 +50,24 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h3 className="font-semibold text-gray-900">Replace Player</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+      <div className="bg-bg-card rounded-xl shadow-pink-soft border border-border-subtle w-full max-w-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle">
+          <h3 className="font-semibold text-text-main">Replace Player</h3>
+          <button
+            onClick={onClose}
+            className="text-text-muted hover:text-text-main"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="p-5 space-y-4">
           <SearchInput value={query} onChange={setQuery} autoFocus />
           {target && (
-            <div className="text-xs text-gray-500">Replacing <span className="font-medium text-gray-900">{target.name}</span></div>
+            <div className="text-xs text-text-muted">
+              Replacing{" "}
+              <span className="font-medium text-text-main">{target.name}</span>
+            </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
@@ -70,13 +80,17 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
               />
             ))}
             {list.length === 0 && (
-              <div className="text-sm text-gray-500">No players match your search.</div>
+              <div className="text-sm text-text-muted">
+                No players match your search.
+              </div>
             )}
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t flex justify-end">
-          <Button variant="ghost" onClick={onClose}>Close</Button>
+        <div className="px-5 py-3 border-t border-border-subtle flex justify-end">
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
         </div>
       </div>
     </div>

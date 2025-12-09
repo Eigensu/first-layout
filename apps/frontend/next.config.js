@@ -8,6 +8,7 @@ config({ path: rootEnvPath });
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    unoptimized: process.env.NODE_ENV === "development",
     remotePatterns: [
       {
         protocol: "http",
@@ -60,9 +61,6 @@ const nextConfig = {
   // Ignore build errors for faster deployment (optional - remove in production)
   typescript: {
     ignoreBuildErrors: false,
-  },
-  eslint: {
-    ignoreDuringBuilds: false,
   },
   // Disable Next.js dev activity indicator (logo/watermark)
   devIndicators: {

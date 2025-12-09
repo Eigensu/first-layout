@@ -28,8 +28,16 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={() => !loading && onCancel()} aria-hidden="true" />
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={() => !loading && onCancel()}
+        aria-hidden="true"
+      />
       <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl border border-primary-200">
         <div className="p-5 sm:p-6">
           <div className="mb-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-primary text-white text-xs font-semibold shadow">
@@ -43,7 +51,7 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={() => !loading && onCancel()}
-              className="px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 disabled:opacity-60"
+              className="px-4 py-2 rounded-full text-sm font-medium text-text-main hover:bg-bg-card-soft border border-border-subtle disabled:opacity-60"
               disabled={loading}
             >
               {cancelText}
@@ -55,7 +63,7 @@ export function ConfirmDialog({
                 "px-5 py-2.5 rounded-full text-sm font-semibold text-white shadow",
                 destructive
                   ? "bg-red-600 hover:bg-red-700"
-                  : "bg-gradient-primary hover:shadow-[0_0_20px_rgba(191,171,121,0.35)]",
+                  : "bg-gradient-brand hover:shadow-pink-soft",
                 loading ? "opacity-70" : "",
               ].join(" ")}
               disabled={loading}

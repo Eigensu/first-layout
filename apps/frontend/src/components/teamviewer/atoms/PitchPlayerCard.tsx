@@ -126,9 +126,9 @@ export function PitchPlayerCard({
       {/* Name Badge - More compact */}
       <div
         className={cn(
-          "-mt-1 bg-gradient-to-r from-accent-800 to-accent-900",
-          "text-primary-100 font-semibold rounded shadow-md",
-          "truncate text-center border border-primary-400/20",
+          "-mt-1 bg-bg-elevated",
+          "text-white font-semibold rounded shadow-md",
+          "truncate text-center border border-border-subtle",
           config.name
         )}
         title={player.name}

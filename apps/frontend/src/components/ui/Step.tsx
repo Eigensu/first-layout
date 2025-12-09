@@ -46,10 +46,10 @@ const StepCard: React.FC<StepProps> = ({
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${
             isCompleted
-              ? "bg-success-500 shadow-lg"
+              ? "bg-gradient-brand shadow-lg"
               : isActive
-                ? "bg-primary-500 shadow-lg shadow-primary-200"
-                : "bg-gray-400"
+                ? "bg-gradient-brand shadow-lg shadow-pink-strong/40"
+                : "bg-border-subtle"
           }`}
         >
           {getStepIcon()}
@@ -58,12 +58,12 @@ const StepCard: React.FC<StepProps> = ({
 
       {/* Step Card - plain white background (no gradients) */}
       <Card
-        className={`border-2 transition-all duration-300 ${
+        className={`border-2 transition-all duration-300 bg-bg-card ${
           isActive
-            ? "border-primary-300 shadow-glow bg-white"
+            ? "border-accent-pink-soft shadow-pink-strong"
             : isCompleted
-              ? "border-success-300 shadow-medium bg-white"
-              : "border-gray-200 hover:border-gray-300 bg-white"
+              ? "border-border-subtle shadow-lg"
+              : "border-border-subtle hover:border-accent-pink-soft/80"
         }`}
       >
         <div className="p-4 sm:p-6 pt-4 sm:pt-8">
@@ -83,14 +83,14 @@ const StepCard: React.FC<StepProps> = ({
               </div>
               <h3
                 className={`text-base sm:text-xl font-semibold font-heading ${
-                  isActive || isCompleted ? "text-gray-900" : "text-gray-700"
+                  isActive || isCompleted ? "text-text-main" : "text-text-muted"
                 }`}
               >
                 {title}
               </h3>
             </div>
             {description && (
-              <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mt-1 sm:mt-2">
+              <p className="text-text-muted text-xs sm:text-sm leading-relaxed mt-1 sm:mt-2">
                 {description}
               </p>
             )}
@@ -126,7 +126,7 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
           {Math.round(progressPercentage)}% Complete
         </span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+      <div className="w-full bg-border-subtle rounded-full h-1.5 sm:h-2">
         <div
           className="bg-gradient-primary h-1.5 sm:h-2 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${progressPercentage}%` }}

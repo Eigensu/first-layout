@@ -8,41 +8,86 @@
   --font-heading: var(--font-poppins), var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
-  /* Primary Brand Colors - Golden Beige Theme */
-  --primary-50: #fdfcfa;
-  --primary-100: #f9f7f3;
-  --primary-200: #f0ebe0;
-  --primary-300: #e6ddca;
-  --primary-400: #d9cba3;
-  --primary-500: #bfab79;
-  --primary-600: #a89363;
-  --primary-700: #8c7853;
-  --primary-800: #6b5d3f;
-  --primary-900: #4a4029;
+  /* Base purples */
+  --bg-body: #1a073e;
+  --bg-elevated: #26104e;
+  --bg-card: #3c1f62;
+  --bg-card-soft: #4a325f;
+  --bg-chip: #70537f;
 
-  /* Accent Colors - Muted Browns */
-  --accent-50: #faf8f5;
-  --accent-100: #f3efe8;
-  --accent-200: #e6ddd0;
-  --accent-300: #d4c4ad;
-  --accent-400: #bfab8a;
-  --accent-500: #8c7853;
-  --accent-600: #756343;
-  --accent-700: #5e4e36;
-  --accent-800: #483a29;
-  --accent-900: #32281d;
+  /* Accents - light lavenders ("pink") */
+  --accent-pink: #c8badf;
+  --accent-pink-soft: #d9cbe8;
+  --accent-pink-deep: #9887b0;
+  --accent-pink-faint: #eee7f8;
 
-  /* Text Colors */
-  --text-primary: #2f2f2f;
-  --text-secondary: #5a5a5a;
-  --text-tertiary: #8a8a8a;
+  /* Accents - deeper purples ("orange") */
+  --accent-orange: #8f82a0;
+  --accent-orange-soft: #83709a;
+  --accent-orange-deep: #4b405a;
+  --accent-orange-faint: #b6a7d3;
 
-  /* Custom Properties for Dynamic Theming */
-  --primary-gradient: linear-gradient(135deg, #bfab79 0%, #a89363 100%);
-  --secondary-gradient: linear-gradient(135deg, #d9cba3 0%, #bfab79 100%);
-  --glass-bg: linear-gradient(135deg,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.05) 100%);
+  /* Text & neutrals */
+  --text-main: #f7f3ff;
+  --text-muted: #c0b6e1;
+  --text-subtle: #9887b0;
+  --border-subtle: #4a4061;
+  --border-strong: #6f6490;
+
+  /* Status */
+  --success: #23d18b;
+  --warning: #facc15;
+  --danger: #ff4b6e;
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(
+    120deg,
+    #1a073e 0%,
+    #29114e 40%,
+    #3c1f62 75%,
+    #4a325f 100%
+  );
+
+  --gradient-brand: linear-gradient(
+    to right,
+    #816e99 0%,
+    #8878a1 50%,
+    #391c60 100%
+  );
+
+  --gradient-card: linear-gradient(
+    145deg,
+    #816e99 0%,
+    #8878a1 50%,
+    #391c60 100%
+  );
+
+  --gradient-button-primary: linear-gradient(
+    135deg,
+    #816e99 0%,
+    #8878a1 50%,
+    #391c60 100%
+  );
+
+  --gradient-button-secondary: linear-gradient(
+    135deg,
+    #5f4e9b 0%,
+    #6456a0 50%,
+    #391c60 100%
+  );
+
+  /* Shadows */
+  --shadow-soft-pink: 0 0 18px rgba(200, 186, 223, 0.35);
+  --shadow-strong-pink: 0 0 30px rgba(152, 135, 176, 0.55);
+
+  /* Legacy gradient support */
+  --primary-gradient: var(--gradient-brand);
+  --secondary-gradient: var(--gradient-button-secondary);
+  --glass-bg: linear-gradient(
+    135deg,
+    rgba(200, 186, 223, 0.1) 0%,
+    rgba(152, 135, 176, 0.05) 100%
+  );
 
   /* Animation Variables */
   --transition-fast: 150ms ease-out;
@@ -69,8 +114,8 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: #f9f7f3;
-  color: #2f2f2f;
+  background: var(--bg-body);
+  color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -78,13 +123,21 @@ body {
 
 /* Enhanced Focus Styles for Accessibility */
 *:focus {
-  outline: 2px solid #bfab79;
+  outline: 2px solid var(--accent-pink-soft);
   outline-offset: 2px;
+}
+
+/* Optional utility classes for shadows */
+.shadow-pink-soft {
+  box-shadow: var(--shadow-soft-pink);
+}
+
+.shadow-pink-strong {
+  box-shadow: var(--shadow-strong-pink);
 }
 
 /* Custom Component Styles */
 @layer components {
-
   /* Glass Morphism Effect */
   .glass {
     background: var(--glass-bg);
@@ -103,7 +156,7 @@ body {
   /* Custom Scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #bfab79 #f9f7f3;
+    scrollbar-color: var(--accent-pink) var(--bg-card);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -111,17 +164,17 @@ body {
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: #f9f7f3;
+    background: var(--bg-card);
     border-radius: 10px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #bfab79, #8c7853);
+    background: var(--gradient-brand);
     border-radius: 10px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #a89363, #6b5d3f);
+    background: var(--accent-pink-deep);
   }
 
   /* Neumorphism Button */
@@ -146,7 +199,6 @@ body {
   }
 
   @keyframes float {
-
     0%,
     100% {
       transform: translateY(0px);
@@ -163,24 +215,22 @@ body {
   }
 
   @keyframes pulse-glow {
-
     0%,
     100% {
-      box-shadow: 0 0 20px rgba(191, 171, 121, 0.3);
+      box-shadow: 0 0 20px rgba(200, 186, 223, 0.3);
     }
 
     50% {
-      box-shadow: 0 0 40px rgba(191, 171, 121, 0.6);
+      box-shadow: 0 0 40px rgba(200, 186, 223, 0.6);
     }
   }
 }
 
 /* Utility Classes */
 @layer utilities {
-
   /* Text Selection */
   ::selection {
-    background-color: #bfab79;
+    background-color: var(--accent-pink);
     color: white;
   }
 
@@ -266,7 +316,6 @@ body {
 
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {
@@ -298,7 +347,6 @@ body {
 }
 
 @keyframes pulse-slow {
-
   0%,
   100% {
     transform: scale(1);

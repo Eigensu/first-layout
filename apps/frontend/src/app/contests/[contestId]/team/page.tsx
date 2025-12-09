@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { formatPoints } from "@/lib/utils";
 import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
+import { LS_KEYS, ROUTES } from "@/common/consts";
 import {
   PlayerCard,
   PlayerList,
@@ -15,8 +18,6 @@ import {
   CaptainSelectionCard,
 } from "@/components";
 import type { Player } from "@/components";
-import { useAuth } from "@/contexts/AuthContext";
-import { LS_KEYS, ROUTES } from "@/common/consts";
 import {
   createTeam,
   getUserTeams,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api/teams";
 import {
   publicContestsApi,
+  type Contest,
   type EnrollmentResponse,
 } from "@/lib/api/public/contests";
 import { useTeamBuilder } from "@/hooks/useTeamBuilder";
@@ -140,8 +142,8 @@ export default function ContestTeamBuilderPage() {
         if (!mounted) return;
         const e = Array.isArray(mine)
           ? mine.find(
-            (x) => x.contest_id === contestId && x.status === "active"
-          )
+              (x) => x.contest_id === contestId && x.status === "active"
+            )
           : undefined;
         setEnrollment(e || null);
         const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
@@ -274,8 +276,8 @@ export default function ContestTeamBuilderPage() {
           } catch (e: any) {
             showAlert(
               e?.response?.data?.detail ||
-              e?.message ||
-              "Failed to enroll in contest",
+                e?.message ||
+                "Failed to enroll in contest",
               "Enrollment failed"
             );
           }
@@ -299,7 +301,7 @@ export default function ContestTeamBuilderPage() {
   ) as unknown as Player[];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
+    <div className="min-h-screen bg-bg-body text-text-main">
       <AlertDialog
         open={alertOpen}
         title={alertTitle}
@@ -319,16 +321,16 @@ export default function ContestTeamBuilderPage() {
             onClick={() => setShowNameDialog(false)}
             aria-hidden="true"
           />
-          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl border border-primary-200">
+          <div className="relative w-full max-w-md rounded-2xl bg-bg-elevated shadow-xl border border-border-subtle">
             <div className="p-5 sm:p-6">
-              <div className="mb-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-primary text-white text-xs font-semibold shadow">
+              <div className="mb-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-brand text-white text-xs font-semibold shadow">
                 <span className="w-1.5 h-1.5 rounded-full bg-white/90" />
                 Required
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-primary-700">
+              <h3 className="text-lg sm:text-xl font-semibold text-text-main">
                 Please enter a team name
               </h3>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-text-muted">
                 You need a name to create and enroll your team.
               </p>
 
@@ -338,7 +340,7 @@ export default function ContestTeamBuilderPage() {
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
                   placeholder="e.g., Golden Strikers"
-                  className="w-full rounded-xl border border-primary-200 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary-400"
+                  className="w-full rounded-xl border border-border-subtle bg-bg-card px-4 py-2.5 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-4 focus:ring-accent-pink-soft/30 focus:border-accent-pink-soft"
                 />
               </div>
 
@@ -346,7 +348,7 @@ export default function ContestTeamBuilderPage() {
                 <button
                   type="button"
                   onClick={() => setShowNameDialog(false)}
-                  className="px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200"
+                  className="px-4 py-2 rounded-full text-sm font-medium text-text-main hover:bg-bg-elevated border border-border-subtle"
                 >
                   Cancel
                 </button>
@@ -357,7 +359,7 @@ export default function ContestTeamBuilderPage() {
                       setShowNameDialog(false);
                     }
                   }}
-                  className="px-5 py-2.5 rounded-full text-sm font-semibold text-white bg-gradient-primary shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)]"
+                  className="px-5 py-2.5 rounded-full text-sm font-semibold text-white bg-gradient-brand shadow hover:shadow-pink-soft"
                 >
                   Continue
                 </button>
@@ -373,14 +375,14 @@ export default function ContestTeamBuilderPage() {
       {!showViewOnly && (
         <div className="sticky top-20 z-40 px-2 sm:px-4 py-2 sm:py-4">
           <div className="max-w-6xl mx-auto">
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl sm:rounded-2xl md:rounded-3xl shadow-lg border border-primary-200 p-2 sm:p-3 md:p-4">
+            <div className="bg-bg-card/90 backdrop-blur-sm rounded-xl sm:rounded-2xl md:rounded-3xl shadow-lg border border-border-subtle p-2 sm:p-3 md:p-4">
               {/* Mobile: Horizontal layout */}
               <div className="sm:hidden">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <h5 className="font-bold text-gray-900 text-sm">
+                  <h5 className="font-bold text-text-main text-sm">
                     Selected Players
                   </h5>
-                  <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-primary text-white shadow-sm">
+                  <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-brand text-white shadow-sm">
                     {selectedPlayers.length}/{TOTAL_MAX || 0}
                   </div>
                 </div>
@@ -392,7 +394,7 @@ export default function ContestTeamBuilderPage() {
                           key={player.id}
                           type="button"
                           onClick={() => handlePlayerSelect(player.id)}
-                          className="flex-shrink-0 px-1.5 py-0.5 border border-primary-200 rounded-full hover:bg-primary-50 hover:border-primary-300 transition-all duration-200 text-[9px] font-medium text-gray-900 whitespace-nowrap bg-white shadow-sm"
+                          className="flex-shrink-0 px-1.5 py-0.5 border border-border-subtle rounded-full hover:bg-bg-elevated hover:border-accent-pink-soft transition-all duration-200 text-[9px] font-medium text-text-main whitespace-nowrap bg-bg-card shadow-sm"
                           title="Tap to remove"
                         >
                           {player.name}
@@ -400,7 +402,9 @@ export default function ContestTeamBuilderPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-gray-500 italic">No players selected yet</p>
+                    <p className="text-[10px] text-gray-500 italic">
+                      No players selected yet
+                    </p>
                   )}
                 </div>
               </div>
@@ -408,10 +412,10 @@ export default function ContestTeamBuilderPage() {
               {/* Desktop: Vertical layout */}
               <div className="hidden sm:flex items-start gap-3 md:gap-4">
                 <div className="flex flex-col gap-1 flex-shrink-0">
-                  <h5 className="font-bold text-gray-900 text-base md:text-lg">
+                  <h5 className="font-bold text-text-main text-base md:text-lg">
                     Selected Players
                   </h5>
-                  <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-primary text-white shadow-sm w-fit ml-8 md:ml-10">
+                  <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-brand text-white shadow-sm w-fit ml-8 md:ml-10">
                     {selectedPlayers.length}/{TOTAL_MAX || 0}
                   </div>
                 </div>
@@ -423,7 +427,7 @@ export default function ContestTeamBuilderPage() {
                           key={player.id}
                           type="button"
                           onClick={() => handlePlayerSelect(player.id)}
-                          className="flex-shrink-0 px-3 md:px-4 py-1.5 md:py-2 border-2 border-primary-200 rounded-full hover:bg-primary-50 hover:border-primary-300 transition-all duration-200 text-xs md:text-sm font-medium text-gray-900 whitespace-nowrap bg-white shadow-sm"
+                          className="flex-shrink-0 px-3 md:px-4 py-1.5 md:py-2 border-2 border-border-subtle rounded-full hover:bg-bg-elevated hover:border-accent-pink-soft transition-all duration-200 text-xs md:text-sm font-medium text-text-main whitespace-nowrap bg-bg-card shadow-sm"
                           title="Tap to remove"
                         >
                           {player.name}
@@ -431,7 +435,9 @@ export default function ContestTeamBuilderPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs md:text-sm text-gray-500 italic">No players selected yet</p>
+                    <p className="text-xs md:text-sm text-text-muted italic">
+                      No players selected yet
+                    </p>
                   )}
                 </div>
               </div>
@@ -445,10 +451,16 @@ export default function ContestTeamBuilderPage() {
           {/* Removed TeamSummary - now showing builder directly */}
           {showViewOnly ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 mb-4">You have already created a team for this contest.</p>
+              <p className="text-gray-600 mb-4">
+                You have already created a team for this contest.
+              </p>
               <Button
                 variant="primary"
-                onClick={() => router.push(`/teams?contest_id=${encodeURIComponent(String(contestId || ""))}`)}
+                onClick={() =>
+                  router.push(
+                    `/teams?contest_id=${encodeURIComponent(String(contestId || ""))}`
+                  )
+                }
               >
                 View Your Team
               </Button>
@@ -486,7 +498,7 @@ export default function ContestTeamBuilderPage() {
               >
                 {isStep1Collapsed && currentStep > 1 ? (
                   <div
-                    className="cursor-pointer hover:bg-gray-50 p-3 sm:p-4 rounded-lg transition-all duration-200"
+                    className="cursor-pointer hover:bg-bg-elevated p-3 sm:p-4 rounded-lg transition-all duration-200"
                     onClick={() => {
                       setCurrentStep(1);
                       setIsStep1Collapsed(false);
@@ -511,8 +523,8 @@ export default function ContestTeamBuilderPage() {
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <div className="text-sm sm:text-base text-gray-600">
-                          <span className="font-semibold text-gray-900">
+                        <div className="text-sm sm:text-base text-text-muted">
+                          <span className="font-semibold text-text-main">
                             {selectedPlayers.length} players
                           </span>{" "}
                           selected
@@ -530,13 +542,12 @@ export default function ContestTeamBuilderPage() {
                 ) : (
                   <div className="space-y-3 sm:space-y-4">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
-                      <h4 className="font-semibold text-gray-900 text-sm sm:text-base">
+                      <h4 className="font-semibold text-text-main text-sm sm:text-base">
                         Players Selected: {selectedPlayers.length}/
                         {TOTAL_MAX || 12}
                       </h4>
                     </div>
-
-                    <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-2.5 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm">
+                    <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2.5 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm">
                       {(() => {
                         const mins = Array.from(
                           new Set(slots.map((s) => s.min_select))
@@ -547,8 +558,8 @@ export default function ContestTeamBuilderPage() {
                         return `Meet the minimum required players in each Slot and press Next to proceed.`;
                       })()}
                     </div>
-
-                    {/* Player list - now full width */}                   <div>
+                    {/* Player list - now full width */}{" "}
+                    <div>
                       <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 pb-2 -mx-2 px-2 scrollbar-hide">
                         {slots.map((s) => {
                           const limit = SLOT_LIMITS[s.id];
@@ -565,7 +576,7 @@ export default function ContestTeamBuilderPage() {
                               {s.name}
                               {limit !== undefined && (
                                 <span
-                                  className={`ml-2 text-xs ${isActive ? "text-white/90" : "text-gray-600"}`}
+                                  className={`ml-2 text-xs ${isActive ? "text-white/90" : "text-text-muted"}`}
                                 >
                                   {count || 0}/{limit}
                                 </span>
@@ -622,7 +633,7 @@ export default function ContestTeamBuilderPage() {
                       )}
 
                       {slots.findIndex((s) => s.id === activeSlotId) ===
-                        slots.length - 1 ? (
+                      slots.length - 1 ? (
                         <div className="flex items-center justify-center mt-6">
                           <div className="flex gap-3 w-full sm:w-auto">
                             <Button
@@ -725,7 +736,7 @@ export default function ContestTeamBuilderPage() {
                                     isSelected={true}
                                     isCaptain={player.id === captainId}
                                     isViceCaptain={player.id === viceCaptainId}
-                                    onSelect={() => { }}
+                                    onSelect={() => {}}
                                     onSetCaptain={handleSetCaptain}
                                     onSetViceCaptain={handleSetViceCaptain}
                                     onReplace={openReplace}
@@ -754,7 +765,6 @@ export default function ContestTeamBuilderPage() {
                       </div>
                     )}
                   </div>
-
                 ) : (
                   <div className="text-center py-8 text-gray-400 text-sm">
                     Continue from Step 1 to configure Captain & Vice-Captain
@@ -778,7 +788,7 @@ export default function ContestTeamBuilderPage() {
                         <div className="mb-6">
                           <label
                             htmlFor="teamName"
-                            className="block text-sm font-medium text-gray-700 mb-2"
+                            className="block text-sm font-medium text-text-main mb-2"
                           >
                             Team Name
                           </label>
@@ -787,15 +797,15 @@ export default function ContestTeamBuilderPage() {
                             id="teamName"
                             value={teamName}
                             onChange={(e) => setTeamName(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-4 py-2 rounded-lg border border-border-subtle bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-accent-pink-soft/40 focus:border-accent-pink-soft"
                             placeholder="Enter your full name"
                             maxLength={50}
                           />
                         </div>
 
                         {/* Team Preview */}
-                        <Card className="p-6">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                        <Card className="p-6 bg-bg-card border border-border-subtle text-text-main">
+                          <h4 className="text-lg font-semibold text-text-main mb-4">
                             Your Dream Team
                           </h4>
                           <div className="space-y-3">
@@ -806,41 +816,35 @@ export default function ContestTeamBuilderPage() {
                               .map((player: Player) => (
                                 <div
                                   key={player.id}
-                                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                                  className="flex items-center justify-between py-2 px-3 bg-bg-elevated rounded-lg border border-border-subtle"
                                 >
-                                  <div className="flex items-center space-x-3">
-                                    <Avatar name={player.name} size="sm" />
-                                    <div>
-                                      <div className="font-medium text-gray-900">
-                                        {player.name}
-                                        {player.id === captainId && (
-                                          <Badge
-                                            variant="warning"
-                                            size="sm"
-                                            className="ml-2"
-                                          >
-                                            Captain
-                                          </Badge>
-                                        )}
-                                        {player.id === viceCaptainId && (
-                                          <Badge
-                                            variant="secondary"
-                                            size="sm"
-                                            className="ml-2"
-                                          >
-                                            Vice-Captain
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <div className="text-sm text-gray-500">
-                                        {player.team}
-                                      </div>
+                                  <div>
+                                    <div className="font-medium text-text-main text-sm">
+                                      {player.name}
+                                    </div>
+                                    <div className="text-xs text-text-muted">
+                                      {player.team}
                                     </div>
                                   </div>
-                                  <div className="text-right">
-                                    <div className="font-medium text-success-600">
-                                      {formatPoints(player.points || 0)} pts
-                                    </div>
+                                  <div className="self-end">
+                                    {player.id === captainId && (
+                                      <Badge
+                                        variant="warning"
+                                        size="sm"
+                                        className="text-[10px] px-1.5 py-0 shadow-sm"
+                                      >
+                                        C
+                                      </Badge>
+                                    )}
+                                    {player.id === viceCaptainId && (
+                                      <Badge
+                                        variant="secondary"
+                                        size="sm"
+                                        className="text-[10px] px-1.5 py-0 shadow-sm"
+                                      >
+                                        VC
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
                               ))}
@@ -863,7 +867,7 @@ export default function ContestTeamBuilderPage() {
               {/* Replace Modal */}
               {showReplace && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                  <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
+                  <div className="bg-bg-elevated rounded-xl shadow-xl w-full max-w-2xl border border-border-subtle">
                     <div className="flex items-center justify-between px-5 py-3 border-b">
                       <h3 className="font-semibold text-gray-900">
                         Replace Player
@@ -888,15 +892,15 @@ export default function ContestTeamBuilderPage() {
                         );
                         if (!target)
                           return (
-                            <div className="text-gray-500">
+                            <div className="text-text-muted">
                               No player selected.
                             </div>
                           );
                         return (
                           <div className="space-y-2">
-                            <div className="text-sm text-gray-600">
+                            <div className="text-sm text-text-muted">
                               Replacing{" "}
-                              <span className="font-medium text-gray-900">
+                              <span className="font-medium text-text-main">
                                 {target.name}
                               </span>
                               . Choose a replacement from the same slot.
@@ -906,14 +910,14 @@ export default function ContestTeamBuilderPage() {
                                 <button
                                   key={p.id}
                                   onClick={() => confirmReplace(p.id)}
-                                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 text-left"
+                                  className="flex items-center gap-3 p-3 border rounded-lg border-border-subtle hover:bg-bg-elevated text-left"
                                 >
                                   <Avatar name={p.name} size="sm" />
                                   <div className="flex-1">
-                                    <div className="font-medium text-gray-900">
+                                    <div className="font-medium text-text-main">
                                       {p.name}
                                     </div>
-                                    <div className="text-xs text-gray-500">
+                                    <div className="text-xs text-text-muted">
                                       {p.team}
                                     </div>
                                   </div>
@@ -963,6 +967,6 @@ export default function ContestTeamBuilderPage() {
           )}
         </div>
       </main>
-    </div >
+    </div>
   );
 }

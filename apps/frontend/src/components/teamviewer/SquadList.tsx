@@ -54,7 +54,7 @@ export function SquadList({
           return (
             <div
               key={player.id}
-              className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              className="flex items-center gap-2 p-2 bg-bg-card rounded-lg hover:bg-bg-card-soft transition-colors cursor-pointer border border-border-subtle"
               onClick={() => onPlayerClick(player.id)}
             >
               <Avatar
@@ -64,12 +64,14 @@ export function SquadList({
                 gradientClassName={getRoleAvatarGradient(player.role || "")}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                <p className="text-xs sm:text-sm font-medium text-text-main truncate">
                   {player.name}
                 </p>
-                <p className="text-xs text-gray-500 truncate">{player.team}</p>
+                <p className="text-xs text-text-muted truncate">
+                  {player.team}
+                </p>
               </div>
-              <div className="text-right text-xs sm:text-sm font-medium text-success-600 whitespace-nowrap">
+              <div className="text-right text-xs sm:text-sm font-medium text-success-400 whitespace-nowrap">
                 {formatPoints(points)} pts
               </div>
             </div>

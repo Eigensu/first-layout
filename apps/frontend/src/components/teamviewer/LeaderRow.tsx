@@ -29,8 +29,8 @@ export function LeaderRow({
       className={
         "flex items-center justify-between gap-3 p-3 rounded-lg border " +
         (isCaptain
-          ? "bg-warning-50 border-warning-200"
-          : "bg-secondary-50 border-secondary-200")
+          ? "bg-bg-card border-border-subtle"
+          : "bg-bg-card border-border-subtle")
       }
     >
       <Avatar
@@ -41,7 +41,7 @@ export function LeaderRow({
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+          <p className="text-sm sm:text-base font-semibold text-text-main truncate">
             {name}
           </p>
           <Badge
@@ -52,11 +52,11 @@ export function LeaderRow({
             {isCaptain ? "Captain (2x)" : "V.Captain (1.5x)"}
           </Badge>
         </div>
-        <p className="text-xs sm:text-sm text-gray-500 truncate mt-0.5">
+        <p className="text-xs sm:text-sm text-text-muted truncate mt-0.5">
           {roleLabel} • {team}
         </p>
       </div>
-      <div className="text-right text-xs sm:text-sm font-medium text-success-700 whitespace-nowrap">
+      <div className="text-right text-xs sm:text-sm font-medium text-success-400 whitespace-nowrap">
         {formatPoints(points)} pts
       </div>
     </div>

@@ -33,17 +33,19 @@ export const PlayerListItem: React.FC<PlayerListItemProps> = ({
       onClick={() => !disabled && onClick?.(player.id)}
       className={`flex items-center gap-3 p-3 border rounded-lg text-left transition-colors w-full ${
         disabled
-          ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-          : "hover:bg-gray-50 border-gray-200"
+          ? "bg-bg-card-soft border-border-subtle text-text-subtle cursor-not-allowed"
+          : "bg-bg-card hover:bg-bg-card-soft border-border-subtle text-text-main"
       }`}
     >
       <Avatar name={player.name} size="sm" />
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-gray-900 truncate">{player.name}</div>
-        <div className="text-xs text-gray-500 truncate">{subtitle}</div>
+        <div className="font-medium text-text-main truncate">{player.name}</div>
+        <div className="text-xs text-text-muted truncate">{subtitle}</div>
       </div>
       {rightText && (
-        <div className="text-right text-sm text-success-600 whitespace-nowrap">{rightText}</div>
+        <div className="text-right text-sm text-success whitespace-nowrap">
+          {rightText}
+        </div>
       )}
     </button>
   );

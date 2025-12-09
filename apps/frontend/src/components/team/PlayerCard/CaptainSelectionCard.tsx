@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Avatar } from "../../ui/Avatar";
+import { Badge } from "../../ui/Badge";
 import type { Player } from "./types.js";
 
 interface CaptainSelectionCardProps {
@@ -22,13 +23,31 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
   onSetViceCaptain,
 }) => {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 transition-all">
+    <div className="relative flex items-center gap-3 p-3 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 transition-all">
+      {isCaptain && (
+        <div className="absolute top-0 right-0 p-[2px]">
+          <Badge
+            variant="warning"
+            size="sm"
+            className="shadow-sm text-[10px] px-1.5 py-0.5"
+          >
+            C
+          </Badge>
+        </div>
+      )}
+      {isViceCaptain && (
+        <div className="absolute top-0 right-0 p-[2px]">
+          <Badge
+            variant="secondary"
+            size="sm"
+            className="shadow-sm text-[10px] px-1.5 py-0.5"
+          >
+            VC
+          </Badge>
+        </div>
+      )}
       {/* Player Avatar */}
-      <Avatar
-        name={player.name}
-        src={player.image}
-        size="sm"
-      />
+      <Avatar name={player.name} src={player.image} size="sm" />
 
       {/* Player Info */}
       <div className="flex-1 min-w-0">
@@ -50,14 +69,15 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
           disabled={isCaptain}
           aria-label={isCaptain ? "Captain selected" : "Set as captain"}
           className={`
-            px-2.5 py-1 text-[10px] font-medium rounded-md transition-all
-            ${isCaptain
-              ? "bg-warning-500 text-white border border-warning-600 shadow-sm cursor-default"
-              : "bg-warning-50 text-warning-700 border border-warning-200 hover:bg-warning-100"
+            px-2.5 py-1 text-[10px] font-bold rounded-md transition-all border
+            ${
+              isCaptain
+                ? "bg-orange-500 text-white border-orange-600 shadow-sm cursor-default"
+                : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"
             }
           `}
         >
-          {isCaptain ? "Captain ✓" : "Captain"}
+          {isCaptain ? "Captain ✓" : "C"}
         </button>
         <button
           onClick={(e) => {
@@ -67,16 +87,19 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
             }
           }}
           disabled={isViceCaptain}
-          aria-label={isViceCaptain ? "Vice Captain selected" : "Set as vice captain"}
+          aria-label={
+            isViceCaptain ? "Vice Captain selected" : "Set as vice captain"
+          }
           className={`
-            px-2.5 py-1 text-[10px] font-medium rounded-md transition-all
-            ${isViceCaptain
-              ? "bg-secondary-500 text-white border border-secondary-600 shadow-sm cursor-default"
-              : "bg-secondary-50 text-secondary-700 border border-secondary-200 hover:bg-secondary-100"
+            px-2.5 py-1 text-[10px] font-bold rounded-md transition-all border
+            ${
+              isViceCaptain
+                ? "bg-purple-600 text-white border-purple-700 shadow-sm cursor-default"
+                : "bg-white text-purple-600 border-purple-300 hover:bg-purple-50"
             }
           `}
         >
-          {isViceCaptain ? "V.Captain ✓" : "V.Captain"}
+          {isViceCaptain ? "V.Captain ✓" : "VC"}
         </button>
       </div>
     </div>

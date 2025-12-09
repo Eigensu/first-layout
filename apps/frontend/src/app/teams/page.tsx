@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PillNavbar, Card, Button } from "@/components";
+import { PillNavbar, Card, Button, Footer } from "@/components";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
@@ -549,13 +549,13 @@ export default function TeamsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
+      <div className="min-h-screen bg-bg-body text-text-main">
         <PillNavbar
           mobileMenuContent={isAuthenticated ? <MobileUserMenu /> : undefined}
         />
         <div className="h-20 sm:h-24"></div>
         <div className="container mx-auto px-4 py-8">
-          <div className="text-center text-gray-500 py-12">
+          <div className="text-center text-text-muted py-12">
             Loading your teams...
           </div>
         </div>
@@ -564,7 +564,7 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
+    <div className="min-h-screen bg-bg-body text-text-main">
       <ConfirmDialog
         open={showDeleteDialog && !!deleteTargetId}
         title="Delete this team?"
@@ -603,17 +603,17 @@ export default function TeamsPage() {
       <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-none">
         {error ? (
           <Card className="p-6 text-center">
-            <div className="text-red-600 mb-4">{error}</div>
+            <div className="text-danger mb-4">{error}</div>
             <Button onClick={() => window.location.reload()}>Retry</Button>
           </Card>
         ) : visibleTeams.length === 0 ? (
           <Card className="p-8 sm:p-12 text-center">
             <div className="max-w-md mx-auto">
               <div className="text-6xl sm:text-8xl mb-4">🏏</div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+              <h3 className="text-xl sm:text-2xl font-bold text-text-main mb-2">
                 No Teams Yet
               </h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-text-muted mb-6">
                 Create your first fantasy cricket team and start competing!
               </p>
               <Button
@@ -630,7 +630,7 @@ export default function TeamsPage() {
           <>
             {/* Create New Team Button - Hidden on mobile */}
             <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-text-main">
                 Your Teams ({visibleTeams.length})
               </h2>
               <div className="w-full sm:w-auto flex items-center gap-2">
@@ -700,6 +700,7 @@ export default function TeamsPage() {
         excludeIds={[]}
         onSelect={confirmReplace}
       />
+      <Footer />
     </div>
   );
 }

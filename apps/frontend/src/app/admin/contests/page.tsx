@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +19,7 @@ import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export default function AdminContestsPage() {
+  const router = useRouter();
   const [contests, setContests] = useState<Contest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export default function AdminContestsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="max-w-5xl mx-auto p-4 space-y-4">
+      <div className="max-w-5xl mx-auto p-4 space-y-4 text-text-main">
         <AlertDialog
           open={alertOpen}
           title={alertTitle}
@@ -253,75 +255,85 @@ export default function AdminContestsPage() {
           onConfirm={confirmForceDelete}
         />
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Admin · Contests</h1>
+          <h1 className="text-2xl font-semibold text-text-main">
+            Admin · Contests
+          </h1>
           <Link
             href="/admin"
-            className="px-3 py-1 rounded border hover:bg-gray-50"
+            className="px-3 py-1 rounded border border-border-subtle text-text-main hover:bg-bg-elevated"
           >
             Back
           </Link>
         </div>
 
-        <Card>
+        <Card className="bg-bg-card border border-border-subtle text-text-main shadow-pink-soft">
           <CardBody className="p-4">
-            <h2 className="text-lg font-medium mb-2">Create Contest</h2>
+            <h2 className="text-lg font-medium mb-2 text-text-main">
+              Create Contest
+            </h2>
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
-                <label className="block text-sm">Code</label>
+                <label className="block text-sm text-text-muted">Code</label>
                 <input
-                  className="w-full border p-2 rounded"
+                  className="w-full border border-border-subtle bg-bg-card text-text-main placeholder:text-text-muted p-2 rounded"
                   value={form.code}
                   onChange={(e) => setForm({ ...form, code: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm">Name</label>
+                <label className="block text-sm text-text-muted">Name</label>
                 <input
-                  className="w-full border p-2 rounded"
+                  className="w-full border border-border-subtle bg-bg-card text-text-main placeholder:text-text-muted p-2 rounded"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm">Start (IST)</label>
+                <label className="block text-sm text-text-muted">
+                  Start (IST)
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="date"
-                    className="border p-2 rounded"
+                    className="border border-border-subtle bg-bg-card text-text-main p-2 rounded"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                   <input
                     type="time"
                     step={60}
-                    className="border p-2 rounded w-28"
+                    className="border border-border-subtle bg-bg-card text-text-main p-2 rounded w-28"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm">End (IST)</label>
+                <label className="block text-sm text-text-muted">
+                  End (IST)
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="date"
-                    className="border p-2 rounded"
+                    className="border border-border-subtle bg-bg-card text-text-main p-2 rounded"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                   />
                   <input
                     type="time"
                     step={60}
-                    className="border p-2 rounded w-28"
+                    className="border border-border-subtle bg-bg-card text-text-main p-2 rounded w-28"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm">Visibility</label>
+                <label className="block text-sm text-text-muted">
+                  Visibility
+                </label>
                 <select
-                  className="w-full border p-2 rounded"
+                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
                   value={form.visibility}
                   onChange={(e) =>
                     setForm({
@@ -335,9 +347,9 @@ export default function AdminContestsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm">Status</label>
+                <label className="block text-sm text-text-muted">Status</label>
                 <select
-                  className="w-full border p-2 rounded"
+                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
                   value={form.status}
                   onChange={(e) =>
                     setForm({
@@ -353,9 +365,11 @@ export default function AdminContestsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm">Contest Type</label>
+                <label className="block text-sm text-text-muted">
+                  Contest Type
+                </label>
                 <select
-                  className="w-full border p-2 rounded"
+                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
                   value={form.contest_type as ContestType}
                   onChange={(e) =>
                     setForm({
@@ -370,12 +384,14 @@ export default function AdminContestsPage() {
               </div>
               {form.contest_type === "daily" && (
                 <div className="sm:col-span-2 space-y-2">
-                  <label className="block text-sm">Allowed Teams</label>
+                  <label className="block text-sm text-text-muted">
+                    Allowed Teams
+                  </label>
                   {/* Dropdown trigger */}
                   <div className="relative">
                     <button
                       type="button"
-                      className="w-full flex items-center justify-between border rounded px-3 py-2 bg-white hover:bg-gray-50"
+                      className="w-full flex items-center justify-between border border-border-subtle rounded px-3 py-2 bg-bg-card text-text-main hover:bg-bg-elevated"
                       onClick={() => setAllowedDropdownOpen((o) => !o)}
                     >
                       <span className="text-left truncate">
@@ -392,12 +408,12 @@ export default function AdminContestsPage() {
                       </svg>
                     </button>
                     {allowedDropdownOpen && (
-                      <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded border bg-white shadow">
-                        <div className="p-2 sticky top-0 bg-white border-b flex gap-2">
+                      <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded border border-border-subtle bg-bg-card shadow-lg">
+                        <div className="p-2 sticky top-0 bg-bg-card border-b border-border-subtle flex gap-2">
                           <input
                             type="text"
                             placeholder="Search..."
-                            className="flex-1 border rounded px-2 py-1 text-sm"
+                            className="flex-1 border border-border-subtle rounded px-2 py-1 text-sm bg-bg-card text-text-main placeholder:text-text-muted"
                             onChange={(e) => {
                               const q = e.currentTarget.value.toLowerCase();
                               e.currentTarget.dataset.query = q;
@@ -405,7 +421,7 @@ export default function AdminContestsPage() {
                           />
                           <button
                             type="button"
-                            className="px-2 py-1 text-xs rounded border"
+                            className="px-2 py-1 text-xs rounded border border-border-subtle text-text-main hover:bg-bg-elevated"
                             onClick={() =>
                               setSelectedAllowedTeams(availableTeams)
                             }
@@ -414,17 +430,17 @@ export default function AdminContestsPage() {
                           </button>
                           <button
                             type="button"
-                            className="px-2 py-1 text-xs rounded border"
+                            className="px-2 py-1 text-xs rounded border border-border-subtle text-text-main hover:bg-bg-elevated"
                             onClick={() => setSelectedAllowedTeams([])}
                           >
                             Clear
                           </button>
                         </div>
-                        <ul className="divide-y">
+                        <ul className="divide-y divide-border-subtle">
                           {availableTeams.map((t) => (
                             <li
                               key={t}
-                              className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                              className="px-3 py-2 hover:bg-bg-elevated cursor-pointer"
                               onClick={() => {
                                 setSelectedAllowedTeams((prev) =>
                                   prev.includes(t)
@@ -435,7 +451,7 @@ export default function AdminContestsPage() {
                             >
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`inline-flex w-4 h-4 items-center justify-center rounded border ${selectedAllowedTeams.includes(t) ? "bg-blue-600 border-blue-600" : "bg-white"}`}
+                                  className={`inline-flex w-4 h-4 items-center justify-center rounded border ${selectedAllowedTeams.includes(t) ? "bg-accent-pink-soft border-accent-pink-soft" : "bg-bg-card"}`}
                                 >
                                   {selectedAllowedTeams.includes(t) && (
                                     <svg
@@ -453,14 +469,14 @@ export default function AdminContestsPage() {
                                     </svg>
                                   )}
                                 </span>
-                                <span className="text-sm text-gray-800">
+                                <span className="text-sm text-text-main">
                                   {t}
                                 </span>
                               </div>
                             </li>
                           ))}
                           {availableTeams.length === 0 && (
-                            <li className="px-3 py-2 text-sm text-gray-500">
+                            <li className="px-3 py-2 text-sm text-text-muted">
                               No teams available
                             </li>
                           )}
@@ -468,7 +484,7 @@ export default function AdminContestsPage() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-muted">
                     Only players whose team is in the allowed list will be
                     selectable for this daily contest.
                   </p>
@@ -486,15 +502,19 @@ export default function AdminContestsPage() {
 
         <div className="grid gap-3">
           {contests.map((c) => (
-            <Card key={c.id} hover>
+            <Card
+              key={c.id}
+              hover
+              className="bg-bg-card border border-border-subtle text-text-main"
+            >
               <CardBody className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">{c.name}</div>
-                    <div className="text-sm text-gray-600">
+                    <div className="font-medium text-text-main">{c.name}</div>
+                    <div className="text-sm text-text-muted">
                       {c.code} · {c.status} · {c.visibility}
                     </div>
-                    <div className="text-xs text-gray-700 mt-1">
+                    <div className="text-xs text-text-muted mt-1">
                       {(() => {
                         const fmt = (iso: string) => {
                           const d = new Date(iso);
@@ -518,19 +538,24 @@ export default function AdminContestsPage() {
                       })()}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/admin/contests/${c.id}`}
-                      className="px-3 py-1 rounded border"
+                  <div className="flex gap-2 items-center mt-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/admin/contests/${c.id}`)}
                     >
                       Manage
-                    </Link>
-                    <button
-                      className="px-3 py-1 rounded border text-red-700"
-                      onClick={() => remove(c.id)}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        setDeleteTargetId(c.id);
+                        setShowDeleteDialog(true);
+                      }}
                     >
                       Delete
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </CardBody>

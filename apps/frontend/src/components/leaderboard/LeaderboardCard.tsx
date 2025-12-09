@@ -20,9 +20,9 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 }) => {
   const getRankBadge = (rank: number) => {
     const colors = {
-      1: "text-yellow-600",
-      2: "text-gray-600",
-      3: "text-amber-600",
+      1: "text-[#FFD700]", // Gold
+      2: "text-[#C0C0C0]", // Silver
+      3: "text-[#CD7F32]", // Bronze
     };
     const color = colors[rank as keyof typeof colors] || "text-gray-700";
     return (
@@ -54,12 +54,12 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
   const getBackgroundClass = () => {
     if (isCurrentUser) {
-      return "bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500";
+      return "bg-gradient-button-primary text-white border border-accent-pink-soft shadow-pink-soft";
     }
     if (entry.rank === 1) {
-      return "bg-gradient-to-r from-primary-100 to-primary-50 border-2 border-primary-400";
+      return "bg-gradient-button-primary text-white border border-accent-pink-soft shadow-pink-soft";
     }
-    return "bg-white border border-gray-200";
+    return "bg-bg-card/70 text-text-main border border-border-subtle";
   };
 
   const getInitials = (name: string) => {
@@ -75,24 +75,26 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
   if (showTopThree && entry.rank <= 3) {
     const containerClasses = (() => {
       // Borders per rank and subtle radial fill
-      const base = "rounded-xl sm:rounded-2xl md:rounded-3xl transition-all duration-300 relative overflow-hidden";
+      const base =
+        "rounded-xl sm:rounded-2xl md:rounded-3xl transition-all duration-300 relative overflow-hidden text-text-main";
       if (entry.rank === 1)
-        return `${base} sm:scale-100 border-2 border-yellow-500 bg-[radial-gradient(circle_at_center,transparent_0%,theme(colors.yellow.100)_100%)] p-2 sm:p-5 md:p-6 hover:shadow-xl`;
+        return `${base} sm:scale-100 border-2 border-accent-pink-soft bg-gradient-button-primary p-2 sm:p-5 md:p-6 hover:shadow-pink-strong`;
       if (entry.rank === 2)
-        return `${base} sm:scale-95 border-2 border-gray-400 bg-[radial-gradient(circle_at_center,transparent_0%,theme(colors.gray.200)_100%)] p-1.5 sm:p-3 md:p-4 hover:shadow-xl`;
+        return `${base} sm:scale-95 border-2 border-accent-orange-soft bg-gradient-card p-1.5 sm:p-3 md:p-4 hover:shadow-pink-soft`;
       if (entry.rank === 3)
-        return `${base} sm:scale-90 border-2 border-amber-600 bg-[radial-gradient(circle_at_center,transparent_0%,theme(colors.orange.100)_100%)] p-1.5 sm:p-2 md:p-3 hover:shadow-xl`;
-      return `${base} bg-white p-3 sm:p-4 hover:shadow-xl`;
-
+        return `${base} sm:scale-90 border-2 border-accent-orange-deep bg-gradient-brand p-1.5 sm:p-2 md:p-3 hover:shadow-pink-soft`;
+      return `${base} bg-bg-card p-3 sm:p-4 hover:shadow-pink-soft`;
     })();
     return (
       <div className={containerClasses}>
         {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-primary-200/30 to-transparent rounded-full -mr-12 sm:-mr-16 -mt-12 sm:-mt-16" />
+        <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-white/15 to-transparent rounded-full -mr-12 sm:-mr-16 -mt-12 sm:-mt-16" />
 
         <div className="relative flex flex-col items-center text-center">
           {/* Rank badge */}
-          <div className="mb-1.5 sm:mb-3 md:mb-4">{getRankBadge(entry.rank)}</div>
+          <div className="mb-1.5 sm:mb-3 md:mb-4">
+            {getRankBadge(entry.rank)}
+          </div>
 
           {/* Avatar */}
           <div className="relative mb-1.5 sm:mb-3 md:mb-4">
@@ -113,10 +115,10 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
           {/* User info */}
           <div className="mb-1 sm:mb-2">
-            <h3 className="font-bold text-sm sm:text-base md:text-xl text-gray-900 line-clamp-1">
+            <h3 className="font-bold text-sm sm:text-base md:text-xl text-text-main line-clamp-1">
               {entry.displayName}
             </h3>
-            <p className="text-[10px] sm:text-xs md:text-sm text-gray-600 line-clamp-1">
+            <p className="text-[10px] sm:text-xs md:text-sm text-text-muted line-clamp-1">
               {entry.teamName}
             </p>
           </div>
@@ -129,19 +131,23 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
             <p
               className={
                 entry.rank === 1
-                  ? "text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-primary-600"
+                  ? "text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-text-main"
                   : entry.rank === 2
-                    ? "text-sm sm:text-lg md:text-xl lg:text-2xl font-bold text-primary-600"
-                    : "text-sm sm:text-base md:text-lg lg:text-xl font-bold text-primary-600"
+                    ? "text-sm sm:text-lg md:text-xl lg:text-2xl font-bold text-text-main"
+                    : "text-sm sm:text-base md:text-lg lg:text-xl font-bold text-text-main"
               }
             >
               {entry.points.toLocaleString()}
             </p>
-            <p className="text-[9px] sm:text-[10px] md:text-xs text-gray-500 mt-0.5 sm:mt-1">points</p>
+            <p className="text-[9px] sm:text-[10px] md:text-xs text-text-muted mt-0.5 sm:mt-1">
+              points
+            </p>
           </div>
 
           {/* Rank change */}
-          <div className="mt-1 sm:mt-2">{getRankChangeIndicator(entry.rankChange)}</div>
+          <div className="mt-1 sm:mt-2">
+            {getRankChangeIndicator(entry.rankChange)}
+          </div>
         </div>
       </div>
     );
@@ -156,45 +162,47 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
         {/* Rank - Fixed width */}
         <div className="w-8 sm:w-10 flex-shrink-0 text-center">
           {entry.rank <= 3 ? (
-            <span className={`font-extrabold text-base sm:text-lg ${entry.rank === 1 ? "text-yellow-600" :
-              entry.rank === 2 ? "text-gray-600" :
-                "text-amber-600"
-              }`}>
+            <span
+              className={`font-extrabold text-base sm:text-lg ${
+                entry.rank === 1
+                  ? "text-[#FFD700]"
+                  : entry.rank === 2
+                    ? "text-[#C0C0C0]"
+                    : "text-[#CD7F32]"
+              }`}
+            >
               {entry.rank}
             </span>
           ) : (
-            <span className="font-bold text-sm sm:text-base text-gray-700">#{entry.rank}</span>
+            <span className="font-bold text-sm sm:text-base text-gray-700">
+              #{entry.rank}
+            </span>
           )}
         </div>
 
         {/* Avatar - Fixed size */}
         <div className="flex-shrink-0">
-          <Avatar
-            name={entry.displayName}
-            src={entry.avatarUrl}
-            size="md"
-          />
+          <Avatar name={entry.displayName} src={entry.avatarUrl} size="md" />
         </div>
 
         {/* User Info and Points - Flexible */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <h4 className="font-semibold text-sm sm:text-base text-gray-900 truncate flex-1">
+            <h4 className="font-semibold text-sm sm:text-base text-text-main truncate flex-1">
               {entry.displayName}
             </h4>
-            <p className="text-sm sm:text-lg font-bold text-primary-600 flex-shrink-0">
-              {entry.points.toLocaleString()} <span className="text-[10px] sm:text-xs text-gray-500 font-normal">pts</span>
+            <p className="text-sm sm:text-lg font-bold text-text-main flex-shrink-0">
+              {entry.points.toLocaleString()}{" "}
+              <span className="text-[10px] sm:text-xs text-text-muted font-normal">
+                pts
+              </span>
             </p>
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
-            <p className="text-xs sm:text-sm text-gray-600 truncate flex-1">
+            <p className="text-xs sm:text-sm text-text-muted truncate flex-1">
               {entry.teamName}
             </p>
-            {action && (
-              <div className="flex-shrink-0">
-                {action}
-              </div>
-            )}
+            {action && <div className="flex-shrink-0">{action}</div>}
           </div>
         </div>
       </div>

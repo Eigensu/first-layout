@@ -24,11 +24,14 @@ export default function ForgotPasswordVerifyPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, otp }),
-      });
+      const res = await fetch(
+        `${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/verify`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, otp }),
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.detail || "Invalid OTP");
@@ -49,16 +52,30 @@ export default function ForgotPasswordVerifyPage() {
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-3 mb-2">
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
-            <Image src="/logo.jpeg" alt="Wall-E Arena Logo" width={64} height={64} className="object-cover" />
+            <Image
+              src="/logo.jpeg"
+              alt="Wall-E Arena Logo"
+              width={64}
+              height={64}
+              className="object-cover"
+            />
           </div>
-          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">Wall-E Arena</h1>
+          <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+            Wall-E Arena
+          </h1>
         </div>
         <p className="text-gray-600">Verify OTP</p>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-[0_35px_140px_-10px_rgba(191,171,121,0.5)]">
+      <div className="bg-bg-card rounded-3xl p-6 sm:p-8 shadow-pink-soft">
         <form onSubmit={onSubmit} className="space-y-4">
-          <Input type="tel" value={phone} readOnly icon="phone" variant="light" />
+          <Input
+            type="tel"
+            value={phone}
+            readOnly
+            icon="phone"
+            variant="light"
+          />
           <Input
             type="text"
             placeholder="Enter OTP"
@@ -69,7 +86,9 @@ export default function ForgotPasswordVerifyPage() {
             required
           />
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+              {error}
+            </div>
           )}
           <Button
             type="submit"

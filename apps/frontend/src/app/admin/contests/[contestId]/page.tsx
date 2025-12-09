@@ -358,7 +358,7 @@ export default function AdminManageContestPage() {
 
   return (
     <ProtectedRoute>
-      <div className="max-w-6xl mx-auto p-4 space-y-6">
+      <div className="max-w-6xl mx-auto p-4 space-y-6 text-text-main">
         <AlertDialog
           open={alertOpen}
           title={alertTitle}
@@ -388,7 +388,9 @@ export default function AdminManageContestPage() {
           onConfirm={confirmUnenroll}
         />
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Admin · Manage Contest</h1>
+          <h1 className="text-2xl font-semibold text-text-main">
+            Admin · Manage Contest
+          </h1>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={loadContest}>
               Refresh
@@ -405,15 +407,17 @@ export default function AdminManageContestPage() {
         {error && <div className="text-red-600">{error}</div>}
 
         {contest && (
-          <div className="border rounded p-4">
-            <div className="text-xl font-medium">{contest.name}</div>
-            <div className="text-sm text-gray-600">
+          <div className="border border-border-subtle rounded p-4 bg-bg-card">
+            <div className="text-xl font-medium text-text-main">
+              {contest.name}
+            </div>
+            <div className="text-sm text-text-muted">
               {contest.code} · {contest.status} · {contest.visibility} ·{" "}
               {contest.contest_type}
             </div>
             <div className="mt-2">
               <button
-                className={`px-3 py-1 rounded border text-sm ${contest.status === "ongoing" ? "text-green-700 border-green-300" : "text-red-700 border-red-300"}`}
+                className={`px-3 py-1 rounded border text-sm ${contest.status === "ongoing" ? "text-success-200 border-success-200/60" : "text-accent-orange border-accent-orange/60"}`}
                 onClick={toggleContestStatus}
                 disabled={toggling}
                 title="Toggle contest ON/OFF"
@@ -425,69 +429,73 @@ export default function AdminManageContestPage() {
                     : "Set Ongoing (Close)"}
               </button>
             </div>
-            <div className="text-sm text-gray-700 mt-1">
+            <div className="text-sm text-text-muted mt-1">
               <span>{formatISTRange(contest.start_at, contest.end_at)}</span>
             </div>
             {contest.description && (
-              <p className="mt-2 text-gray-700">{contest.description}</p>
+              <p className="mt-2 text-text-muted">{contest.description}</p>
             )}
             {/* Unified Settings Card */}
-            <Card className="mt-4">
+            <Card className="mt-4 bg-bg-card border border-border-subtle text-text-main">
               <CardBody className="p-4">
-                <div className="text-md font-medium mb-2">Contest Settings</div>
+                <div className="text-md font-medium mb-2 text-text-main">
+                  Contest Settings
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 items-start">
                   <div className="flex flex-col md:col-span-3">
-                    <label className="text-sm text-gray-600 mb-1">Name</label>
+                    <label className="text-sm text-text-muted mb-1">Name</label>
                     <input
-                      className="border rounded p-2 w-full"
+                      className="border border-border-subtle rounded p-2 w-full bg-bg-card text-text-main placeholder:text-text-muted"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                     />
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm text-gray-600 mb-1">
+                    <label className="text-sm text-text-muted mb-1">
                       Start (IST)
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="date"
-                        className="border rounded p-2 w-[11rem]"
+                        className="border border-border-subtle rounded p-2 w-[11rem] bg-bg-card text-text-main"
                         value={editStartDate}
                         onChange={(e) => setEditStartDate(e.target.value)}
                       />
                       <input
                         type="time"
                         step={60}
-                        className="border rounded p-2 w-[8.5rem]"
+                        className="border border-border-subtle rounded p-2 w-[8.5rem] bg-bg-card text-text-main"
                         value={editStartTime}
                         onChange={(e) => setEditStartTime(e.target.value)}
                       />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm text-gray-600 mb-1">
+                    <label className="text-sm text-text-muted mb-1">
                       End (IST)
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="date"
-                        className="border rounded p-2 w-[11rem]"
+                        className="border border-border-subtle rounded p-2 w-[11rem] bg-bg-card text-text-main"
                         value={editEndDate}
                         onChange={(e) => setEditEndDate(e.target.value)}
                       />
                       <input
                         type="time"
                         step={60}
-                        className="border rounded p-2 w-[8.5rem]"
+                        className="border border-border-subtle rounded p-2 w-[8.5rem] bg-bg-card text-text-main"
                         value={editEndTime}
                         onChange={(e) => setEditEndTime(e.target.value)}
                       />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm text-gray-600 mb-1">Status</label>
+                    <label className="text-sm text-text-muted mb-1">
+                      Status
+                    </label>
                     <select
-                      className="border rounded p-2"
+                      className="border border-border-subtle rounded p-2 bg-bg-card text-text-main"
                       value={editStatus || ""}
                       onChange={(e) =>
                         setEditStatus(e.target.value as Contest["status"])
@@ -501,11 +509,11 @@ export default function AdminManageContestPage() {
                     </select>
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm text-gray-600 mb-1">
+                    <label className="text-sm text-text-muted mb-1">
                       Visibility
                     </label>
                     <select
-                      className="border rounded p-2"
+                      className="border border-border-subtle rounded p-2 bg-bg-card text-text-main"
                       value={editVisibility || ""}
                       onChange={(e) =>
                         setEditVisibility(
@@ -519,11 +527,11 @@ export default function AdminManageContestPage() {
                     </select>
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm text-gray-600 mb-1">
+                    <label className="text-sm text-text-muted mb-1">
                       Contest Type
                     </label>
                     <select
-                      className="border rounded p-2"
+                      className="border border-border-subtle rounded p-2 bg-bg-card text-text-main"
                       value={editContestType || ""}
                       onChange={(e) =>
                         setEditContestType(
@@ -539,16 +547,16 @@ export default function AdminManageContestPage() {
 
                   {(editContestType || contest?.contest_type) === "daily" && (
                     <div className="flex flex-col md:col-span-3">
-                      <label className="text-sm text-gray-600 mb-1">
+                      <label className="text-sm text-text-muted mb-1">
                         Allowed Teams (comma separated)
                       </label>
                       <textarea
-                        className="border rounded p-2 min-h-[70px]"
+                        className="border border-border-subtle rounded p-2 min-h-[70px] bg-bg-card text-text-main placeholder:text-text-muted"
                         placeholder="e.g. Mumbai Indians, Chennai Super Kings"
                         value={editAllowedTeamsRaw}
                         onChange={(e) => setEditAllowedTeamsRaw(e.target.value)}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-text-muted mt-1">
                         Only players whose team appears here will be eligible
                         for this daily contest.
                       </p>
@@ -572,9 +580,9 @@ export default function AdminManageContestPage() {
               </CardBody>
             </Card>
             {contest.contest_type === "daily" && (
-              <div className="mt-2 text-sm text-gray-700">
-                <div className="font-medium">Allowed Teams</div>
-                <div className="text-gray-700">
+              <div className="mt-2 text-sm text-text-muted">
+                <div className="font-medium text-text-main">Allowed Teams</div>
+                <div className="text-text-muted">
                   {(contest.allowed_teams || []).length > 0
                     ? contest.allowed_teams.join(", ")
                     : "None"}
@@ -585,33 +593,46 @@ export default function AdminManageContestPage() {
         )}
 
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="border rounded p-4">
-            <h2 className="text-lg font-medium mb-2">Leaderboard (Top 100)</h2>
+          <div className="border border-border-subtle rounded p-4 bg-bg-card text-text-main">
+            <h2 className="text-lg font-medium mb-2 text-text-main">
+              Leaderboard (Top 100)
+            </h2>
             <div className="overflow-x-auto">
-              <table className="min-w-full border">
+              <table className="min-w-full border border-border-subtle text-text-main">
                 <thead>
-                  <tr className="bg-gray-50 text-left">
-                    <th className="p-2 border">Rank</th>
-                    <th className="p-2 border">User</th>
-                    <th className="p-2 border">Team</th>
-                    <th className="p-2 border">Points</th>
+                  <tr className="bg-bg-elevated text-left text-text-main">
+                    <th className="p-2 border border-border-subtle">Rank</th>
+                    <th className="p-2 border border-border-subtle">User</th>
+                    <th className="p-2 border border-border-subtle">Team</th>
+                    <th className="p-2 border border-border-subtle">Points</th>
                   </tr>
                 </thead>
                 <tbody>
                   {leaderboard.map((e) => (
                     <tr
                       key={`${e.rank}-${e.username}`}
-                      className="hover:bg-gray-50"
+                      className="hover:bg-bg-elevated/60"
                     >
-                      <td className="p-2 border">{e.rank}</td>
-                      <td className="p-2 border">{e.displayName}</td>
-                      <td className="p-2 border">{e.teamName}</td>
-                      <td className="p-2 border">{e.points.toFixed(2)}</td>
+                      <td className="p-2 border border-border-subtle">
+                        {e.rank}
+                      </td>
+                      <td className="p-2 border border-border-subtle">
+                        {e.displayName}
+                      </td>
+                      <td className="p-2 border border-border-subtle">
+                        {e.teamName}
+                      </td>
+                      <td className="p-2 border border-border-subtle">
+                        {e.points.toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                   {leaderboard.length === 0 && (
                     <tr>
-                      <td className="p-2 border text-gray-600" colSpan={4}>
+                      <td
+                        className="p-2 border border-border-subtle text-text-muted"
+                        colSpan={4}
+                      >
                         No entries yet.
                       </td>
                     </tr>
@@ -620,19 +641,19 @@ export default function AdminManageContestPage() {
               </table>
             </div>
           </div>
-          <div className="border rounded p-4">
-            <h2 className="text-lg font-medium mb-2">
+          <div className="border border-border-subtle rounded p-4 bg-bg-card text-text-main">
+            <h2 className="text-lg font-medium mb-2 text-text-main">
               Eligibility · Enroll Teams
             </h2>
             <div className="flex gap-2 mb-3">
               <input
-                className="border rounded p-2 flex-1"
+                className="border border-border-subtle rounded p-2 flex-1 bg-bg-card text-text-main placeholder:text-text-muted"
                 placeholder="Search users (username/full name)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
               <button
-                className="px-3 py-2 rounded border"
+                className="px-3 py-2 rounded border border-border-subtle text-text-main hover:bg-bg-elevated"
                 onClick={searchUsers}
               >
                 Search
@@ -640,20 +661,22 @@ export default function AdminManageContestPage() {
             </div>
 
             {userList && (
-              <div className="border rounded divide-y mb-3">
+              <div className="border border-border-subtle rounded divide-y divide-border-subtle mb-3 bg-bg-card">
                 {userList.users.map((u) => (
                   <div
                     key={u.user_id}
                     className="p-2 flex items-center justify-between"
                   >
                     <div>
-                      <div className="font-medium">{u.username}</div>
-                      <div className="text-xs text-gray-600">
+                      <div className="font-medium text-text-main">
+                        {u.username}
+                      </div>
+                      <div className="text-xs text-text-muted">
                         Teams: {u.team_count}
                       </div>
                     </div>
                     <button
-                      className="px-3 py-1 rounded border"
+                      className="px-3 py-1 rounded border border-border-subtle text-text-main hover:bg-bg-elevated"
                       onClick={() => {
                         setSelectedUserId(u.user_id);
                         loadUserTeams(u.user_id);
@@ -664,32 +687,34 @@ export default function AdminManageContestPage() {
                   </div>
                 ))}
                 {userList.users.length === 0 && (
-                  <div className="p-2 text-gray-600">No users found.</div>
+                  <div className="p-2 text-text-muted">No users found.</div>
                 )}
               </div>
             )}
 
             {userTeams && (
               <div>
-                <div className="mb-2 text-sm text-gray-700">
+                <div className="mb-2 text-sm text-text-muted">
                   User: {userTeams.user.username}
                 </div>
-                <div className="border rounded divide-y max-h-64 overflow-y-auto">
+                <div className="border border-border-subtle rounded divide-y divide-border-subtle max-h-64 overflow-y-auto bg-bg-card">
                   {userTeams.teams.map((t) => (
                     <div
                       key={t.team_id}
                       className="p-2 flex items-center justify-between"
                     >
                       <div>
-                        <div className="font-medium">{t.team_name}</div>
-                        <div className="text-xs text-gray-600">
+                        <div className="font-medium text-text-main">
+                          {t.team_name}
+                        </div>
+                        <div className="text-xs text-text-muted">
                           Points: {t.total_points}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {t.enrolled ? (
                           <button
-                            className="px-3 py-1 rounded border text-red-700"
+                            className="px-3 py-1 rounded border border-border-subtle text-accent-orange"
                             onClick={() => unenrollTeam(t.team_id)}
                             disabled={contest?.status === "ongoing"}
                           >
@@ -707,13 +732,13 @@ export default function AdminManageContestPage() {
                     </div>
                   ))}
                   {userTeams.teams.length === 0 && (
-                    <div className="p-2 text-gray-600">
+                    <div className="p-2 text-text-muted">
                       No teams for this user.
                     </div>
                   )}
                 </div>
                 <button
-                  className="mt-3 px-4 py-2 rounded bg-blue-600 text-white"
+                  className="mt-3 px-4 py-2 rounded border border-border-subtle bg-bg-elevated text-text-main hover:bg-bg-card"
                   disabled={enrolling || contest?.status === "ongoing"}
                   onClick={enrollSelected}
                 >

@@ -42,7 +42,7 @@ export default function LeaderboardIndexPage() {
   // No inline leaderboard fetch on index; navigation only
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
+    <div className="min-h-screen bg-bg-body">
       <PillNavbar
         activeId="leaderboard"
         mobileMenuContent={isAuthenticated ? <MobileUserMenu /> : undefined}
@@ -51,45 +51,53 @@ export default function LeaderboardIndexPage() {
 
       <div className="max-w-5xl mx-auto p-4">
         <div className="flex items-center justify-center gap-3 mb-6">
-          <Trophy className="w-7 h-7 text-primary-600" />
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-primary-400 to-primary-700 bg-clip-text text-transparent">
+          <Trophy className="w-7 h-7 text-accent-pink-500" />
+          <h1 className="text-3xl font-extrabold text-text-main">
             Leaderboard
           </h1>
         </div>
 
-        {loading && <div>Loading...</div>}
+        {loading && <div className="text-text-main">Loading...</div>}
         {error && <div className="text-red-600">{error}</div>}
 
         {!loading && contests.length === 0 && (
-          <div className="text-gray-600">No contests found.</div>
+          <div className="text-text-muted">No contests found.</div>
         )}
 
         {/* Pinned full contest (as navigable row) */}
         {pinnedFull && (
           <div className="mb-6">
             <button
-              onClick={() => router.push(`/contests/${pinnedFull.id}/leaderboard` )}
-              className="w-full text-left rounded-2xl bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-400 px-5 py-4 shadow-md hover:shadow-lg transition flex items-center justify-between"
+              onClick={() =>
+                router.push(`/contests/${pinnedFull.id}/leaderboard`)
+              }
+              className="w-full text-left rounded-2xl bg-gradient-brand px-5 py-4 shadow-pink-soft hover:shadow-pink-strong transition flex items-center justify-between border-2 border-accent-pink-soft"
             >
               <div className="min-w-0 pr-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900 whitespace-normal break-words">
+                  <span className="font-semibold text-white whitespace-normal break-words drop-shadow">
                     {pinnedFull.name}
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${pinnedFull.status === "live"
-                    ? "bg-green-50 text-green-700 border-green-200"
-                    : pinnedFull.status === "completed"
-                      ? "bg-gray-50 text-gray-700 border-gray-200"
-                      : pinnedFull.status === "archived"
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-blue-50 text-blue-700 border-blue-200"
-                    }`}>{pinnedFull.status}</span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full border ${
+                      pinnedFull.status === "live"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : pinnedFull.status === "completed"
+                          ? "bg-gray-50 text-gray-700 border-gray-200"
+                          : pinnedFull.status === "archived"
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}
+                  >
+                    {pinnedFull.status}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {new Date(pinnedFull.start_at).toLocaleDateString()} - {new Date(pinnedFull.end_at).toLocaleDateString()}
+                <p className="text-xs text-white/80 mt-1 drop-shadow">
+                  {new Date(pinnedFull.start_at).toLocaleDateString()} -{" "}
+                  {new Date(pinnedFull.end_at).toLocaleDateString()}
                 </p>
               </div>
-              <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <ChevronRight className="w-5 h-5 text-white/70 flex-shrink-0" />
             </button>
           </div>
         )}
@@ -99,28 +107,34 @@ export default function LeaderboardIndexPage() {
           {dailyContests.map((c) => (
             <button
               key={c.id}
-              onClick={() => router.push(`/contests/${c.id}/leaderboard` )}
-              className="w-full text-left rounded-2xl bg-white/90 backdrop-blur px-5 py-4 shadow hover:shadow-md transition flex items-center justify-between"
+              onClick={() => router.push(`/contests/${c.id}/leaderboard`)}
+              className="w-full text-left rounded-2xl bg-gradient-brand px-5 py-4 shadow-pink-soft hover:shadow-pink-strong transition flex items-center justify-between border-2 border-accent-pink-soft"
             >
               <div className="min-w-0 pr-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900 whitespace-normal break-words">
+                  <span className="font-semibold text-white whitespace-normal break-words drop-shadow">
                     {c.name}
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${c.status === "live"
-                    ? "bg-green-50 text-green-700 border-green-200"
-                    : c.status === "completed"
-                      ? "bg-gray-50 text-gray-700 border-gray-200"
-                      : c.status === "archived"
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-blue-50 text-blue-700 border-blue-200"
-                    }`}>{c.status}</span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full border ${
+                      c.status === "live"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : c.status === "completed"
+                          ? "bg-gray-50 text-gray-700 border-gray-200"
+                          : c.status === "archived"
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}
+                  >
+                    {c.status}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {new Date(c.start_at).toLocaleDateString()} - {new Date(c.end_at).toLocaleDateString()}
+                <p className="text-xs text-white/80 mt-1 drop-shadow">
+                  {new Date(c.start_at).toLocaleDateString()} -{" "}
+                  {new Date(c.end_at).toLocaleDateString()}
                 </p>
               </div>
-              <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <ChevronRight className="w-5 h-5 text-white/70 flex-shrink-0" />
             </button>
           ))}
         </div>

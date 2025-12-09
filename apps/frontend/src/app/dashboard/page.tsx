@@ -34,7 +34,7 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50 to-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-bg-elevated shadow-sm border-b border-border-subtle">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -48,10 +48,10 @@ function DashboardContent() {
                 />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-text-main">
                   Wall-E Arena
                 </h1>
-                <p className="text-sm text-gray-500">Dashboard</p>
+                <p className="text-sm text-text-muted">Dashboard</p>
               </div>
             </div>
             <Button
@@ -69,26 +69,26 @@ function DashboardContent() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+        <div className="bg-bg-card rounded-3xl shadow-xl p-8 mb-8">
+          <h2 className="text-3xl font-bold text-text-main mb-2">
             Welcome back, {user?.full_name || user?.username}! 👋
           </h2>
-          <p className="text-gray-600">
+          <p className="text-text-muted">
             You&apos;re successfully logged in to your Wall-E Arena account.
           </p>
         </div>
 
         {/* User Info Card */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
-          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-            <User className="w-5 h-5 mr-2 text-primary-600" />
+        <div className="bg-bg-card rounded-3xl shadow-xl p-8 mb-8">
+          <h3 className="text-xl font-bold text-text-main mb-6 flex items-center">
+            <User className="w-5 h-5 mr-2 text-accent-pink-500" />
             Your Profile
           </h3>
 
           <div className="space-y-4">
             {/* Avatar section */}
-            <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-              <div className="relative h-16 w-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center text-lg font-semibold text-gray-600">
+            <div className="flex items-center gap-4 pb-4 border-b border-border-subtle">
+              <div className="relative h-16 w-16 rounded-full overflow-hidden bg-bg-card-soft flex items-center justify-center text-lg font-semibold text-text-muted">
                 {user?.avatar_url ? (
                   (() => {
                     const src = user.avatar_url.startsWith("/api")
@@ -100,7 +100,8 @@ function DashboardContent() {
                         alt={user?.username || "avatar"}
                         className="h-16 w-16 object-cover object-center"
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          (e.currentTarget as HTMLImageElement).style.display =
+                            "none";
                         }}
                       />
                     );
@@ -110,51 +111,55 @@ function DashboardContent() {
                 )}
               </div>
               <div>
-                <div className="text-base font-semibold text-gray-900">{user?.full_name || user?.username}</div>
-                <div className="text-sm text-gray-500">{user?.email}</div>
+                <div className="text-base font-semibold text-text-main">
+                  {user?.full_name || user?.username}
+                </div>
+                <div className="text-sm text-text-muted">{user?.email}</div>
               </div>
             </div>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <User className="w-5 h-5 text-gray-400 mt-1" />
+                <User className="w-5 h-5 text-text-muted mt-1" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Username</p>
-                <p className="text-base text-gray-900">{user?.username}</p>
+                <p className="text-sm font-medium text-text-muted">Username</p>
+                <p className="text-base text-text-main">{user?.username}</p>
               </div>
             </div>
 
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <Mail className="w-5 h-5 text-gray-400 mt-1" />
+                <Mail className="w-5 h-5 text-text-muted mt-1" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Email</p>
-                <p className="text-base text-gray-900">{user?.email}</p>
+                <p className="text-sm font-medium text-text-muted">Email</p>
+                <p className="text-base text-text-main">{user?.email}</p>
               </div>
             </div>
 
             {user?.full_name && (
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <User className="w-5 h-5 text-gray-400 mt-1" />
+                  <User className="w-5 h-5 text-text-muted mt-1" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Full Name</p>
-                  <p className="text-base text-gray-900">{user.full_name}</p>
+                  <p className="text-sm font-medium text-text-muted">
+                    Full Name
+                  </p>
+                  <p className="text-base text-text-main">{user.full_name}</p>
                 </div>
               </div>
             )}
 
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <Calendar className="w-5 h-5 text-gray-400 mt-1" />
+                <Calendar className="w-5 h-5 text-text-muted mt-1" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">
+                <p className="text-sm font-medium text-text-muted">
                   Member Since
                 </p>
-                <p className="text-base text-gray-900">
+                <p className="text-base text-text-main">
                   {formatDate(user?.created_at || "")}
                 </p>
               </div>
@@ -163,24 +168,24 @@ function DashboardContent() {
             <div className="pt-4 flex items-center space-x-4">
               <div className="flex items-center">
                 <div
-                  className={`w-3 h-3 rounded-full ${user?.is_active ? "bg-green-500" : "bg-red-500"} mr-2`}
+                  className={`w-3 h-3 rounded-full ${user?.is_active ? "bg-success" : "bg-danger"} mr-2`}
                 ></div>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-text-muted">
                   {user?.is_active ? "Account Active" : "Account Inactive"}
                 </span>
               </div>
               <div className="flex items-center">
                 <div
-                  className={`w-3 h-3 rounded-full ${user?.is_verified ? "bg-green-500" : "bg-yellow-500"} mr-2`}
+                  className={`w-3 h-3 rounded-full ${user?.is_verified ? "bg-success" : "bg-warning"} mr-2`}
                 ></div>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-text-muted">
                   {user?.is_verified ? "Email Verified" : "Email Not Verified"}
                 </span>
               </div>
             </div>
 
             {/* Change Password Button */}
-            <div className="pt-6 border-t border-gray-100">
+            <div className="pt-6 border-t border-border-subtle">
               <Button
                 onClick={() => setIsChangePasswordOpen(true)}
                 variant="outline"
@@ -194,13 +199,15 @@ function DashboardContent() {
         </div>
 
         {/* Features Coming Soon */}
-        <div className="bg-white rounded-3xl shadow-xl p-8">
-          <h3 className="text-xl font-bold text-gray-900 mb-6">Coming Soon</h3>
+        <div className="bg-bg-card rounded-3xl shadow-xl p-8">
+          <h3 className="text-xl font-bold text-text-main mb-6">Coming Soon</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-6 text-center">
               <div className="text-4xl mb-3">🏏</div>
-              <h4 className="font-semibold text-gray-900 mb-2">Create Teams</h4>
-              <p className="text-sm text-gray-600">
+              <h4 className="font-semibold text-text-main mb-2">
+                Create Teams
+              </h4>
+              <p className="text-sm text-text-muted">
                 Build your dream cricket team
               </p>
               <div className="mt-4">
@@ -209,17 +216,17 @@ function DashboardContent() {
             </div>
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 text-center">
               <div className="text-4xl mb-3">🏆</div>
-              <h4 className="font-semibold text-gray-900 mb-2">
+              <h4 className="font-semibold text-text-main mb-2">
                 Join Contests
               </h4>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-text-muted">
                 Compete with other players
               </p>
             </div>
             <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 text-center">
               <div className="text-4xl mb-3">📊</div>
-              <h4 className="font-semibold text-gray-900 mb-2">View Stats</h4>
-              <p className="text-sm text-gray-600">Track your performance</p>
+              <h4 className="font-semibold text-text-main mb-2">View Stats</h4>
+              <p className="text-sm text-text-muted">Track your performance</p>
             </div>
           </div>
         </div>

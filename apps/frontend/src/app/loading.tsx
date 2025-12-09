@@ -26,7 +26,7 @@ export default function Loading() {
       {/* Text with 3 dots */}
       <div
         className="-mt-20 sm:mt-0 flex items-center gap-1 text-[20px] sm:text-[24px] md:text-[28px] font-semibold tracking-wide"
-        style={{ color: "#8c7853" }}
+        style={{ color: "var(--accent-orange)" }}
       >
         <span>Connecting to wallearena</span>
         <span className="dots">
@@ -121,7 +121,7 @@ export default function Loading() {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #a89363;
+          background: var(--accent-orange-soft);
           animation: blink 1.2s infinite ease-in-out;
         }
         .dot:nth-child(2) {

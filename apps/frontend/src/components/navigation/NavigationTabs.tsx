@@ -23,7 +23,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
 }) => {
   return (
     <nav
-      className={`bg-white shadow-lg rounded-2xl mx-2 sm:mx-4 mt-4 p-1.5 sm:p-2 ${className}`}
+      className={`bg-bg-card shadow-lg rounded-2xl mx-2 sm:mx-4 mt-4 p-1.5 sm:p-2 ${className}`}
     >
       <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => (
@@ -34,7 +34,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
               ${
                 activeTab === tab.id
                   ? "bg-gradient-primary text-white shadow-lg transform scale-105"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  : "text-text-muted hover:bg-bg-card-soft hover:text-text-main"
               }
             `}
             onClick={() => onTabChange(tab.id)}
@@ -42,7 +42,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             {tab.icon && (
               <span
                 className={`${
-                  activeTab === tab.id ? "text-white" : "text-gray-500"
+                  activeTab === tab.id ? "text-text-main" : "text-text-muted"
                 } w-4 h-4 sm:w-5 sm:h-5`}
               >
                 {tab.icon}
@@ -56,8 +56,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 text-xs font-bold rounded-full
                 ${
                   activeTab === tab.id
-                    ? "bg-white/20 text-white"
-                    : "bg-primary-100 text-primary-600"
+                    ? "bg-bg-card-soft text-text-main"
+                    : "bg-bg-chip text-text-muted"
                 }
               `}
               >
@@ -87,15 +87,15 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
 }) => {
   return (
     <header
-      className={`bg-white shadow-sm border-b border-gray-200 ${className}`}
+      className={`bg-bg-elevated shadow-sm border-b border-border-subtle ${className}`}
     >
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold font-heading text-gray-900">
+            <h1 className="text-2xl font-bold font-heading text-text-main">
               {title}
             </h1>
-            {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-text-muted mt-1">{subtitle}</p>}
           </div>
           {actions && (
             <div className="flex items-center space-x-3">{actions}</div>
@@ -126,7 +126,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, className = "" }) => {
           <li key={index} className="flex items-center">
             {index > 0 && (
               <svg
-                className="w-4 h-4 text-gray-400 mx-2"
+                className="w-4 h-4 text-text-subtle mx-2"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -142,8 +142,8 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, className = "" }) => {
               text-sm
               ${
                 item.current
-                  ? "text-gray-900 font-medium"
-                  : "text-gray-600 hover:text-gray-900 cursor-pointer"
+                  ? "text-text-main font-medium"
+                  : "text-text-muted hover:text-text-main cursor-pointer"
               }
             `}
             >
