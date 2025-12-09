@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 from datetime import datetime
-import fnmatch
 from config.settings import settings
 import logging
 from config.database import connect_to_mongo, close_mongo_connection
@@ -28,6 +27,7 @@ logging.basicConfig(
     level=logging.CRITICAL,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
+logger = logging.getLogger("app.startup")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,18 +47,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware with wildcard support
-def get_cors_origins():
-    """Get CORS origins list with wildcard pattern support."""
-    return settings.cors_origins_list
+# CORS middleware with wildcard support (exact origins + optional regex)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(),
+    allow_origins=settings.cors_exact_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Log CORS configuration (helpful for debugging in deployments)
+logger.info("CORS exact origins: %s", settings.cors_exact_origins)
+logger.info("CORS origin regex: %s", settings.cors_origin_regex)
 
 # Include routers
 app.include_router(auth_router)

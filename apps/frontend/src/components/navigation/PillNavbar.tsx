@@ -146,12 +146,9 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
   return (
     <>
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 mx-auto px-2 sm:px-4 pt-4 transition-all duration-300 ${className}`}
-        style={{ maxWidth: isScrolled ? "900px" : "1280px" }}
-      >
+      <nav className={`fixed top-0 left-0 right-0 z-50 ${className}`}>
         {/* Desktop Navigation */}
-        <div className="hidden md:flex bg-[#f9f7f3] rounded-full shadow-md border border-gray-200 p-1.5 items-center justify-between gap-1 transition-all duration-300">
+        <div className="hidden md:flex bg-[#f9f7f3] shadow-md border border-gray-200 p-1.5 items-center justify-between gap-1">
           {/* Left side: Logo and Nav Items */}
           <div className="flex items-center gap-1">
             {/* Logo */}
@@ -175,8 +172,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   key={item.id}
                   onClick={() => handleNavigation(item.href)}
                   className={`
-                    flex items-center justify-center space-x-1.5 rounded-full font-medium transition-all duration-300 whitespace-nowrap
-                    ${isScrolled ? "px-4 py-2" : "px-6 py-2.5"}
+                    flex items-center justify-center space-x-1.5 rounded-full font-medium whitespace-nowrap px-6 py-2.5
                     ${
                       isActive
                         ? "bg-gradient-primary text-white shadow-md"
@@ -202,7 +198,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
               <div ref={userMenuRef} className="relative">
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
                   aria-haspopup="menu"
                   aria-expanded={userMenuOpen}
                 >
@@ -214,7 +210,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   />
                   <span className="text-gray-700">Account</span>
                   <ChevronDown
-                    className={`h-4 w-4 text-gray-500 transition-transform ${userMenuOpen ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 text-gray-500 ${userMenuOpen ? "rotate-180" : ""}`}
                   />
                 </button>
 
@@ -266,7 +262,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             ) : (
               <Link
                 href="/auth/login"
-                className="inline-flex items-center rounded-full bg-gradient-primary text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)] transition"
+                className="inline-flex items-center rounded-full bg-gradient-primary text-white px-5 py-2.5 text-sm font-semibold shadow hover:shadow-[0_0_20px_rgba(191,171,121,0.35)]"
               >
                 Join Us
               </Link>
@@ -274,7 +270,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
           </div>
         </div>
         {/* Mobile Navigation Header */}
-        <div className="md:hidden bg-[#f9f7f3] rounded-2xl shadow-md border border-gray-200">
+        <div className="md:hidden bg-[#f9f7f3] shadow-md border border-gray-200">
           <div className="flex items-center justify-between p-3">
             {/* Logo */}
             <Link
@@ -296,7 +292,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             {/* Hamburger Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors z-50 relative"
+              className="p-2 rounded-lg hover:bg-gray-100 z-50 relative"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -312,7 +308,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
       {/* Backdrop Overlay */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setMobileMenuOpen(false)}
           aria-hidden="true"
         />
@@ -320,7 +316,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
       {/* Side Menu Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 md:hidden transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 md:hidden ${
           mobileMenuOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -342,7 +338,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
           </Link>
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100"
             aria-label="Close menu"
           >
             <X className="w-6 h-6 text-gray-600" />
@@ -359,7 +355,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   key={item.id}
                   onClick={() => handleNavigation(item.href)}
                   className={`
-                    w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all
+                    w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
                     ${
                       isActive
                         ? "bg-gradient-primary text-white shadow-md"

@@ -178,56 +178,54 @@ export default function HomePage() {
           <div className="h-20"></div>
 
           {/* Hero Section - Full Width Carousel */}
-          <PageSection className="relative mb-8 sm:mb-10">
-            <PageContainer className="relative z-10">
-              {loadingCarousel ? (
-                <div className="w-full h-96 md:h-[500px] bg-gradient-to-br from-primary-100 to-primary-50 rounded-3xl flex items-center justify-center">
-                  <Spinner size="lg" />
-                </div>
-              ) : carouselImages.length > 0 ? (
-                <HeroCarousel images={carouselImages} />
-              ) : (
-                // Fallback hero section when no carousel images
-                <div className="w-full h-64 md:h-80 bg-gradient-to-br from-primary-100 to-primary-50 rounded-3xl flex items-center justify-center border border-primary-200 shadow-lg">
-                  <div className="text-center px-6">
-                    <Image
-                      src="/logo.jpeg"
-                      alt="Wall-E Arena"
-                      width={200}
-                      height={200}
-                      className="rounded-3xl shadow-2xl object-cover mx-auto mb-6"
-                      priority
-                    />
-                    <h1 className="text-4xl sm:text-5xl font-extrabold text-primary-700 tracking-tight leading-tight mb-4">
-                      MWPL Season 2 Fantasy League
-                    </h1>
-                    <p className="text-lg sm:text-xl text-gray-700 mb-8 max-w-xl mx-auto leading-relaxed">
-                      Build your dream team, compete with friends, and rise to
-                      the top!
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                      {isAuthenticated ? (
-                        <Link
-                          href="/contests"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
-                        >
-                          Explore Contests
-                          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Link>
-                      ) : (
-                        <Link
-                          href="/auth/login"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
-                        >
-                          Get Started
-                          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Link>
-                      )}
-                    </div>
+          <PageSection className="relative mb-8 sm:mb-10 px-4">
+            {loadingCarousel ? (
+              <div className="w-full h-96 md:h-[500px] bg-gradient-to-br from-primary-100 to-primary-50 rounded-3xl flex items-center justify-center">
+                <Spinner size="lg" />
+              </div>
+            ) : carouselImages.length > 0 ? (
+              <HeroCarousel images={carouselImages} />
+            ) : (
+              // Fallback hero section when no carousel images
+              <div className="w-full h-64 md:h-80 bg-gradient-to-br from-primary-100 to-primary-50 rounded-3xl flex items-center justify-center border border-primary-200 shadow-lg">
+                <div className="text-center px-6">
+                  <Image
+                    src="/logo.jpeg"
+                    alt="Wall-E Arena"
+                    width={200}
+                    height={200}
+                    className="rounded-3xl shadow-2xl object-cover mx-auto mb-6"
+                    priority
+                  />
+                  <h1 className="text-4xl sm:text-5xl font-extrabold text-primary-700 tracking-tight leading-tight mb-4">
+                    MWPL Season 2 Fantasy League
+                  </h1>
+                  <p className="text-lg sm:text-xl text-gray-700 mb-8 max-w-xl mx-auto leading-relaxed">
+                    Build your dream team, compete with friends, and rise to the
+                    top!
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                    {isAuthenticated ? (
+                      <Link
+                        href="/contests"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
+                      >
+                        Explore Contests
+                        <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/auth/login"
+                        className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-primary shadow-lg hover:shadow-[0_0_20px_rgba(191,171,121,0.5)] transition-all duration-300 group"
+                      >
+                        Get Started
+                        <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    )}
                   </div>
                 </div>
-              )}
-            </PageContainer>
+              </div>
+            )}
           </PageSection>
 
           {/* Contests Section - Merged Ongoing and Live */}

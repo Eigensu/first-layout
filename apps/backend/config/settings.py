@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional
 from functools import lru_cache
 from pathlib import Path
@@ -54,8 +55,37 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         """Convert CORS origins string to list and support wildcard patterns."""
-        origins = [origin.strip() for origin in self.cors_origins.split(",")]
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
         return origins
+
+    @property
+    def cors_exact_origins(self) -> list[str]:
+        """Return explicit origins (no wildcard characters)."""
+        origins = self.cors_origins_list
+        exact = [o for o in origins if "*" not in o and "?" not in o]
+        return exact
+
+    @property
+    def cors_origin_regex(self) -> Optional[str]:
+        """Return a combined regex string for wildcard origin patterns if any.
+
+        Example: 'https://walle-layout-git-*.vercel.app' => '^https://walle-layout-git-.*\\.vercel\\.app$'
+        Multiple wildcard patterns will be joined: '^(?:pattern1|pattern2)$'
+        """
+        origins = self.cors_origins_list
+        wildcard = [o for o in origins if "*" in o or "?" in o]
+        if not wildcard:
+            return None
+
+        patterns = []
+        for p in wildcard:
+            # Escape regex special chars, then convert wildcard placeholders to regex
+            escaped = re.escape(p)
+            converted = escaped.replace(r"\*", ".*").replace(r"\?", ".")
+            patterns.append(converted)
+
+        combined = "^(?:" + "|".join(patterns) + ")$"
+        return combined
     
     @property
     def is_production(self) -> bool:

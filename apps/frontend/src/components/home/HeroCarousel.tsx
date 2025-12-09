@@ -163,7 +163,7 @@ export function HeroCarousel({
                       src={`${API_BASE_URL}${currentImage.image_url}`}
                       alt={currentImage.title || "Carousel image"}
                       fill
-                      className="object-cover md:object-contain"
+                      className="object-cover"
                       priority={currentIndex === 0}
                       sizes="100vw"
                     />
@@ -182,7 +182,7 @@ export function HeroCarousel({
                       src={`${API_BASE_URL}${currentImage.image_url}`}
                       alt={currentImage.title || "Carousel image"}
                       fill
-                      className="object-cover md:object-contain"
+                      className="object-cover"
                       priority={currentIndex === 0}
                       sizes="100vw"
                     />

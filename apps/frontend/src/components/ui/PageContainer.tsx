@@ -36,6 +36,7 @@ interface PageSectionProps {
 /**
  * A section wrapper that provides consistent spacing and optional full-bleed styling.
  * Use fullBleed={true} for sections with rounded corners that need margin from screen edges.
+ * For full-width hero elements, use HeroSection component instead.
  */
 export function PageSection({
   children,
