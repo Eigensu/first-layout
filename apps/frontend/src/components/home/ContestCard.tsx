@@ -164,7 +164,7 @@ export function ContestCard({
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      className="relative rounded-2xl p-5 shadow-pink-soft cursor-pointer hover:shadow-pink-strong md:transition h-full overflow-hidden"
+      className="relative rounded-2xl p-5 cursor-pointer md:transition h-full overflow-hidden"
     >
       {/* Metallic gradient background */}
       <div className="absolute inset-0 bg-gradient-brand opacity-100" />

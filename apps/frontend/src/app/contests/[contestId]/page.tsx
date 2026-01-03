@@ -97,21 +97,21 @@ export default function ContestDetailsPage() {
                   router.push(target);
                 }
               }}
-              className="w-full h-full rounded-3xl bg-gradient-to-br from-white via-white to-primary-50 shadow-lg hover:shadow-xl p-6 sm:p-8 lg:p-10 text-center flex items-center justify-center transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
+              className="w-full h-full rounded-3xl bg-gradient-to-br from-white via-primary-50 to-primary-100 shadow-lg hover:shadow-xl transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
             >
-              <div className="flex flex-col items-center justify-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px]">
-                <div className="mb-5 p-4 rounded-2xl bg-primary-50 inline-flex">
-                  <User className="w-12 h-12 text-primary-600" />
+              <div className="p-6 sm:p-8 lg:p-10 flex flex-col items-center justify-center text-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px] h-full">
+                <div className="mb-5 p-4 rounded-2xl bg-primary-100 inline-flex">
+                  <User className="w-12 h-12 text-primary-700" />
                 </div>
                 <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-primary-700">
                   {isJoined ? "View Team" : "Make Team"}
                 </h2>
-                <p className="mt-2 text-primary-700/80 text-sm sm:text-base">
+                <p className="mt-2 text-primary-700 text-sm sm:text-base">
                   {isJoined
                     ? "Open your registered team"
                     : "Assemble your squad and compete together"}
                 </p>
-                <div className="mt-6 inline-flex items-center px-6 py-2.5 rounded-full bg-gradient-primary text-white text-sm font-semibold shadow transition">
+                <div className="mt-6 inline-flex items-center px-6 py-2.5 rounded-full bg-gradient-primary text-white text-sm font-semibold shadow hover:shadow-lg transition">
                   {isJoined ? "Go to Team" : "Start Building"}
                 </div>
               </div>

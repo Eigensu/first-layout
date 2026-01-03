@@ -38,17 +38,17 @@ const Spinner: React.FC<SpinnerProps> = ({ size = "md", className = "" }) => {
 
   return (
     <div className={`${sizeClasses[size]} ${className}`}>
-      <div className="animate-spin rounded-full border-2 border-gray-300 border-t-primary-600 h-full w-full"></div>
+      <div className="animate-spin rounded-full border-2 border-primary-300/30 border-t-primary-300 h-full w-full"></div>
     </div>
   );
 };
 
 // Page Loading Component
 const PageLoader: React.FC<{ message?: string }> = ({ message }) => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+  <div className="min-h-screen bg-bg-body flex items-center justify-center">
     <div className="text-center">
       <Spinner size="lg" className="mb-4 mx-auto" />
-      <p className="text-gray-600">{message || "WalleArena is loading..."}</p>
+      <p className="text-white">{message || "WalleArena is loading..."}</p>
     </div>
   </div>
 );

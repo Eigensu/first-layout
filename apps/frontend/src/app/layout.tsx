@@ -30,9 +30,9 @@ export const metadata: Metadata = {
   keywords: "fantasy cricket, sports, gaming, team building",
   authors: [{ name: "Wall-E Arena Team" }],
   icons: {
-    icon: "/logo.jpeg",
-    shortcut: "/logo.jpeg",
-    apple: "/logo.jpeg",
+    icon: "/walle-logo.png",
+    shortcut: "/walle-logo.png",
+    apple: "/walle-logo.png",
   },
 };
 
