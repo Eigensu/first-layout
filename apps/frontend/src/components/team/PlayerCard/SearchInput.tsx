@@ -31,7 +31,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         value={searchQuery}
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder="Search players..."
-        className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all text-base"
+        className="block w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2 sm:py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all text-sm sm:text-base"
       />
       {searchQuery && (
         <button

@@ -24,7 +24,10 @@ export function Pagination({
         <div className="text-xs sm:text-sm text-gray-500">
           Showing {(currentPage - 1) * pageSize + 1} to{" "}
           {Math.min(currentPage * pageSize, totalItems)} of {totalItems} players
-          <span className="inline sm:hidden"> · Page {currentPage} of {totalPages}</span>
+          <span className="inline sm:hidden">
+            {" "}
+            · Page {currentPage} of {totalPages}
+          </span>
         </div>
         <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
           <Button

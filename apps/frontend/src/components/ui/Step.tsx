@@ -66,12 +66,12 @@ const StepCard: React.FC<StepProps> = ({
               : "border-border-subtle hover:border-accent-pink-soft/80"
         }`}
       >
-        <div className="p-4 sm:p-6 pt-4 sm:pt-8">
+        <div className="p-3 sm:p-6 pt-3 sm:pt-8">
           {/* Mobile: Show step number inline with title */}
-          <div className="mb-3 sm:mb-4">
+          <div className="mb-2 sm:mb-4">
             <div className="flex items-center gap-2 sm:block">
               <div
-                className={`sm:hidden w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
+                className={`sm:hidden w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${
                   isCompleted
                     ? "bg-success-500"
                     : isActive
@@ -118,7 +118,7 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1.5 sm:mb-2">
+      <div className="flex justify-between text-xs sm:text-sm text-gray-300 mb-1.5 sm:mb-2">
         <span className="font-medium">
           Step {currentStep} of {totalSteps}
         </span>

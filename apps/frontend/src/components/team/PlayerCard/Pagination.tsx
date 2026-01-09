@@ -18,7 +18,7 @@ export const Pagination: React.FC<PaginationProps> = ({
       <button
         onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage === 1}
-        className="px-3 sm:px-4 py-2 text-sm font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-100"
+        className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:bg-white/10"
       >
         <span className="hidden sm:inline">Previous</span>
         <span className="sm:hidden">Prev</span>
@@ -40,7 +40,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             return (
               <span
                 key={`ellipsis-${page}`}
-                className="px-1 sm:px-2 text-gray-500"
+                className="px-1 sm:px-2 text-gray-400"
               >
                 ...
               </span>
@@ -53,10 +53,10 @@ export const Pagination: React.FC<PaginationProps> = ({
             <button
               key={page}
               onClick={() => onPageChange(page)}
-              className={`w-9 h-9 sm:w-10 sm:h-10 text-sm font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${
+              className={`w-7 h-7 sm:w-10 sm:h-10 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${
                 currentPage === page
                   ? "bg-gradient-primary text-white shadow-md hover:shadow-lg"
-                  : "text-gray-700 hover:bg-gray-100"
+                  : "text-gray-300 hover:bg-white/10"
               }`}
             >
               {page}
@@ -68,7 +68,7 @@ export const Pagination: React.FC<PaginationProps> = ({
       <button
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage === totalPages}
-        className="px-3 sm:px-4 py-2 text-sm font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-100"
+        className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:bg-white/10"
       >
         Next
       </button>

@@ -23,7 +23,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
   onSetViceCaptain,
 }) => {
   return (
-    <div className="relative flex items-center gap-3 p-3 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 transition-all">
+    <div className="relative flex items-center gap-2 p-2 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 transition-all">
       {isCaptain && (
         <div className="absolute top-0 right-0 p-[2px]">
           <Badge
@@ -58,7 +58,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -69,7 +69,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
           disabled={isCaptain}
           aria-label={isCaptain ? "Captain selected" : "Set as captain"}
           className={`
-            px-2.5 py-1 text-[10px] font-bold rounded-md transition-all border
+            px-2 py-0.5 text-[9px] font-bold rounded transition-all border
             ${
               isCaptain
                 ? "bg-orange-500 text-white border-orange-600 shadow-sm cursor-default"
@@ -91,7 +91,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
             isViceCaptain ? "Vice Captain selected" : "Set as vice captain"
           }
           className={`
-            px-2.5 py-1 text-[10px] font-bold rounded-md transition-all border
+            px-2 py-0.5 text-[9px] font-bold rounded transition-all border
             ${
               isViceCaptain
                 ? "bg-purple-600 text-white border-purple-700 shadow-sm cursor-default"

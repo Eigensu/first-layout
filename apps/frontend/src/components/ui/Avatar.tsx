@@ -47,7 +47,7 @@ const Avatar: React.FC<AvatarProps> = ({
   };
 
   const sizeClasses = {
-    sm: "w-8 h-8 text-sm",
+    sm: "w-6 h-6 sm:w-8 sm:h-8 text-xs sm:text-sm",
     md: "w-10 h-10 text-base",
     lg: "w-12 h-12 text-lg",
     xl: "w-16 h-16 text-xl",
@@ -57,7 +57,8 @@ const Avatar: React.FC<AvatarProps> = ({
     "rounded-full flex items-center justify-center text-white font-bold";
 
   // Build absolute src if backend returned a relative API path
-  const resolvedSrc = src && src.startsWith("/api") ? `${API_BASE_URL}${src}` : src;
+  const resolvedSrc =
+    src && src.startsWith("/api") ? `${API_BASE_URL}${src}` : src;
 
   if (resolvedSrc && !errored) {
     return (

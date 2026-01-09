@@ -56,9 +56,9 @@ export function useTeamBuilder(
         const slotsList = await fetchSlots();
         // Sort slots numerically by number embedded in name or code (fallback to name)
         const numFrom = (s: { name: string; code: string }) => {
-          const nameNum = Number((s.name.match(/\d+/)?.[0]) ?? NaN);
+          const nameNum = Number(s.name.match(/\d+/)?.[0] ?? NaN);
           if (!Number.isNaN(nameNum)) return nameNum;
-          const codeNum = Number((s.code.match(/\d+/)?.[0]) ?? NaN);
+          const codeNum = Number(s.code.match(/\d+/)?.[0] ?? NaN);
           if (!Number.isNaN(codeNum)) return codeNum;
           return Number.MAX_SAFE_INTEGER;
         };
@@ -81,7 +81,10 @@ export function useTeamBuilder(
         const playerArrays = await Promise.all(
           sortedSlots.map(async (s) => {
             try {
-              const arr: ApiPlayer[] = await fetchPlayersBySlot(s.id, contestId);
+              const arr: ApiPlayer[] = await fetchPlayersBySlot(
+                s.id,
+                contestId
+              );
               return arr.map((p) => ({ ...p, slot: p.slot || s.id }));
             } catch {
               return [] as ApiPlayer[];
@@ -90,7 +93,7 @@ export function useTeamBuilder(
         );
         const flatPlayers: ApiPlayer[] = playerArrays.flat();
         const mappedBase: UIBuildPlayer[] = flatPlayers.map((p) => ({
-          id: p.id,
+          id: String(p.id),
           name: p.name,
           team: p.team || "",
           role: slotNameById[String(p.slot || "")] || "Slot",

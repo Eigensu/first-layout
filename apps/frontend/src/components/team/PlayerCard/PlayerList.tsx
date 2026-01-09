@@ -73,12 +73,12 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   };
 
   return (
-    <div className={`space-y-2 sm:space-y-3 ${className}`}>
+    <div className={`space-y-1.5 sm:space-y-3 ${className}`}>
       {/* Search Input */}
       <SearchInput searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
       {/* Player Count */}
-      <div className="text-xs sm:text-sm text-gray-600 font-medium">
+      <div className="text-[10px] sm:text-sm text-gray-600 font-medium ml-1">
         Showing {paginatedPlayers.length} of {totalPlayers} player
         {totalPlayers !== 1 ? "s" : ""}
       </div>

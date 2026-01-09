@@ -28,7 +28,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     return (
       <div
         className={`
-          flex items-center gap-2.5 sm:gap-3 p-3 sm:p-4 rounded-xl border-2 transition-all
+          flex items-center gap-2 sm:gap-3 p-2 sm:p-4 rounded-xl border-2 transition-all
           ${
             disabled && !isSelected
               ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
@@ -44,19 +44,19 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         <Avatar
           name={player.name}
           src={player.image}
-          size="md"
+          size="sm"
           gradientClassName={getAvatarGradient()}
         />
 
         {/* Player Info */}
         <div className="flex-1 min-w-0">
           <h4
-            className={`font-semibold text-sm sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
+            className={`font-semibold text-xs sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
           >
             {player.name}
           </h4>
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
-            <span className="text-xs text-gray-500 flex items-center gap-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-0 sm:mt-1">
+            <span className="text-[10px] sm:text-xs text-gray-500 flex items-center gap-1">
               <svg
                 className="w-3 h-3"
                 fill="none"
