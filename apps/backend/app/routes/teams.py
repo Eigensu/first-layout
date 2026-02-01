@@ -116,6 +116,16 @@ async def create_team(
             contest = None
         if not contest:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contest_id")
+
+        # Prevent joining an ongoing contest
+        # Ongoing = status active/ongoing AND start_at <= now < end_at
+        now = datetime.utcnow()
+        if contest.status == "ongoing" and contest.start_at <= now < contest.end_at:
+             raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot create a team for an ongoing contest.",
+            )
+
         if contest.contest_type == "daily" and contest.allowed_teams:
             disallowed = [p.name for p in players if p.team and p.team not in contest.allowed_teams]
             if disallowed:

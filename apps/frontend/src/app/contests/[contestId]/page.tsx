@@ -39,6 +39,7 @@ export default function ContestDetailsPage() {
 
   // Check if user has already enrolled in this contest
   useEffect(() => {
+    if (!isAuthenticated) return;
     (async () => {
       try {
         const mine: EnrollmentResponse[] =
@@ -48,7 +49,7 @@ export default function ContestDetailsPage() {
         // ignore unauthenticated or unavailable
       }
     })();
-  }, [contestId]);
+  }, [contestId, isAuthenticated]);
 
   return (
     <div className="max-w-7xl mx-auto p-4">
@@ -88,34 +89,92 @@ export default function ContestDetailsPage() {
           {/* Action cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch">
             {/* Make/View team side (first) */}
-            <button
-              onClick={() => {
-                const target = `/contests/${contest.id}/team`;
-                if (!isAuthenticated) {
-                  router.push(`/auth/login?next=${encodeURIComponent(target)}`);
-                } else {
-                  router.push(target);
-                }
-              }}
-              className="w-full h-full rounded-3xl bg-gradient-to-br from-white via-primary-50 to-primary-100 shadow-lg hover:shadow-xl transition transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-primary/20"
-            >
-              <div className="p-6 sm:p-8 lg:p-10 flex flex-col items-center justify-center text-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px] h-full">
-                <div className="mb-5 p-4 rounded-2xl bg-primary-100 inline-flex">
-                  <User className="w-12 h-12 text-primary-700" />
-                </div>
-                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-primary-700">
-                  {isJoined ? "View Team" : "Make Team"}
-                </h2>
-                <p className="mt-2 text-primary-700 text-sm sm:text-base">
-                  {isJoined
-                    ? "Open your registered team"
-                    : "Assemble your squad and compete together"}
-                </p>
-                <div className="mt-6 inline-flex items-center px-6 py-2.5 rounded-full bg-gradient-primary text-white text-sm font-semibold shadow hover:shadow-lg transition">
-                  {isJoined ? "Go to Team" : "Start Building"}
-                </div>
-              </div>
-            </button>
+            {(() => {
+              const now = new Date();
+              const startAt = new Date(contest.start_at);
+              const endAt = new Date(contest.end_at);
+              const isContestOngoing =
+                contest.status === "ongoing" && now >= startAt && now < endAt;
+
+              const isCreationDisabled = !isJoined && isContestOngoing;
+
+              return (
+                <button
+                  disabled={isCreationDisabled}
+                  onClick={() => {
+                    if (isCreationDisabled) return;
+                    const target = `/contests/${contest.id}/team`;
+                    if (!isAuthenticated) {
+                      router.push(
+                        `/auth/login?next=${encodeURIComponent(target)}`,
+                      );
+                    } else {
+                      router.push(target);
+                    }
+                  }}
+                  className={`w-full h-full rounded-3xl shadow-lg transition transform focus:outline-none focus:ring-4 focus:ring-primary/20 ${
+                    isCreationDisabled
+                      ? "bg-white/50 backdrop-blur-sm cursor-not-allowed"
+                      : "bg-gradient-to-br from-white via-primary-50 to-primary-100 hover:shadow-xl hover:scale-105 active:scale-95"
+                  }`}
+                >
+                  <div className="p-6 sm:p-8 lg:p-10 flex flex-col items-center justify-center text-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px] h-full">
+                    <div
+                      className={`mb-5 p-4 rounded-2xl inline-flex ${
+                        isCreationDisabled ? "bg-gray-500/10" : "bg-primary-100"
+                      }`}
+                    >
+                      <User
+                        className={`w-12 h-12 ${
+                          isCreationDisabled
+                            ? "text-gray-600"
+                            : "text-primary-700"
+                        }`}
+                      />
+                    </div>
+                    <h2
+                      className={`text-3xl sm:text-4xl font-black tracking-tight ${
+                        isCreationDisabled
+                          ? "text-gray-700"
+                          : "text-primary-700"
+                      }`}
+                    >
+                      {isJoined
+                        ? "View Team"
+                        : isCreationDisabled
+                          ? "Contest Started"
+                          : "Make Team"}
+                    </h2>
+                    <p
+                      className={`mt-2 text-sm sm:text-base ${
+                        isCreationDisabled
+                          ? "text-gray-600"
+                          : "text-primary-700"
+                      }`}
+                    >
+                      {isJoined
+                        ? "Open your registered team"
+                        : isCreationDisabled
+                          ? "Team creation is closed for this ongoing contest"
+                          : "Assemble your squad and compete together"}
+                    </p>
+                    <div
+                      className={`mt-6 inline-flex items-center px-6 py-2.5 rounded-full text-sm font-semibold shadow transition ${
+                        isCreationDisabled
+                          ? "bg-gray-500 text-gray-200 cursor-not-allowed"
+                          : "bg-gradient-primary text-white hover:shadow-lg"
+                      }`}
+                    >
+                      {isJoined
+                        ? "Go to Team"
+                        : isCreationDisabled
+                          ? "Locked"
+                          : "Start Building"}
+                    </div>
+                  </div>
+                </button>
+              );
+            })()}
 
             {/* Leaderboard side (second) */}
             <button
