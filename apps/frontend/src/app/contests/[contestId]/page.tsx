@@ -70,8 +70,11 @@ export default function ContestDetailsPage() {
           <div className="text-center mb-2 -mt-12">
             <div className="flex justify-center mt-0">
               <Image
-                src="/lodha-park-cricket-league-season-2-sponsors/title-sponsor-2.png"
-                alt="Title Sponsor"
+                src={
+                  contest.logo_url ||
+                  "/world-tower-premier-league-season-2-sponsors/title-sponsor-2.png"
+                }
+                alt="Contest Logo"
                 width={180}
                 height={180}
                 className="h-28 w-auto sm:h-40 object-contain"

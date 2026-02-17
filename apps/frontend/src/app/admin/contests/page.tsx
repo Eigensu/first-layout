@@ -13,6 +13,7 @@ import {
   ContestVisibility,
   ContestStatus,
 } from "@/lib/api/admin/contests";
+import { adminSettingsApi } from "@/lib/api/admin/settings";
 import { API_BASE_URL } from "@/common/consts";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AlertDialog } from "@/components/ui/AlertDialog";
@@ -27,6 +28,7 @@ export default function AdminContestsPage() {
   const [form, setForm] = useState<ContestCreate>({
     code: "",
     name: "",
+    logo_url: "",
     start_at: new Date().toISOString(),
     end_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
     visibility: "public",
@@ -38,8 +40,9 @@ export default function AdminContestsPage() {
   const [creating, setCreating] = useState(false);
   const [availableTeams, setAvailableTeams] = useState<string[]>([]);
   const [selectedAllowedTeams, setSelectedAllowedTeams] = useState<string[]>(
-    []
+    [],
   );
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [allowedDropdownOpen, setAllowedDropdownOpen] =
     useState<boolean>(false);
 
@@ -90,8 +93,8 @@ export default function AdminContestsPage() {
         const data: Array<{ team?: string | null }> = await res.json();
         const uniq = Array.from(
           new Set(
-            data.map((p) => (p.team || "").trim()).filter((t) => t.length > 0)
-          )
+            data.map((p) => (p.team || "").trim()).filter((t) => t.length > 0),
+          ),
         ).sort();
         setAvailableTeams(uniq);
       } catch {
@@ -160,8 +163,18 @@ export default function AdminContestsPage() {
         allowed_teams:
           form.contest_type === "daily" ? selectedAllowedTeams : [],
       };
-      await adminContestsApi.create(payload);
-      setForm({ ...form, code: "", name: "" });
+      const res = await adminContestsApi.create(payload);
+
+      if (logoFile) {
+        try {
+          await adminContestsApi.uploadLogo(res.id, logoFile);
+        } catch (uploadErr) {
+          showAlert("Contest created but logo upload failed", "Warning");
+        }
+      }
+
+      setForm({ ...form, code: "", name: "", logo_url: "" });
+      setLogoFile(null);
       // Reset only code/name; keep IST inputs seeded
       setSelectedAllowedTeams([]);
       await load();
@@ -269,6 +282,53 @@ export default function AdminContestsPage() {
         <Card className="bg-bg-card border border-border-subtle text-text-main shadow-pink-soft">
           <CardBody className="p-4">
             <h2 className="text-lg font-medium mb-2 text-text-main">
+              Tournament Settings
+            </h2>
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+              <div className="w-full sm:w-auto flex-1">
+                <label className="block text-sm text-text-muted mb-1">
+                  Default Tournament Logo (Apply to all contests without
+                  specific logo)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="w-full text-sm text-text-main file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                  onChange={async (e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      try {
+                        await adminSettingsApi.uploadDefaultLogo(
+                          e.target.files[0],
+                        );
+                        showAlert(
+                          "Default logo updated successfully",
+                          "Success",
+                        );
+                        // Clear input
+                        e.target.value = "";
+                      } catch (err: any) {
+                        showAlert(
+                          err?.message || "Failed to upload default logo",
+                          "Error",
+                        );
+                      }
+                    }
+                  }}
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  Upload to replace the global default logo immediately.
+                </p>
+              </div>
+              <div>
+                {/* Could add a preview here if needed via get_default_logo */}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="bg-bg-card border border-border-subtle text-text-main shadow-pink-soft">
+          <CardBody className="p-4">
+            <h2 className="text-lg font-medium mb-2 text-text-main">
               Create Contest
             </h2>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -287,6 +347,26 @@ export default function AdminContestsPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="block text-sm text-text-muted">Logo</label>
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="w-full text-sm text-text-main file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setLogoFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  {form.logo_url && !logoFile && (
+                    <div className="text-xs text-text-muted break-all">
+                      Current: {form.logo_url}
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-text-muted">
@@ -445,7 +525,7 @@ export default function AdminContestsPage() {
                                 setSelectedAllowedTeams((prev) =>
                                   prev.includes(t)
                                     ? prev.filter((x) => x !== t)
-                                    : [...prev, t]
+                                    : [...prev, t],
                                 );
                               }}
                             >

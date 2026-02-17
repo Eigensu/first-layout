@@ -77,7 +77,13 @@ async def delete_current_user(
     """Soft delete current user account with password verification"""
 
     # Verify password
-    if not verify_password(request.password, current_user.hashed_password):
+    try:
+        is_valid = verify_password(request.password, current_user.hashed_password)
+    except Exception:
+        # If verification fails (e.g. invalid hash format), treat as auth failure
+        is_valid = False
+
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password"

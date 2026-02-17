@@ -8,6 +8,7 @@ class ContestCreate(BaseModel):
     code: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
+    logo_url: Optional[str] = None
     start_at: datetime
     end_at: datetime
     status: Literal["live", "ongoing", "completed", "archived"] = "live"
@@ -42,6 +43,7 @@ class ContestCreate(BaseModel):
 class ContestUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    logo_url: Optional[str] = None
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     status: Optional[Literal["live", "ongoing", "completed", "archived"]] = None
@@ -76,7 +78,9 @@ class ContestResponse(BaseModel):
     id: str
     code: str
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    logo_file_id: Optional[str] = None
     start_at: datetime
     end_at: datetime
     status: str

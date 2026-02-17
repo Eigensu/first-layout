@@ -197,39 +197,6 @@ function DashboardContent() {
             </div>
           </div>
         </div>
-
-        {/* Features Coming Soon */}
-        <div className="bg-bg-card rounded-3xl shadow-xl p-8">
-          <h3 className="text-xl font-bold text-text-main mb-6">Coming Soon</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-6 text-center">
-              <div className="text-4xl mb-3">🏏</div>
-              <h4 className="font-semibold text-text-main mb-2">
-                Create Teams
-              </h4>
-              <p className="text-sm text-text-muted">
-                Build your dream cricket team
-              </p>
-              <div className="mt-4">
-                <Button onClick={() => router.push("/")}>Create Teams</Button>
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 text-center">
-              <div className="text-4xl mb-3">🏆</div>
-              <h4 className="font-semibold text-text-main mb-2">
-                Join Contests
-              </h4>
-              <p className="text-sm text-text-muted">
-                Compete with other players
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 text-center">
-              <div className="text-4xl mb-3">📊</div>
-              <h4 className="font-semibold text-text-main mb-2">View Stats</h4>
-              <p className="text-sm text-text-muted">Track your performance</p>
-            </div>
-          </div>
-        </div>
       </main>
 
       {/* Change Password Modal */}

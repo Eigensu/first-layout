@@ -1,10 +1,10 @@
 // Local assets mapping for sponsors. Keys can be name/id/slug. Values are public/ paths.
-// Example provided by user: apps/frontend/public/lodha-park-cricket-league-season-2-sponsors/Auction Partner.png
+// Example provided by user: apps/frontend/public/world-tower-premier-league-season-2-sponsors/Auction Partner.png
 // Use the public path starting with '/'. Spaces are supported by next/image.
 
 export const sponsorLogoMap: Record<string, string> = {
   // Map by exact sponsor name as seen in UI/API
-  CHADIYALI: "/lodha-park-cricket-league-season-2-sponsors/auction-partner.png",
+  CHADIYALI: "/world-tower-premier-league-season-2-sponsors/auction-partner.png",
   // Add more mappings here as needed
 };
 
@@ -13,8 +13,8 @@ function normalizeKey(value?: string) {
 }
 
 // Build candidate local paths from description-based convention.
-// Example: description "Auction Partner" => "/lodha-park-cricket-league-season-2-sponsors/auction-partner.png"
-const DESCRIPTION_BASE_DIR = "/lodha-park-cricket-league-season-2-sponsors"; // under public/
+// Example: description "Auction Partner" => "/world-tower-premier-league-season-2-sponsors/auction-partner.png"
+const DESCRIPTION_BASE_DIR = "/world-tower-premier-league-season-2-sponsors"; // under public/
 const CANDIDATE_EXTS = [".png", ".webp", ".jpg", ".jpeg"]; // try common formats
 
 function buildCandidatesFromDescription(desc?: string): string[] {

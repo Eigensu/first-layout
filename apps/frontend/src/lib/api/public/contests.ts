@@ -10,6 +10,7 @@ export interface Contest {
   code: string;
   name: string;
   description?: string | null;
+  logo_url?: string | null;
   start_at: string;
   end_at: string;
   status: ContestStatus;

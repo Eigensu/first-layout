@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status as http_status, Query
+from fastapi import APIRouter, Depends, HTTPException, status as http_status, Query, UploadFile, File
 from typing import Optional, List
 from beanie import PydanticObjectId
 from datetime import datetime
 from bson import ObjectId
 from app.utils.timezone import now_ist, to_ist
+from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs
 from pydantic import BaseModel
 
 from app.models.contest import Contest
@@ -30,11 +31,21 @@ from app.models.user import User
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
 async def to_response(contest: Contest) -> ContestResponse:
+    logo_url = contest.logo_url
+    if not logo_url and not contest.logo_file_id:
+        # Fallback to default tournament logo
+        from app.models.settings import GlobalSettings
+        settings = await GlobalSettings.get_instance()
+        if settings.default_contest_logo_file_id:
+            logo_url = "/api/settings/logo"
+
     return ContestResponse(
         id=str(contest.id),
         code=contest.code,
         name=contest.name,
         description=contest.description,
+        logo_url=logo_url,
+        logo_file_id=contest.logo_file_id,
         start_at=to_ist(contest.start_at),
         end_at=to_ist(contest.end_at),
         status=contest.status,
@@ -45,6 +56,7 @@ async def to_response(contest: Contest) -> ContestResponse:
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
+
 
 
 @router.post("", response_model=ContestResponse, status_code=201)
@@ -442,3 +454,46 @@ async def upsert_player_points(
         pass
 
     return resp
+
+
+# -------- Per-Contest Logo Management --------
+
+
+class UploadResponse(BaseModel):
+    url: str
+    message: str
+
+@router.post("/{contest_id}/upload-logo", response_model=UploadResponse)
+async def upload_contest_logo(
+    contest_id: str,
+    file: UploadFile = File(..., description="Contest logo image"),
+    current_user: User = Depends(get_admin_user),
+):
+    contest = await Contest.get(contest_id)
+    if not contest:
+        raise HTTPException(status_code=404, detail="Contest not found")
+
+    # Delete old logo if it exists in GridFS
+    if contest.logo_file_id:
+        await delete_contest_logo_from_gridfs(contest.logo_file_id)
+
+    # Save new logo to GridFS
+    try:
+        file_id = await upload_contest_logo_to_gridfs(file, filename_prefix=f"contest_{contest_id}")
+        # Update contest with API URL and file id
+        contest.logo_file_id = file_id
+        contest.logo_url = f"/api/contests/{contest_id}/logo"
+        contest.updated_at = now_ist()
+        await contest.save()
+        return UploadResponse(
+            url=contest.logo_url,
+            message="Logo uploaded successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload logo: {str(e)}"
+        )
+

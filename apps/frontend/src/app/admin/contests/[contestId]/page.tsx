@@ -42,7 +42,7 @@ export default function AdminManageContestPage() {
   const [userList, setUserList] = useState<UsersWithTeamsResponse | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [userTeams, setUserTeams] = useState<AdminUserTeamsResponse | null>(
-    null
+    null,
   );
   const [selectedTeamIds, setSelectedTeamIds] = useState<
     Record<string, boolean>
@@ -66,6 +66,8 @@ export default function AdminManageContestPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   // General settings
   const [editName, setEditName] = useState<string>("");
+  const [editLogoUrl, setEditLogoUrl] = useState<string>("");
+  const [editLogoFile, setEditLogoFile] = useState<File | null>(null);
   const [redirectAfterSave, setRedirectAfterSave] = useState(false);
 
   // No fixed steps; free time input via <input type="time">
@@ -115,6 +117,7 @@ export default function AdminManageContestPage() {
     setEditContestType(c.contest_type);
     setEditAllowedTeamsRaw((c.allowed_teams || []).join(", "));
     setEditName(c.name);
+    setEditLogoUrl(c.logo_url || "");
   };
 
   const saveAllSettings = async () => {
@@ -149,6 +152,7 @@ export default function AdminManageContestPage() {
         payload.allowed_teams = [];
       }
       if (editName.trim()) payload.name = editName.trim();
+      if (editLogoUrl !== undefined) payload.logo_url = editLogoUrl;
 
       const updated = await adminContestsApi.update(contest.id, payload);
 
@@ -159,6 +163,18 @@ export default function AdminManageContestPage() {
     } catch (e: any) {
       showAlert(e?.message || "Failed to save settings", "Update failed");
     } finally {
+      if (editLogoFile && contest) {
+        try {
+          await adminContestsApi.uploadLogo(contest.id, editLogoFile);
+          // Refresh to show new logo
+          const refreshed = await adminContestsApi.get(contest.id);
+          setContest(refreshed);
+          reseedFrom(refreshed); // This will update the URL in the form
+          setEditLogoFile(null); // Clear file input
+        } catch (uploadErr) {
+          showAlert("Settings saved but logo upload failed", "Warning");
+        }
+      }
       setSavingSettings(false);
     }
   };
@@ -191,7 +207,7 @@ export default function AdminManageContestPage() {
     } catch (e: any) {
       showAlert(
         e?.message || "Failed to toggle contest status",
-        "Update failed"
+        "Update failed",
       );
     } finally {
       setToggling(false);
@@ -298,7 +314,7 @@ export default function AdminManageContestPage() {
 
   const enrollSelected = async () => {
     const team_ids = Object.keys(selectedTeamIds).filter(
-      (k) => selectedTeamIds[k]
+      (k) => selectedTeamIds[k],
     );
     if (team_ids.length === 0) {
       showAlert("Select at least one team", "Validation");
@@ -450,6 +466,34 @@ export default function AdminManageContestPage() {
                       onChange={(e) => setEditName(e.target.value)}
                     />
                   </div>
+                  <div className="flex flex-col md:col-span-3">
+                    <label className="text-sm text-text-muted mb-1">
+                      Contest Logo
+                    </label>
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="w-full text-sm text-text-main file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setEditLogoFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                      {editLogoFile && (
+                        <div className="text-xs text-text-success">
+                          File selected: {editLogoFile.name}
+                        </div>
+                      )}
+                      {!editLogoFile && editLogoUrl && (
+                        <div className="text-xs text-text-muted break-all">
+                          Current: {editLogoUrl}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex flex-col">
                     <label className="text-sm text-text-muted mb-1">
                       Start (IST)
@@ -517,7 +561,7 @@ export default function AdminManageContestPage() {
                       value={editVisibility || ""}
                       onChange={(e) =>
                         setEditVisibility(
-                          e.target.value as Contest["visibility"]
+                          e.target.value as Contest["visibility"],
                         )
                       }
                     >
@@ -535,7 +579,7 @@ export default function AdminManageContestPage() {
                       value={editContestType || ""}
                       onChange={(e) =>
                         setEditContestType(
-                          e.target.value as Contest["contest_type"]
+                          e.target.value as Contest["contest_type"],
                         )
                       }
                     >

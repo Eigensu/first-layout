@@ -29,7 +29,7 @@ export default function HomePage() {
   const [loadingContests, setLoadingContests] = useState(false);
   const [contestsError, setContestsError] = useState<string | null>(null);
   const [joinedContestIds, setJoinedContestIds] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [liveContests, setLiveContests] = useState<Contest[]>([]);
   const [loadingLive, setLoadingLive] = useState(false);
@@ -68,7 +68,7 @@ export default function HomePage() {
         if (images.length === 0) {
           try {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/sponsors/?active=true&page_size=10`
+              `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/sponsors/?active=true&page_size=10`,
             );
             if (response.ok) {
               const data = await response.json();
@@ -155,7 +155,7 @@ export default function HomePage() {
         description: "Safe and fair gameplay",
       },
     ],
-    []
+    [],
   );
 
   return (
@@ -200,7 +200,7 @@ export default function HomePage() {
                       priority
                     />
                     <h1 className="text-4xl sm:text-5xl font-extrabold text-primary-700 tracking-tight leading-tight mb-4">
-                      Lodha park cricket league
+                      World Tower Premier League
                     </h1>
                     <p className="text-lg sm:text-xl text-gray-700 mb-8 max-w-xl mx-auto leading-relaxed">
                       Build your dream team, compete with friends, and rise to

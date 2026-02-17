@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, Response
 from typing import Optional, List, Dict, Annotated
 from beanie import PydanticObjectId
 from beanie.operators import Or, RegEx
@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from bson import ObjectId
 from app.utils.timezone import now_ist, to_ist
+from app.utils.gridfs import open_contest_logo_stream
 
 from app.models.contest import Contest
 from app.models.team_contest_enrollment import TeamContestEnrollment
@@ -66,11 +67,20 @@ async def to_contest_response(contest: Contest, skip_save: bool = False) -> Cont
         contest.updated_at = now_ist()
         # Skip immediate save for performance; status updates are idempotent
         # and will be persisted on next write operation or background task
+    logo_url = contest.logo_url
+    if not logo_url and not contest.logo_file_id:
+        from app.models.settings import GlobalSettings
+        settings = await GlobalSettings.get_instance()
+        if settings.default_contest_logo_file_id:
+            logo_url = "/api/settings/logo"
+
     return ContestResponse(
         id=str(contest.id),
         code=contest.code,
         name=contest.name,
         description=contest.description,
+        logo_url=logo_url,
+        logo_file_id=contest.logo_file_id,
         start_at=to_ist(contest.start_at),
         end_at=to_ist(contest.end_at),
         status=computed,
@@ -491,3 +501,17 @@ async def get_team_in_contest(contest_id: str, team_id: str, current_user: Optio
         vice_captain_id=str(team.vice_captain_id) if team.vice_captain_id else None,
         players=player_items,
     )
+
+
+
+
+@router.get("/{contest_id}/logo")
+async def get_contest_logo(contest_id: str):
+    """Serve the contest logo file"""
+    contest = await Contest.get(contest_id)
+    if not contest or not contest.logo_file_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    
+    stream, content_type = await open_contest_logo_stream(contest.logo_file_id)
+    data = await stream.read()
+    return Response(content=data, media_type=content_type)

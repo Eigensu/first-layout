@@ -10,6 +10,7 @@ export interface Contest {
   code: string;
   name: string;
   description?: string | null;
+  logo_url?: string | null;
   start_at: string;
   end_at: string;
   status: ContestStatus;
@@ -32,6 +33,7 @@ export interface ContestCreate {
   code: string;
   name: string;
   description?: string;
+  logo_url?: string;
   start_at: string; // ISO
   end_at: string; // ISO
   status?: ContestStatus;
@@ -44,6 +46,7 @@ export interface ContestCreate {
 export interface ContestUpdate {
   name?: string;
   description?: string;
+  logo_url?: string;
   start_at?: string;
   end_at?: string;
   status?: ContestStatus;
@@ -116,6 +119,14 @@ export const adminContestsApi = {
     body: PlayerPointsBulkUpsertRequest
   ): Promise<PlayerPointsResponseItem[]> => {
     const response = await apiClient.put(`/api/admin/contests/${contestId}/player-points`, body);
+    return response.data;
+  },
+  uploadLogo: async (contestId: string, file: File): Promise<{ url: string; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post(`/api/admin/contests/${contestId}/upload-logo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 };

@@ -203,11 +203,11 @@ export function ContestCard({
               )}
             </div>
             <Image
-              src="/Contests/logo.png"
-              alt="Contest logo"
+              src={contest.logo_url || "/Contests/logo.png"}
+              alt={`${contest.name} logo`}
               width={120}
               height={32}
-              className="w-[120px] h-auto opacity-90 drop-shadow"
+              className="w-[120px] h-auto object-contain opacity-90 drop-shadow"
             />
           </div>
         </div>

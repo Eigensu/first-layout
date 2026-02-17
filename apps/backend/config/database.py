@@ -13,6 +13,7 @@ from app.models.admin.import_log import ImportLog
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
+from app.models.settings import GlobalSettings
 
 settings = get_settings()
 
@@ -51,6 +52,7 @@ async def connect_to_mongo():
                 TeamContestEnrollment,
                 PasswordResetSession,
                 PasswordResetToken,
+                GlobalSettings,
             ]
         )
         print(f"✓ Initialized Beanie ODM with database: {settings.mongodb_db_name}")
