@@ -101,14 +101,20 @@ async def resolve_slot(
     
     # Try slot_code
     if slot_code:
-        slot_doc = await Slot.find_one(Slot.code == slot_code.strip())
+        # Code is stored in uppercase and with underscores in the DB
+        # When comparing, we should normalize the input the same way
+        normalized_code = slot_code.strip().upper().replace(" ", "_")
+        
+        slot_doc = await Slot.find_one({
+            "code": {"$regex": f"^{normalized_code}$", "$options": "i"}
+        })
         
         if not slot_doc and strategy == "create":
             # Create new slot from code
             from datetime import datetime
             slot_doc = Slot(
-                code=slot_code.strip().upper(),
-                name=slot_code.strip().replace("_", " ").title(),
+                code=slugify_code(slot_code),
+                name=slot_code.strip(),
                 min_select=4,
                 max_select=4,
                 created_at=datetime.utcnow(),
@@ -118,14 +124,16 @@ async def resolve_slot(
     
     # Try slot_name
     if not slot_doc and slot_name:
-        slot_doc = await Slot.find_one(Slot.name == slot_name.strip())
+        # Search case-insensitively
+        slot_doc = await Slot.find_one({
+            "name": {"$regex": f"^{slot_name.strip()}$", "$options": "i"}
+        })
         
         if not slot_doc and strategy == "create":
             # Create new slot from name
             from datetime import datetime
-            code = slot_name.strip().upper().replace(" ", "_")
             slot_doc = Slot(
-                code=code,
+                code=slugify_code(slot_name),
                 name=slot_name.strip(),
                 min_select=4,
                 max_select=4,
@@ -135,6 +143,11 @@ async def resolve_slot(
             await slot_doc.insert()
     
     return str(slot_doc.id) if slot_doc else None
+
+
+def slugify_code(text: str) -> str:
+    """Safely convert text to an uppercase slug format."""
+    return text.strip().upper().replace(" ", "_").replace("-", "_")
 
 
 def extract_stats(row: Dict[str, Any], known_fields: set) -> Optional[Dict[str, Any]]:
