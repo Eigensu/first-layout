@@ -96,16 +96,22 @@ export function usePlayerImport(onSuccess?: () => void) {
       a.click();
       window.URL.revokeObjectURL(url2);
       document.body.removeChild(a);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error downloading template:", err);
-      setError("Failed to download template");
+      if (err instanceof Error) {
+        setError(err.message || "Failed to download template");
+      } else {
+        setError("Failed to download template");
+      }
     } finally {
       setDownloadingTemplate(false);
     }
   };
 
-  const handleImport = async () => {
+  const handleImport = async (overrideDryRun?: boolean) => {
     if (!file) return;
+
+    const isDryRun = overrideDryRun !== undefined ? overrideDryRun : options.dry_run;
 
     try {
       setLoading(true);
@@ -113,7 +119,7 @@ export function usePlayerImport(onSuccess?: () => void) {
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("dry_run", String(options.dry_run));
+      formData.append("dry_run", String(isDryRun));
       formData.append("conflict", options.conflict);
       formData.append("slot_strategy", options.slot_strategy);
       formData.append("header_row", "1");
@@ -143,20 +149,21 @@ export function usePlayerImport(onSuccess?: () => void) {
           onSuccess();
         }, 2000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error importing:", err);
-      setError(err.message || "Failed to import players");
+      if (err instanceof Error) {
+        setError(err.message || "Failed to import players");
+      } else {
+        setError("Failed to import players");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleConfirmImport = () => {
-    setOptions({ ...options, dry_run: false });
-    // Trigger import again with dry_run=false
-    setTimeout(() => {
-      handleImport();
-    }, 100);
+    setOptions(prev => ({ ...prev, dry_run: false }));
+    handleImport(false);
   };
 
   const updateConflictOption = (conflict: "skip" | "update" | "error") => {
