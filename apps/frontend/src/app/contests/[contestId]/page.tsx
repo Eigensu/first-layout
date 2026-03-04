@@ -11,6 +11,7 @@ import {
   type EnrollmentResponse,
 } from "@/lib/api/public/contests";
 import { PageLoader } from "@/components";
+import { getImageUrl } from "@/lib/utils";
 
 export default function ContestDetailsPage() {
   const { isAuthenticated } = useAuth();
@@ -70,10 +71,10 @@ export default function ContestDetailsPage() {
           <div className="text-center mb-2 -mt-12">
             <div className="flex justify-center mt-0">
               <Image
-                src={
-                  contest.logo_url ||
-                  "/world-tower-premier-league-season-2-sponsors/title-sponsor-2.png"
-                }
+                src={getImageUrl(
+                  contest.logo_url,
+                  "/world-tower-premier-league-season-2-sponsors/title-sponsor-2.png",
+                )}
                 alt="Contest Logo"
                 width={180}
                 height={180}

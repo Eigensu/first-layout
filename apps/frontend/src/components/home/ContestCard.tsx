@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type Contest } from "@/lib/api/public/contests";
 import { ROUTES } from "@/common/consts";
+import { getImageUrl } from "@/lib/utils";
 
 export type ContestCardStatus = "live" | "ongoing";
 
@@ -203,7 +204,7 @@ export function ContestCard({
               )}
             </div>
             <Image
-              src={contest.logo_url || "/Contests/logo.png"}
+              src={getImageUrl(contest.logo_url, "/Contests/logo.png")}
               alt={`${contest.name} logo`}
               width={120}
               height={32}
