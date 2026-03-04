@@ -13,6 +13,7 @@ export type ApiPlayer = {
 export async function fetchPlayersBySlot(slotId: string, contestId?: string): Promise<ApiPlayer[]> {
   const q = new URLSearchParams();
   q.set("slot", String(slotId));
+  q.set("limit", "1000");
   if (contestId) q.set("contest_id", String(contestId));
   const res = await fetch(`${NEXT_PUBLIC_API_URL}/api/players?${q.toString()}`);
   if (!res.ok) throw new Error(`Failed to load players for slot ${slotId} (${res.status})`);
