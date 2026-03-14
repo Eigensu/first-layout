@@ -30,7 +30,7 @@ export default function ForgotPasswordVerifyPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone, otp }),
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) {
@@ -64,7 +64,7 @@ export default function ForgotPasswordVerifyPage() {
             Wall-E Arena
           </h1>
         </div>
-        <p className="text-gray-600">Verify OTP</p>
+        <p className="text-gray-600">Enter the OTP received via call</p>
       </div>
 
       <div className="bg-bg-card rounded-3xl p-6 sm:p-8 shadow-pink-soft">
