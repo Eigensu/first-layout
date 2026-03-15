@@ -35,7 +35,7 @@ export default function ContestLeaderboardTabPage() {
         setError(null);
         const [c, lb] = await Promise.all([
           publicContestsApi.get(contestId),
-          publicContestsApi.leaderboard(contestId),
+          publicContestsApi.leaderboard(contestId, { limit: 1000 }),
         ]);
         setContest(c);
         setLeaderboard(lb);

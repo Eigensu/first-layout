@@ -207,7 +207,7 @@ async def get_contest_if_enrolled(contest_id: str, current_user: User = Depends(
 async def contest_leaderboard(
     contest_id: str,
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(1000, ge=1, le=1000),
     current_user: Optional[User] = Depends(get_optional_current_user),
 ):
     contest = await Contest.get(contest_id)

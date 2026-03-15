@@ -248,7 +248,7 @@ export default function AdminManageContestPage() {
   const loadLeaderboard = async () => {
     try {
       const res = await publicContestsApi.leaderboard(contestId, {
-        limit: 100,
+        limit: 1000,
       });
       setLeaderboard(res.entries);
     } catch {
@@ -639,7 +639,7 @@ export default function AdminManageContestPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <div className="border border-border-subtle rounded p-4 bg-bg-card text-text-main">
             <h2 className="text-lg font-medium mb-2 text-text-main">
-              Leaderboard (Top 100)
+              Leaderboard (Top 1000)
             </h2>
             <div className="overflow-x-auto">
               <table className="min-w-full border border-border-subtle text-text-main">
