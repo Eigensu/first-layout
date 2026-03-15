@@ -19,6 +19,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar } from "@/components/ui/Avatar";
+import { MobileUserMenu } from "./MobileUserMenu";
 
 export interface PillNavItem {
   id: string;
@@ -311,7 +312,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
       {/* Backdrop Overlay */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setMobileMenuOpen(false)}
           aria-hidden="true"
         />
@@ -319,37 +320,39 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
       {/* Side Menu Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-bg-card shadow-2xl z-50 md:hidden transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-72 bg-[#130D2A] shadow-2xl z-50 md:hidden transform transition-transform duration-300 ease-in-out flex flex-col ${
           mobileMenuOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        {/* Menu Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border-subtle">
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between px-4 border-b border-border-subtle h-[62px] shrink-0">
           <Link
             href="/"
             aria-label="Go to Home"
             className="flex items-center cursor-pointer"
+            onClick={() => setMobileMenuOpen(false)}
           >
             <Image
               src="/walle-logo.png"
               alt="Wall-E Arena Logo"
               width={72}
               height={72}
-              className="rounded-full object-cover -my-3"
+              className="rounded-full object-cover -my-6"
             />
           </Link>
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="p-2 rounded-lg hover:bg-bg-card-soft transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-bg-card-soft hover:bg-bg-card-soft/10 transition-colors active:scale-95"
             aria-label="Close menu"
           >
-            <X className="w-6 h-6 text-text-muted" />
+            <X className="w-5 h-5 text-text-muted" />
           </button>
         </div>
 
-        {/* Menu Content */}
-        <div className="overflow-y-auto h-[calc(100%-73px)] p-4">
-          <div className="space-y-1">
+        {/* Scrollable Nav Area */}
+        <div className="flex-1 overflow-y-auto px-3 pt-5 pb-3 flex flex-col">
+          {/* Primary Navigation */}
+          <nav className="space-y-1">
             {visibleItems.map((item) => {
               const isActive = item.id === currentActiveId;
               return (
@@ -357,36 +360,57 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                   key={item.id}
                   onClick={() => handleNavigation(item.href)}
                   className={`
-                    w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
+                    group relative w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all duration-200 text-left
                     ${
                       isActive
-                        ? "bg-gradient-primary text-white shadow-md"
-                        : "text-text-muted hover:bg-bg-card-soft hover:text-text-main"
+                        ? "bg-primary-600/20 text-text-muted"
+                        : "text-text-muted hover:text-text-muted/90 hover:text-text-main"
                     }
-                    outline-none focus:outline-none focus-visible:outline-none focus:ring-0 active:bg-transparent
+                    outline-none focus:outline-none active:scale-[0.97]
                   `}
                 >
-                  {item.icon && (
-                    <span
-                      className={
-                        isActive ? "text-text-main" : "text-text-muted"
-                      }
-                    >
-                      {item.icon}
-                    </span>
+                  {/* Active indicator bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-gradient-to-b from-primary-400 to-primary-600" />
                   )}
-                  <span className="text-sm">{item.label}</span>
+                  <span
+                    className={`w-5 h-5 flex items-center justify-center shrink-0 transition-colors duration-200 ${
+                      isActive
+                        ? "text-primary-300"
+                        : "text-text-muted group-hover:text-text-muted/70"
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
+                  <span
+                    className={`text-[14.5px] font-medium leading-none transition-colors ${isActive ? "text-white" : ""}`}
+                  >
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
-          </div>
+          </nav>
 
-          {/* Additional mobile menu content (e.g., UserMenu) */}
-          {mobileMenuContent && (
-            <div className="mt-4 pt-4 border-t border-border-subtle">
-              {mobileMenuContent}
-            </div>
-          )}
+          {/* Push account section to bottom */}
+          <div className="flex-1" />
+
+          {/* Account / Auth section */}
+          <div className="mt-4 pt-4 border-t border-white/[0.08]">
+            {mobileMenuContent ? (
+              mobileMenuContent
+            ) : isAuthenticated ? (
+              <MobileUserMenu onClose={() => setMobileMenuOpen(false)} />
+            ) : (
+              <Link
+                href="/auth/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-brand text-white px-4 py-3 text-sm font-semibold shadow-lg shadow-primary-900/40 hover:opacity-90 transition-all duration-200 active:scale-[0.97]"
+              >
+                Login / Join Us
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </>
