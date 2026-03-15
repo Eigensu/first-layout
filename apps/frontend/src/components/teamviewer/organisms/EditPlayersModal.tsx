@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Search, X, Check, Star, Crown } from "lucide-react";
+import { Search, X, Check } from "lucide-react";
 import { getInitials, getSlotGradient } from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -200,18 +200,25 @@ export function EditPlayersModal({
   }, [isOpen, currentPlayerIds, initialCaptainId, initialViceCaptainId]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const playerById = useMemo(() => {
+    const map: Record<string, EditablePlayer> = {};
+    allPlayers.forEach((player) => {
+      map[player.id] = player;
+    });
+    return map;
+  }, [allPlayers]);
   const count = selectedIds.length;
   const isValid = count === requiredCount && captainId && viceCaptainId && captainId !== viceCaptainId;
 
   const selectedCountBySlot = useMemo(() => {
     const counts: Record<string, number> = {};
     selectedIds.forEach((id) => {
-      const p = allPlayers.find((ap) => ap.id === id);
+      const p = playerById[id];
       const sid = String(p?.slot || "");
       if (sid) counts[sid] = (counts[sid] || 0) + 1;
     });
     return counts;
-  }, [selectedIds, allPlayers]);
+  }, [selectedIds, playerById]);
 
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
@@ -221,7 +228,7 @@ export function EditPlayersModal({
         if (viceCaptainId === id) setViceCaptainId("");
         return next;
       }
-      const player = allPlayers.find((p) => p.id === id);
+      const player = playerById[id];
       const sid = String(player?.slot || "");
       const currentSlotCount = selectedCountBySlot[sid] || 0;
       const limit = slotLimits[sid] || 4;

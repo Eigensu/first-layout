@@ -81,8 +81,9 @@ function PlayerChip({
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="group flex flex-col items-center gap-1 w-[70px] flex-shrink-0 focus:outline-none"
+      className="group flex flex-col items-center gap-1 w-[70px] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-bg-card"
     >
       {/* Avatar */}
       <div className="relative">
@@ -141,8 +142,8 @@ export function TeamViewer({
   onOpenPlayerActions,
   contestStatus,
   onEditPlayers,
-  roleToSlotLabel,
-  getRoleAvatarGradient,
+  roleToSlotLabel: _roleToSlotLabel,
+  getRoleAvatarGradient: _getRoleAvatarGradient,
   initialView = "list",
   onViewChange,
 }: TeamViewerProps) {
@@ -180,7 +181,7 @@ export function TeamViewer({
   const contestMap = useMemo(
     () =>
       new Map<string, number>(
-        (contestData?.players || []).map((p) => [p.id, p.contest_points])
+        (contestData?.players || []).map((p) => [p.id, p.contest_points || 0])
       ),
     [contestData]
   );

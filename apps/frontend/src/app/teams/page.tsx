@@ -149,7 +149,13 @@ export default function TeamsPage() {
 
   // Fetch slots
   useEffect(() => {
-    fetchSlots().then(setSlots).catch(() => {});
+    fetchSlots()
+      .then(setSlots)
+      .catch((err) => {
+        console.error("Failed to load slots:", err);
+        // Keep a safe default so dependent logic can still proceed.
+        setSlots([]);
+      });
   }, []);
 
   const totalMaxSelected = slots.reduce((acc, s) => acc + (s.max_select || 0), 0) || 16;
@@ -177,9 +183,8 @@ export default function TeamsPage() {
       }
     };
 
-    if (slots.length > 0) {
-      fetchPlayers();
-    }
+    // Always fetch players. If slots are unavailable/empty, slotToRole falls back to "Player".
+    fetchPlayers();
   }, [contestIdParam, slots]);
 
   // Load per-team enrollments and resolve contest names

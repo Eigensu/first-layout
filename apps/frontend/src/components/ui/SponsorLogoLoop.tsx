@@ -40,12 +40,20 @@ function resolveLogoUrl(logo: string): string {
   return `${base}${logo.startsWith("/") ? "" : "/"}${logo}`;
 }
 
+function isValidSponsorLogo(logo: string | null | undefined): boolean {
+  if (!logo) return false;
+  const normalized = logo.trim().toLowerCase();
+  if (!normalized || normalized === "pending") return false;
+  const resolved = resolveLogoUrl(logo);
+  return resolved.trim().length > 0;
+}
+
 export function SponsorLogoLoop({
   fallbackLogos = DEFAULT_FALLBACK_LOGOS,
   featuredOnly = false,
   ...logoLoopProps
 }: SponsorLogoLoopProps) {
-  const [apiLogos, setApiLogos] = useState<LogoItem[] | null>(null);
+  const [apiLogos, setApiLogos] = useState<LogoItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,12 +66,14 @@ export function SponsorLogoLoop({
 
         if (cancelled) return;
 
-        const fetched: LogoItem[] = sponsors.map((s) => ({
-          src: resolveLogoUrl(s.logo),
-          alt: s.name,
-          href: s.website || undefined,
-          title: s.name,
-        }));
+        const fetched: LogoItem[] = sponsors
+          .filter((s) => isValidSponsorLogo(s.logo))
+          .map((s) => ({
+            src: resolveLogoUrl(s.logo),
+            alt: s.name,
+            href: s.website || undefined,
+            title: s.name,
+          }));
 
         setApiLogos(fetched);
       } catch {
@@ -73,9 +83,6 @@ export function SponsorLogoLoop({
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredOnly]);
-
-  // Still loading — don't render yet
-  if (apiLogos === null) return null;
 
   // Merge: pinned + (API logos if any, else fallback)
   const sourceLogos = apiLogos.length > 0 ? apiLogos : fallbackLogos;
