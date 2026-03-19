@@ -8,6 +8,7 @@ import { ContestMetaBadges } from "../molecules/ContestMetaBadges";
 import { CaptainRow, ViceCaptainRow } from "../LeaderRow";
 import { SquadList } from "../SquadList";
 import { PitchView } from "./PitchView";
+import { TeamEditHistory } from "./TeamEditHistory";
 import {
   type TeamViewMode,
   type TeamBasic,
@@ -46,6 +47,9 @@ export interface TeamViewerProps {
   // View mode
   initialView?: TeamViewMode;
   onViewChange?: (view: TeamViewMode) => void;
+
+  // Admin
+  isAdmin?: boolean;
 }
 
 export function TeamViewer({
@@ -69,6 +73,7 @@ export function TeamViewer({
   getRoleAvatarGradient,
   initialView = "list",
   onViewChange,
+  isAdmin,
 }: TeamViewerProps) {
   const [viewMode, setViewMode] = useState<TeamViewMode>(initialView);
 
@@ -94,6 +99,15 @@ export function TeamViewer({
       ),
     [teamPlayers, team.captain_id, team.vice_captain_id, contestData]
   );
+
+  // Build player ID → name map for edit history diffs
+  const playerNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of players) {
+      map[p.id] = p.name;
+    }
+    return map;
+  }, [players]);
 
   // Find captain and vice-captain
   const captain = players.find((p) => p.id === team.captain_id);
@@ -271,6 +285,11 @@ export function TeamViewer({
             />
           </div>
         </>
+      )}
+
+      {/* Edit History (admin only) */}
+      {isAdmin && (
+        <TeamEditHistory teamId={team.id} playerNameMap={playerNameMap} />
       )}
 
       {/* Actions */}

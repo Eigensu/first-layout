@@ -5,6 +5,7 @@ from app.models.user import User, RefreshToken, UserProfile
 from app.models.sponsor import Sponsor
 from app.models.carousel import CarouselImage
 from app.models.team import Team
+from app.models.team_edit_history import TeamEditHistory
 from app.models.contest import Contest
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.admin.player import Player as AdminPlayer
@@ -43,6 +44,7 @@ async def connect_to_mongo():
                 Sponsor,
                 CarouselImage,
                 Team,
+                TeamEditHistory,
                 AdminPlayer,
                 PublicPlayer,
                 PlayerContestPoints,
