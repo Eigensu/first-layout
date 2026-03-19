@@ -32,7 +32,7 @@ from app.models.user import User
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
 async def to_response(contest: Contest) -> ContestResponse:
-    status = await sync_contest_status(contest)
+    status = await sync_contest_status(contest, persist=False)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo

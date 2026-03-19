@@ -11,13 +11,11 @@ import {
   ContestCreate,
   ContestType,
   ContestVisibility,
-  ContestStatus,
 } from "@/lib/api/admin/contests";
 import { adminSettingsApi } from "@/lib/api/admin/settings";
 import {
   API_BASE_URL,
   CONTEST_DEFAULTS,
-  CONTEST_STATUS_OPTIONS,
   CONTEST_TYPE_OPTIONS,
   CONTEST_VISIBILITY_OPTIONS,
 } from "@/common/consts";
@@ -39,7 +37,6 @@ export default function AdminContestsPage() {
     end_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
     visibility: CONTEST_DEFAULTS.visibility,
     points_scope: CONTEST_DEFAULTS.points_scope,
-    status: CONTEST_DEFAULTS.status,
     contest_type: CONTEST_DEFAULTS.contest_type,
     allowed_teams: [],
   });
@@ -437,22 +434,12 @@ export default function AdminContestsPage() {
               </div>
               <div>
                 <label className="block text-sm text-text-muted">Status</label>
-                <select
-                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
-                  value={form.status}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      status: e.currentTarget.value as ContestStatus,
-                    })
-                  }
-                >
-                  {CONTEST_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded">
+                  Derived from schedule
+                </div>
+                <p className="mt-1 text-xs text-text-muted">
+                  Status is auto-calculated from start/end time. Archive from manage view if needed.
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-text-muted">

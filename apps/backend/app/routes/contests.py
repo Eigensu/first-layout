@@ -51,7 +51,7 @@ class ContestTeamResponse(BaseModel):
     vice_captain_id: Optional[str] = None
     players: List[ContestTeamPlayerSchema]
 
-async def to_contest_response(contest: Contest, skip_save: bool = False) -> ContestResponse:
+async def to_contest_response(contest: Contest, skip_save: bool = True) -> ContestResponse:
     # Keep stored status in sync with real-time lifecycle.
     computed = await sync_contest_status(contest, persist=not skip_save)
     logo_url = contest.logo_url

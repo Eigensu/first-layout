@@ -24,8 +24,8 @@ async def sync_contest_status(contest: Contest, *, persist: bool = True) -> Cont
     computed = compute_contest_status(contest)
     if contest.status != computed:
         contest.status = computed
-        contest.updated_at = now_ist()
         if persist:
+            contest.updated_at = now_ist()
             await contest.save()  # type: ignore[misc]
     return computed
 
