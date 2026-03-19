@@ -236,7 +236,7 @@ export function SlotsSection() {
     setAssigning(true);
     try {
       const ids = Object.keys(selectedAvailable).filter(
-        (id) => selectedAvailable[id]
+        (id) => selectedAvailable[id],
       );
       if (ids.length === 0) return;
       await slotsApi.assignPlayers(selectedSlot.id, { player_ids: ids });
@@ -258,7 +258,7 @@ export function SlotsSection() {
     setUnassigning(true);
     try {
       const ids = Object.keys(selectedAssigned).filter(
-        (id) => selectedAssigned[id]
+        (id) => selectedAssigned[id],
       );
       if (ids.length === 0) return;
       await slotsApi.bulkUnassignPlayers(selectedSlot.id, { player_ids: ids });
@@ -289,12 +289,16 @@ export function SlotsSection() {
                   placeholder="Search slots by code or name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-border-subtle rounded-lg bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="ghost" size="sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-text-main hover:bg-bg-elevated"
+              >
                 <Filter className="w-4 h-4 mr-2" />
                 Filter
               </Button>
@@ -310,7 +314,7 @@ export function SlotsSection() {
       {/* Error Message */}
       {error && (
         <Card>
-          <CardBody className="p-4 bg-red-50">
+          <CardBody className="p-4 bg-red-500/10">
             <p className="text-red-600 text-sm">{error}</p>
           </CardBody>
         </Card>
@@ -318,26 +322,28 @@ export function SlotsSection() {
 
       {/* Edit Slot Modal */}
       {editModalOpen && editSlot && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <Card className="max-w-md w-full">
             <CardBody className="p-6 space-y-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-text-main">
                     Edit Slot
                   </h3>
-                  <p className="text-sm text-gray-500">Code: {editSlot.code}</p>
+                  <p className="text-sm text-text-muted">
+                    Code: {editSlot.code}
+                  </p>
                 </div>
                 <button
                   onClick={() => setEditModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="text-text-muted hover:text-text-main p-1 hover:bg-bg-elevated rounded transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">
+                  <label className="block text-sm text-text-muted mb-1">
                     Name
                   </label>
                   <input
@@ -345,13 +351,13 @@ export function SlotsSection() {
                     onChange={(e) =>
                       setEditForm((f) => ({ ...f, name: e.target.value }))
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
                 {/* Category removed from edit form */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">
+                    <label className="block text-sm text-text-muted mb-1">
                       Min select
                     </label>
                     <input
@@ -364,11 +370,11 @@ export function SlotsSection() {
                           min_select: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">
+                    <label className="block text-sm text-text-muted mb-1">
                       Max select
                     </label>
                     <input
@@ -381,7 +387,7 @@ export function SlotsSection() {
                           max_select: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -415,7 +421,7 @@ export function SlotsSection() {
       {loading ? (
         <Card>
           <CardBody className="p-8 text-center">
-            <p className="text-gray-500">Loading slots...</p>
+            <p className="text-text-muted">Loading slots...</p>
           </CardBody>
         </Card>
       ) : (
@@ -425,7 +431,7 @@ export function SlotsSection() {
             .filter(
               (slot) =>
                 slot.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                slot.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                slot.name?.toLowerCase().includes(searchQuery.toLowerCase()),
             )
             .map((slot) => (
               <Card key={slot.id} hover>
@@ -436,28 +442,32 @@ export function SlotsSection() {
                     </div>
                     <button
                       onClick={() => handleDeleteClick(slot)}
-                      className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                      className="text-red-500 hover:text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  <h3 className="text-lg font-semibold text-text-main mb-1">
                     {slot.name}
                   </h3>
                   {/* Category removed from UI */}
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <div className="flex items-center gap-3 text-sm text-text-muted">
                       <Users className="w-4 h-4" />
                       <span>{slot.player_count} Players</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="flex items-center justify-between text-sm text-text-muted">
                       <span>
                         Min select:{" "}
-                        <span className="font-medium">{slot.min_select}</span>
+                        <span className="font-medium text-text-main">
+                          {slot.min_select}
+                        </span>
                       </span>
                       <span>
                         Max select:{" "}
-                        <span className="font-medium">{slot.max_select}</span>
+                        <span className="font-medium text-text-main">
+                          {slot.max_select}
+                        </span>
                       </span>
                     </div>
                     <div className="pt-2 flex gap-2">
@@ -487,7 +497,7 @@ export function SlotsSection() {
       {!loading && slots.length === 0 && (
         <Card>
           <CardBody className="p-8 text-center">
-            <p className="text-gray-500 mb-4">No slots available</p>
+            <p className="text-text-muted mb-4">No slots available</p>
             <Button variant="primary" size="sm" onClick={handleOpenCreate}>
               <Plus className="w-4 h-4 mr-2" />
               Create First Slot
@@ -498,21 +508,21 @@ export function SlotsSection() {
 
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && slotToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <Card className="max-w-md w-full">
             <CardBody className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-text-main">
                   Delete Slot {slotToDelete.name}
                 </h3>
                 <button
                   onClick={handleDeleteCancel}
-                  className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="text-text-muted hover:text-text-main p-1 hover:bg-bg-elevated rounded transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-gray-600 mb-4">
+              <p className="text-text-muted mb-4">
                 Are you sure you want to delete this slot? This will unassign{" "}
                 <span className="font-semibold">
                   {slotToDelete.player_count} player
@@ -545,23 +555,23 @@ export function SlotsSection() {
 
       {/* Create Slot Modal */}
       {createModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <Card className="max-w-md w-full">
             <CardBody className="p-6 space-y-4">
               <div className="flex items-start justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-text-main">
                   Create Slot
                 </h3>
                 <button
                   onClick={() => setCreateModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="text-text-muted hover:text-text-main p-1 hover:bg-bg-elevated rounded transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">
+                  <label className="block text-sm text-text-muted mb-1">
                     Code
                   </label>
                   <input
@@ -570,11 +580,11 @@ export function SlotsSection() {
                       setForm((f) => ({ ...f, code: e.target.value }))
                     }
                     placeholder="E.g., BATTERS"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">
+                  <label className="block text-sm text-text-muted mb-1">
                     Name
                   </label>
                   <input
@@ -583,13 +593,13 @@ export function SlotsSection() {
                       setForm((f) => ({ ...f, name: e.target.value }))
                     }
                     placeholder="E.g., Batters"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
                 {/* Category removed from create form */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">
+                    <label className="block text-sm text-text-muted mb-1">
                       Min select
                     </label>
                     <input
@@ -602,11 +612,11 @@ export function SlotsSection() {
                           min_select: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-700 mb-1">
+                    <label className="block text-sm text-text-muted mb-1">
                       Max select
                     </label>
                     <input
@@ -619,7 +629,7 @@ export function SlotsSection() {
                           max_select: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -654,15 +664,15 @@ export function SlotsSection() {
 
       {/* Manage Slot Modal */}
       {manageOpen && selectedSlot && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-4xl">
             <CardBody className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-text-main">
                     Manage Players
                   </h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-text-muted">
                     Slot:{" "}
                     <span className="font-medium">{selectedSlot.name}</span> (
                     {selectedSlot.code})
@@ -670,7 +680,7 @@ export function SlotsSection() {
                 </div>
                 <button
                   onClick={() => closeManage(true)}
-                  className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="text-text-muted hover:text-text-main p-1 hover:bg-bg-elevated rounded transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -678,16 +688,18 @@ export function SlotsSection() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Assigned Players */}
-                <div className="border rounded-md">
-                  <div className="p-3 border-b flex items-center justify-between">
-                    <h4 className="font-medium">Assigned Players</h4>
-                    <div className="text-sm text-gray-500">
+                <div className="border border-border-subtle rounded-md bg-bg-card">
+                  <div className="p-3 border-b border-border-subtle flex items-center justify-between">
+                    <h4 className="font-medium text-text-main">
+                      Assigned Players
+                    </h4>
+                    <div className="text-sm text-text-muted">
                       {assignedPlayers.length}
                     </div>
                   </div>
                   <div className="p-3">
                     <div className="relative mb-3">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4" />
                       <input
                         value={assignedSearch}
                         onChange={async (e) => {
@@ -695,17 +707,19 @@ export function SlotsSection() {
                           await fetchAssigned(selectedSlot.id);
                         }}
                         placeholder="Search assigned players"
-                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        className="w-full pl-9 pr-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       />
                     </div>
                     <div className="max-h-72 overflow-auto">
                       {loadingAssigned ? (
-                        <p className="text-sm text-gray-500 p-2">Loading...</p>
+                        <p className="text-sm text-text-muted p-2">
+                          Loading...
+                        </p>
                       ) : (
                         assignedPlayers.map((p) => (
                           <label
                             key={p.id}
-                            className="flex items-center gap-2 py-2 px-2 hover:bg-gray-50 rounded cursor-pointer"
+                            className="flex items-center gap-2 py-2 px-2 hover:bg-bg-elevated rounded cursor-pointer"
                           >
                             <input
                               type="checkbox"
@@ -717,10 +731,10 @@ export function SlotsSection() {
                                 }))
                               }
                             />
-                            <span className="text-sm text-gray-700">
+                            <span className="text-sm text-text-main">
                               {p.name}
                             </span>
-                            <span className="ml-auto text-xs text-gray-500">
+                            <span className="ml-auto text-xs text-text-muted">
                               {p.team}
                             </span>
                           </label>
@@ -740,16 +754,18 @@ export function SlotsSection() {
                 </div>
 
                 {/* Available Players */}
-                <div className="border rounded-md">
-                  <div className="p-3 border-b flex items-center justify-between">
-                    <h4 className="font-medium">Available Players</h4>
-                    <div className="text-sm text-gray-500">
+                <div className="border border-border-subtle rounded-md bg-bg-card">
+                  <div className="p-3 border-b border-border-subtle flex items-center justify-between">
+                    <h4 className="font-medium text-text-main">
+                      Available Players
+                    </h4>
+                    <div className="text-sm text-text-muted">
                       {availablePlayers.length}
                     </div>
                   </div>
                   <div className="p-3">
                     <div className="relative mb-3">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4" />
                       <input
                         value={availableSearch}
                         onChange={async (e) => {
@@ -758,17 +774,19 @@ export function SlotsSection() {
                           await fetchAvailable(v);
                         }}
                         placeholder="Search players to assign"
-                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        className="w-full pl-9 pr-3 py-2 border border-border-subtle rounded-md bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       />
                     </div>
                     <div className="max-h-72 overflow-auto">
                       {loadingAvailable ? (
-                        <p className="text-sm text-gray-500 p-2">Loading...</p>
+                        <p className="text-sm text-text-muted p-2">
+                          Loading...
+                        </p>
                       ) : (
                         availablePlayers.map((p) => (
                           <label
                             key={p.id}
-                            className="flex items-center gap-2 py-2 px-2 hover:bg-gray-50 rounded cursor-pointer"
+                            className="flex items-center gap-2 py-2 px-2 hover:bg-bg-elevated rounded cursor-pointer"
                           >
                             <input
                               type="checkbox"
@@ -780,10 +798,10 @@ export function SlotsSection() {
                                 }))
                               }
                             />
-                            <span className="text-sm text-gray-700">
+                            <span className="text-sm text-text-main">
                               {p.name}
                             </span>
-                            <span className="ml-auto text-xs text-gray-500">
+                            <span className="ml-auto text-xs text-text-muted">
                               {p.team}
                             </span>
                           </label>

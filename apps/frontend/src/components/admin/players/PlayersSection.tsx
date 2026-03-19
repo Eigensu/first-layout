@@ -40,29 +40,29 @@ export function PlayersSection() {
   return (
     <div className="space-y-4">
       {/* Actions Bar */}
-      <Card>
+      <Card className="bg-white border-gray-200 shadow-sm">
         <CardBody className="p-4">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:w-auto">
               <label htmlFor="players-search" className="sr-only">
                 Search players
               </label>
-              <div className="relative flex items-center rounded-xl border border-gray-200 bg-white/70 px-3 py-2 shadow-sm backdrop-blur focus-within:ring-2 focus-within:ring-orange-500">
-                <Search className="text-gray-400 w-5 h-5" />
+              <div className="relative flex items-center rounded-xl border border-border-subtle bg-bg-card px-3 py-2 shadow-sm backdrop-blur focus-within:ring-2 focus-within:ring-orange-500">
+                <Search className="text-text-muted w-5 h-5" />
                 <input
                   id="players-search"
                   type="search"
                   placeholder="Search players..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent outline-none pl-2 pr-8 text-sm placeholder:text-gray-400"
+                  className="w-full bg-transparent outline-none pl-2 pr-8 text-sm text-text-main placeholder:text-text-muted"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
                     aria-label="Clear search"
-                    className="absolute right-2 p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                    className="absolute right-2 p-1 rounded-md text-text-muted hover:text-text-main hover:bg-bg-elevated"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -84,7 +84,7 @@ export function PlayersSection() {
       </Card>
 
       {/* Players Table */}
-      <Card>
+      <Card className="bg-white border-gray-200 shadow-sm">
         <CardBody className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -96,7 +96,7 @@ export function PlayersSection() {
               <span>{error}</span>
             </div>
           ) : players.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-text-muted">
               No players found. Click &quot;Add Player&quot; to get started.
             </div>
           ) : (
@@ -154,8 +154,8 @@ export function PlayersSection() {
 
       {/* Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-bg-card rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-border-subtle">
             <div className="p-6">
               <PlayerImport
                 onSuccess={handleImportSuccess}

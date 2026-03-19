@@ -15,7 +15,7 @@ export function PlayerTableRow({
   onEditPoints,
 }: PlayerTableRowProps) {
   return (
-    <tr className="hover:bg-gray-50">
+    <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center">
           {player.image_url ? (
