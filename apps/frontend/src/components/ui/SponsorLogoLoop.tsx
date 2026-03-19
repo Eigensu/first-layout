@@ -48,6 +48,22 @@ function isValidSponsorLogo(logo: string | null | undefined): boolean {
   return resolved.trim().length > 0;
 }
 
+function sanitizeWebsiteUrl(
+  website: string | null | undefined
+): string | undefined {
+  if (!website) return undefined;
+  const trimmed = website.trim();
+  if (!trimmed) return undefined;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://")) {
+    return trimmed;
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    return undefined;
+  }
+  return `https://${trimmed}`;
+}
+
 export function SponsorLogoLoop({
   fallbackLogos = DEFAULT_FALLBACK_LOGOS,
   featuredOnly = false,
@@ -71,7 +87,7 @@ export function SponsorLogoLoop({
           .map((s) => ({
             src: resolveLogoUrl(s.logo),
             alt: s.name,
-            href: s.website || undefined,
+            href: sanitizeWebsiteUrl(s.website),
             title: s.name,
           }));
 
@@ -89,9 +105,10 @@ export function SponsorLogoLoop({
 
   // Deduplicate pinned: remove any API logo whose src matches a pinned logo
   const pinnedSrcs = new Set(PINNED_LOGOS.map((l) => ("src" in l ? l.src : "")));
-  const filteredSource = sourceLogos.filter(
-    (l) => !("src" in l) || !pinnedSrcs.has((l as any).src)
-  );
+  const filteredSource = sourceLogos.filter((l) => {
+    if (!("src" in l)) return true;
+    return !pinnedSrcs.has(l.src);
+  });
 
   const logos: LogoItem[] = [...PINNED_LOGOS, ...filteredSource];
 

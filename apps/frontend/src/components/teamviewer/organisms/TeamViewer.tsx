@@ -42,10 +42,6 @@ export interface TeamViewerProps {
   contestStatus?: string;           // "live" | "ongoing" | "completed" etc.
   onEditPlayers?: () => void;
 
-  // Utilities
-  roleToSlotLabel: (role: string) => string;
-  getRoleAvatarGradient: (role: string) => string | undefined;
-
   // View mode
   initialView?: TeamViewMode;
   onViewChange?: (view: TeamViewMode) => void;
@@ -142,8 +138,6 @@ export function TeamViewer({
   onOpenPlayerActions,
   contestStatus,
   onEditPlayers,
-  roleToSlotLabel: _roleToSlotLabel,
-  getRoleAvatarGradient: _getRoleAvatarGradient,
   initialView = "list",
   onViewChange,
 }: TeamViewerProps) {

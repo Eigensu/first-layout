@@ -113,15 +113,6 @@ export default function TeamsPage() {
     ? teams.filter((t) => enrollmentByTeam[t.id]?.contestId === contestIdParam)
     : teams;
 
-  const normalizeRole = (role: string): string => {
-    const r = role.toLowerCase();
-    if (r === "batsman" || r === "batsmen") return "Batsman";
-    if (r === "bowler") return "Bowler";
-    if (r === "all-rounder" || r === "allrounder") return "All-Rounder";
-    if (r === "wicket-keeper" || r === "wicketkeeper") return "Wicket-Keeper";
-    return role;
-  };
-
   const roleToSlotLabel = (role: string): string => {
     return role ? role.toUpperCase() : "PLAYER";
   };
@@ -554,7 +545,14 @@ export default function TeamsPage() {
     if (!editPlayersTeamId) return;
     try {
       setSavingPlayers(true);
-      const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN) as string;
+      const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
+      if (!token) {
+        showAlert(
+          "Your session has expired. Please log in again to save squad changes.",
+          "Not authenticated",
+        );
+        return;
+      }
       const updated = await updateTeam(editPlayersTeamId, payload, token);
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setEditPlayersTeamId(null);
@@ -719,8 +717,6 @@ export default function TeamsPage() {
                   }
                   contestStatus={contestStatusByTeam[team.id]}
                   onEditPlayers={() => setEditPlayersTeamId(team.id)}
-                  roleToSlotLabel={roleToSlotLabel}
-                  getRoleAvatarGradient={getRoleAvatarGradient}
                   initialView="list"
                 />
               ))}
@@ -745,7 +741,6 @@ export default function TeamsPage() {
           <EditPlayersModal
             isOpen={!!editPlayersTeamId}
             onClose={() => setEditPlayersTeamId(null)}
-            teamId={et.id}
             teamName={et.team_name}
             currentPlayerIds={et.player_ids}
             captainId={et.captain_id}
@@ -763,8 +758,6 @@ export default function TeamsPage() {
             slotLimits={slotLimits}
             saving={savingPlayers}
             onSave={handleSavePlayers}
-            roleToSlotLabel={roleToSlotLabel}
-            getRoleAvatarGradient={getRoleAvatarGradient}
           />
         );
       })()}

@@ -19,8 +19,6 @@ export interface EditPlayersModalProps {
   isOpen: boolean;
   onClose: () => void;
 
-  /** The team being edited */
-  teamId: string;
   teamName: string;
 
   /** Current squad */
@@ -41,9 +39,6 @@ export interface EditPlayersModalProps {
     captain_id: string;
     vice_captain_id: string;
   }) => void;
-
-  roleToSlotLabel: (role: string) => string;
-  getRoleAvatarGradient: (role: string) => string | undefined;
 }
 
 // ── Helper: slot label → colour ───────────────────────────────────────────────
@@ -169,7 +164,6 @@ function PlayerRow({
 export function EditPlayersModal({
   isOpen,
   onClose,
-  teamId,
   teamName,
   currentPlayerIds,
   captainId: initialCaptainId,
@@ -179,8 +173,6 @@ export function EditPlayersModal({
   slotLimits = {},
   saving,
   onSave,
-  roleToSlotLabel,
-  getRoleAvatarGradient,
 }: EditPlayersModalProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>(() => [...currentPlayerIds]);
   const [captainId, setCaptainId] = useState<string>(initialCaptainId || "");
@@ -273,7 +265,12 @@ export function EditPlayersModal({
       />
 
       {/* Sheet */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-[#130D2A] border-t border-white/10 shadow-2xl max-h-[92dvh]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-squad-title"
+        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-[#130D2A] border-t border-white/10 shadow-2xl max-h-[92dvh]"
+      >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-white/20" />
@@ -282,7 +279,12 @@ export function EditPlayersModal({
         {/* Header */}
         <div className="px-4 pb-3 border-b border-white/[0.08] flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-white leading-tight">Edit Squad</h2>
+            <h2
+              id="edit-squad-title"
+              className="text-base font-bold text-white leading-tight"
+            >
+              Edit Squad
+            </h2>
             <p className="text-xs text-white/40">{teamName}</p>
           </div>
           <div className="flex items-center gap-3">
