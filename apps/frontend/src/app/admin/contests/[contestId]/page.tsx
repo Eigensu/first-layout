@@ -19,6 +19,10 @@ import {
 import { publicContestsApi, LeaderboardEntry } from "@/lib/api/public/contests";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  CONTEST_TYPE_OPTIONS,
+  CONTEST_VISIBILITY_OPTIONS,
+} from "@/common/consts";
 
 export default function AdminManageContestPage() {
   const params = useParams<{ contestId: string }>();
@@ -53,8 +57,6 @@ export default function AdminManageContestPage() {
   const [editStartTime, setEditStartTime] = useState<string>(""); // "HH:MM" 24h
   const [editEndDate, setEditEndDate] = useState<string>("");
   const [editEndTime, setEditEndTime] = useState<string>(""); // "HH:MM" 24h
-  const [editStatus, setEditStatus] = useState<Contest["status"] | "">("");
-  const [savingSchedule, setSavingSchedule] = useState(false);
   // Other settings edit state
   const [editVisibility, setEditVisibility] = useState<
     Contest["visibility"] | ""
@@ -112,7 +114,6 @@ export default function AdminManageContestPage() {
     setEditStartTime(start.time);
     setEditEndDate(end.date);
     setEditEndTime(end.time);
-    setEditStatus(c.status);
     setEditVisibility(c.visibility);
     setEditContestType(c.contest_type);
     setEditAllowedTeamsRaw((c.allowed_teams || []).join(", "));
@@ -140,7 +141,6 @@ export default function AdminManageContestPage() {
         start_at: startIso,
         end_at: endIso,
       };
-      payload.status = editStatus || contest.status;
       if (editVisibility) payload.visibility = editVisibility;
       if (editContestType) payload.contest_type = editContestType;
       if (editContestType === "daily") {
@@ -187,62 +187,8 @@ export default function AdminManageContestPage() {
   const loadContest = async () => {
     const c = await adminContestsApi.get(contestId);
     setContest(c);
-    // seed schedule/status editors from server
+    // seed schedule editors from server
     reseedFrom(c);
-  };
-
-  const [toggling, setToggling] = useState(false);
-  const toggleContestStatus = async () => {
-    if (!contest) return;
-    const current = contest.status;
-    const next = current === "ongoing" ? "live" : "ongoing";
-    try {
-      setToggling(true);
-      const updated = await adminContestsApi.update(contest.id, {
-        status: next,
-      });
-      setContest(updated);
-      // Reload leaderboard state accordingly
-      await loadLeaderboard();
-    } catch (e: any) {
-      showAlert(
-        e?.message || "Failed to toggle contest status",
-        "Update failed",
-      );
-    } finally {
-      setToggling(false);
-    }
-  };
-
-  const saveScheduleAndStatus = async () => {
-    if (!contest) return;
-    // Basic validation
-    if (!editStartDate || !editStartTime || !editEndDate || !editEndTime) {
-      showAlert("Start and End time are required", "Validation");
-      return;
-    }
-    const startIso = formToNaiveIso(editStartDate, editStartTime);
-    const endIso = formToNaiveIso(editEndDate, editEndTime);
-    if (startIso >= endIso) {
-      showAlert("Start time must be before End time", "Validation");
-      return;
-    }
-
-    try {
-      setSavingSchedule(true);
-      const payload: any = { start_at: startIso, end_at: endIso };
-      if (editStatus) payload.status = editStatus;
-      const updated = await adminContestsApi.update(contest.id, payload);
-      setContest(updated);
-      reseedFrom(updated);
-      // Refresh derived views
-      await loadLeaderboard();
-      showAlert("Contest schedule updated", "Success");
-    } catch (e: any) {
-      showAlert(e?.message || "Failed to update schedule", "Update failed");
-    } finally {
-      setSavingSchedule(false);
-    }
   };
 
   const loadLeaderboard = async () => {
@@ -431,19 +377,8 @@ export default function AdminManageContestPage() {
               {contest.code} · {contest.status} · {contest.visibility} ·{" "}
               {contest.contest_type}
             </div>
-            <div className="mt-2">
-              <button
-                className={`px-3 py-1 rounded border text-sm ${contest.status === "ongoing" ? "text-success-200 border-success-200/60" : "text-accent-orange border-accent-orange/60"}`}
-                onClick={toggleContestStatus}
-                disabled={toggling}
-                title="Toggle contest ON/OFF"
-              >
-                {toggling
-                  ? "Toggling..."
-                  : contest.status === "ongoing"
-                    ? "Set Live (Open)"
-                    : "Set Ongoing (Close)"}
-              </button>
+            <div className="mt-2 text-xs text-text-muted">
+              Status is auto-derived from the contest schedule.
             </div>
             <div className="text-sm text-text-muted mt-1">
               <span>{formatISTRange(contest.start_at, contest.end_at)}</span>
@@ -538,19 +473,12 @@ export default function AdminManageContestPage() {
                     <label className="text-sm text-text-muted mb-1">
                       Status
                     </label>
-                    <select
-                      className="border border-border-subtle rounded p-2 bg-bg-card text-text-main"
-                      value={editStatus || ""}
-                      onChange={(e) =>
-                        setEditStatus(e.target.value as Contest["status"])
-                      }
-                    >
-                      <option value="">(no change)</option>
-                      <option value="live">live</option>
-                      <option value="ongoing">ongoing</option>
-                      <option value="completed">completed</option>
-                      <option value="archived">archived</option>
-                    </select>
+                    <div className="border border-border-subtle rounded p-2 bg-bg-card text-text-main">
+                      {contest.status}
+                    </div>
+                    <p className="mt-1 text-xs text-text-muted">
+                      Auto-derived from schedule.
+                    </p>
                   </div>
                   <div className="flex flex-col">
                     <label className="text-sm text-text-muted mb-1">
@@ -566,8 +494,11 @@ export default function AdminManageContestPage() {
                       }
                     >
                       <option value="">(no change)</option>
-                      <option value="public">public</option>
-                      <option value="private">private</option>
+                      {CONTEST_VISIBILITY_OPTIONS.map((visibility) => (
+                        <option key={visibility} value={visibility}>
+                          {visibility}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex flex-col">
@@ -584,8 +515,11 @@ export default function AdminManageContestPage() {
                       }
                     >
                       <option value="">(no change)</option>
-                      <option value="full">full</option>
-                      <option value="daily">daily</option>
+                      {CONTEST_TYPE_OPTIONS.map((contestType) => (
+                        <option key={contestType} value={contestType}>
+                          {contestType}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

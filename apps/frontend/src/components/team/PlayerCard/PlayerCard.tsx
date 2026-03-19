@@ -132,32 +132,6 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
       `}
       onClick={() => !disabled && onSelect(player.id)}
     >
-      {/* Captain/Vice-Captain Badges */}
-      {isCaptain && (
-        <div className="absolute top-0 right-0 z-10 p-1">
-          <Badge
-            variant="warning"
-            size="sm"
-            className="shadow-md text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5"
-          >
-            <span className="hidden sm:inline">Captain (2x)</span>
-            <span className="sm:hidden">C (2x)</span>
-          </Badge>
-        </div>
-      )}
-      {isViceCaptain && (
-        <div className="absolute top-0 right-0 z-10 p-1">
-          <Badge
-            variant="secondary"
-            size="sm"
-            className="shadow-md text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5"
-          >
-            <span className="hidden sm:inline">Vice Captain (1.5x)</span>
-            <span className="sm:hidden">VC (1.5x)</span>
-          </Badge>
-        </div>
-      )}
-
       <div className={`p-3 ${variant === "captain" ? "sm:p-3" : "sm:p-4"}`}>
         {/* Player Header */}
         <div
@@ -172,11 +146,31 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
             />
 
             <div>
-              <h4
-                className={`font-semibold ${variant === "captain" ? "text-sm sm:text-base" : "text-sm sm:text-base"} ${isSelected ? "text-white" : "text-gray-900"}`}
-              >
-                {player.name}
-              </h4>
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <h4
+                  className={`font-semibold ${variant === "captain" ? "text-sm sm:text-base" : "text-sm sm:text-base"} ${isSelected ? "text-white" : "text-gray-900"} truncate`}
+                >
+                  {player.name}
+                </h4>
+                {isCaptain && (
+                  <Badge
+                    variant="warning"
+                    size="sm"
+                    className="shrink-0 shadow-sm text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0 leading-none bg-orange-500 text-white border border-orange-600"
+                  >
+                    C
+                  </Badge>
+                )}
+                {isViceCaptain && (
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 shadow-sm text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0 leading-none bg-violet-600 text-white border border-violet-700"
+                  >
+                    VC
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center space-x-1.5 sm:space-x-2 mt-0.5 sm:mt-1">
                 {player.slotLabel && (
                   <Badge

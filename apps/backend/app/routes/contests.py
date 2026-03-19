@@ -15,6 +15,11 @@ from app.models.user import User
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
 from app.utils.security import decode_token
+from app.services.contest_status import (
+    compute_contest_status,
+    sync_contest_status,
+    contest_status_filter_clauses,
+)
 from app.schemas.contest import ContestListResponse, ContestResponse
 from app.schemas.leaderboard import LeaderboardResponseSchema, LeaderboardEntrySchema
 from app.utils.dependencies import get_current_active_user
@@ -46,27 +51,9 @@ class ContestTeamResponse(BaseModel):
     vice_captain_id: Optional[str] = None
     players: List[ContestTeamPlayerSchema]
 
-def _compute_status(contest: Contest) -> ContestStatus:
-    now = now_ist()
-    # Ensure contest times are in IST for comparison
-    start = to_ist(contest.start_at)
-    end = to_ist(contest.end_at)
-    if end <= now:
-        return ContestStatus.COMPLETED
-    if start <= now < end:
-        return ContestStatus.ONGOING
-    return ContestStatus.LIVE
-
-
-async def to_contest_response(contest: Contest, skip_save: bool = False) -> ContestResponse:
-    # Derive status from time window to reflect real-time lifecycle
-    computed = _compute_status(contest)
-    # Update in-memory status without persisting (saves go to DB asynchronously)
-    if contest.status != computed and contest.status != ContestStatus.ARCHIVED:
-        contest.status = computed
-        contest.updated_at = now_ist()
-        # Skip immediate save for performance; status updates are idempotent
-        # and will be persisted on next write operation or background task
+async def to_contest_response(contest: Contest, skip_save: bool = True) -> ContestResponse:
+    # Keep stored status in sync with real-time lifecycle.
+    computed = await sync_contest_status(contest, persist=not skip_save)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         from app.models.settings import GlobalSettings
@@ -119,16 +106,8 @@ async def list_public_contests(
 ):
     conditions = [Contest.visibility == ContestVisibility.PUBLIC]
 
-    # Map status to filter clauses
-    now = now_ist()
-    status_filters = {
-        ContestStatus.ONGOING: [Contest.start_at <= now, Contest.end_at > now],
-        ContestStatus.LIVE: [Contest.start_at > now],
-        ContestStatus.COMPLETED: [Contest.end_at <= now],
-        ContestStatus.ARCHIVED: [Contest.status == ContestStatus.ARCHIVED],
-    }
     if status:
-        conditions.extend(status_filters[status])
+        conditions.extend(contest_status_filter_clauses(status))
 
     query = Contest.find(conditions[0]) if conditions else Contest.find_all()
     for cond in conditions[1:]:
@@ -347,7 +326,8 @@ async def enroll_in_contest(
     if not contest or contest.visibility != "public":
         raise HTTPException(status_code=404, detail="Contest not found")
 
-    if contest.status in ("completed", "archived"):
+    computed_status = compute_contest_status(contest)
+    if computed_status in (ContestStatus.COMPLETED, ContestStatus.ARCHIVED):
         raise HTTPException(status_code=400, detail="Contest is not open for enrollment")
 
     # validate team ownership (avoid exceptions for validation)
@@ -360,7 +340,7 @@ async def enroll_in_contest(
         raise HTTPException(status_code=404, detail="Team not found")
 
     # Only allow non-owners to view when contest is ONGOING
-    computed_status = _compute_status(contest)
+    computed_status = compute_contest_status(contest)
     is_owner = current_user is not None and str(team.user_id) == str(current_user.id)
     if not is_owner and computed_status != ContestStatus.ONGOING:
         raise HTTPException(status_code=403, detail="Team details visible when contest is ongoing")
@@ -438,7 +418,7 @@ async def get_team_in_contest(contest_id: str, team_id: str, current_user: Optio
         raise HTTPException(status_code=404, detail="Team not found")
 
     # Allow team owner anytime; others only when contest is ONGOING or COMPLETED
-    computed_status = _compute_status(contest)
+    computed_status = compute_contest_status(contest)
     is_owner = current_user is not None and str(team.user_id) == str(current_user.id)
     if not is_owner and computed_status not in (ContestStatus.ONGOING, ContestStatus.COMPLETED):
         raise HTTPException(status_code=403, detail="Team details visible when contest is ongoing or completed")

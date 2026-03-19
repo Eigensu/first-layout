@@ -89,7 +89,20 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
   const userMenuRef = React.useRef<HTMLDivElement>(null);
 
   const visibleItems = React.useMemo(() => {
-    if (isAuthenticated) return items;
+    if (isAuthenticated) {
+      const hasDashboard = items.some((it) => it.id === "dashboard");
+      if (hasDashboard) return items;
+
+      return [
+        {
+          id: "dashboard",
+          label: "Dashboard",
+          href: "/dashboard",
+          icon: <LayoutDashboard className="w-4 h-4" />,
+        },
+        ...items,
+      ];
+    }
     const allow = new Set(["home", "leaderboard", "about"]);
     return items.filter((it) => allow.has(it.id));
   }, [isAuthenticated, items]);

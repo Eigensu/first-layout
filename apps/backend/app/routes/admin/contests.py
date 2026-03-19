@@ -12,6 +12,7 @@ from app.models.team import Team
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.services.contest_status import sync_contest_status, contest_status_filter_clauses
 from app.common.enums.contests import ContestStatus, ContestVisibility
 from app.common.enums.enrollments import EnrollmentStatus
 from app.schemas.contest import (
@@ -31,6 +32,7 @@ from app.models.user import User
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
 async def to_response(contest: Contest) -> ContestResponse:
+    status = await sync_contest_status(contest, persist=False)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo
@@ -48,7 +50,7 @@ async def to_response(contest: Contest) -> ContestResponse:
         logo_file_id=contest.logo_file_id,
         start_at=to_ist(contest.start_at),
         end_at=to_ist(contest.end_at),
-        status=contest.status,
+        status=status,
         visibility=contest.visibility,
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
@@ -94,18 +96,21 @@ async def create_contest(
 async def list_contests(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    status: Optional[str] = Query(None),
+    status: Optional[ContestStatus] = Query(None),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_admin_user),
 ):
-    query = Contest.find_all()
+    conditions = []
     if status:
-        query = Contest.find(Contest.status == status)
-    # Simple search on code or name (case sensitive minimal)
+        conditions.extend(contest_status_filter_clauses(status))
+
     if search:
         from beanie.operators import Or, RegEx
-        conditions = Or(RegEx(Contest.code, search, options="i"), RegEx(Contest.name, search, options="i"))
-        query = Contest.find(conditions)
+        conditions.append(Or(RegEx(Contest.code, search, options="i"), RegEx(Contest.name, search, options="i")))
+
+    query = Contest.find(conditions[0]) if conditions else Contest.find_all()
+    for cond in conditions[1:]:
+        query = query.find(cond)
 
     total = await query.count()
     skip = (page - 1) * page_size

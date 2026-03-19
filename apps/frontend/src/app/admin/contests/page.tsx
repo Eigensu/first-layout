@@ -11,10 +11,14 @@ import {
   ContestCreate,
   ContestType,
   ContestVisibility,
-  ContestStatus,
 } from "@/lib/api/admin/contests";
 import { adminSettingsApi } from "@/lib/api/admin/settings";
-import { API_BASE_URL } from "@/common/consts";
+import {
+  API_BASE_URL,
+  CONTEST_DEFAULTS,
+  CONTEST_TYPE_OPTIONS,
+  CONTEST_VISIBILITY_OPTIONS,
+} from "@/common/consts";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -31,10 +35,9 @@ export default function AdminContestsPage() {
     logo_url: "",
     start_at: new Date().toISOString(),
     end_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-    visibility: "public",
-    points_scope: "time_window",
-    status: "live",
-    contest_type: "full",
+    visibility: CONTEST_DEFAULTS.visibility,
+    points_scope: CONTEST_DEFAULTS.points_scope,
+    contest_type: CONTEST_DEFAULTS.contest_type,
     allowed_teams: [],
   });
   const [creating, setCreating] = useState(false);
@@ -422,27 +425,21 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value="public">public</option>
-                  <option value="private">private</option>
+                  {CONTEST_VISIBILITY_OPTIONS.map((visibility) => (
+                    <option key={visibility} value={visibility}>
+                      {visibility}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm text-text-muted">Status</label>
-                <select
-                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
-                  value={form.status}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      status: e.currentTarget.value as ContestStatus,
-                    })
-                  }
-                >
-                  <option value="live">live</option>
-                  <option value="ongoing">ongoing</option>
-                  <option value="completed">completed</option>
-                  <option value="archived">archived</option>
-                </select>
+                <div className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded">
+                  Derived from schedule
+                </div>
+                <p className="mt-1 text-xs text-text-muted">
+                  Status is auto-calculated from start/end time. Archive from manage view if needed.
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-text-muted">
@@ -458,8 +455,11 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value="full">full</option>
-                  <option value="daily">daily</option>
+                  {CONTEST_TYPE_OPTIONS.map((contestType) => (
+                    <option key={contestType} value={contestType}>
+                      {contestType}
+                    </option>
+                  ))}
                 </select>
               </div>
               {form.contest_type === "daily" && (
