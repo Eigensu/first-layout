@@ -38,10 +38,5 @@
    MAX_PAGE_SIZE: 100,
  } as const;
 
- // Contest related enums reused across admin/public API modules and pages
- export const CONTEST = {
-   STATUSES: ['draft', 'active', 'paused', 'completed', 'archived'] as const,
-   VISIBILITIES: ['public', 'private'] as const,
-   POINTS_SCOPES: ['time_window', 'snapshot'] as const,
- } as const;
+export * from '@/common/consts/contest';
 

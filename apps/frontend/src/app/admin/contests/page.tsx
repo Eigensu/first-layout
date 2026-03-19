@@ -14,7 +14,13 @@ import {
   ContestStatus,
 } from "@/lib/api/admin/contests";
 import { adminSettingsApi } from "@/lib/api/admin/settings";
-import { API_BASE_URL } from "@/common/consts";
+import {
+  API_BASE_URL,
+  CONTEST_DEFAULTS,
+  CONTEST_STATUS_OPTIONS,
+  CONTEST_TYPE_OPTIONS,
+  CONTEST_VISIBILITY_OPTIONS,
+} from "@/common/consts";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -31,10 +37,10 @@ export default function AdminContestsPage() {
     logo_url: "",
     start_at: new Date().toISOString(),
     end_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-    visibility: "public",
-    points_scope: "time_window",
-    status: "live",
-    contest_type: "full",
+    visibility: CONTEST_DEFAULTS.visibility,
+    points_scope: CONTEST_DEFAULTS.points_scope,
+    status: CONTEST_DEFAULTS.status,
+    contest_type: CONTEST_DEFAULTS.contest_type,
     allowed_teams: [],
   });
   const [creating, setCreating] = useState(false);
@@ -422,8 +428,11 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value="public">public</option>
-                  <option value="private">private</option>
+                  {CONTEST_VISIBILITY_OPTIONS.map((visibility) => (
+                    <option key={visibility} value={visibility}>
+                      {visibility}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -438,10 +447,11 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value="live">live</option>
-                  <option value="ongoing">ongoing</option>
-                  <option value="completed">completed</option>
-                  <option value="archived">archived</option>
+                  {CONTEST_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -458,8 +468,11 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value="full">full</option>
-                  <option value="daily">daily</option>
+                  {CONTEST_TYPE_OPTIONS.map((contestType) => (
+                    <option key={contestType} value={contestType}>
+                      {contestType}
+                    </option>
+                  ))}
                 </select>
               </div>
               {form.contest_type === "daily" && (

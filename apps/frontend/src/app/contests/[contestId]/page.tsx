@@ -94,11 +94,7 @@ export default function ContestDetailsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch">
             {/* Make/View team side (first) */}
             {(() => {
-              const now = new Date();
-              const startAt = new Date(contest.start_at);
-              const endAt = new Date(contest.end_at);
-              const isContestOngoing =
-                contest.status === "ongoing" && now >= startAt && now < endAt;
+              const isContestOngoing = contest.status === "ongoing";
 
               const isCreationDisabled = !isJoined && isContestOngoing;
 

@@ -19,6 +19,12 @@ import {
 import { publicContestsApi, LeaderboardEntry } from "@/lib/api/public/contests";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  CONTEST_STATUS,
+  CONTEST_STATUS_OPTIONS,
+  CONTEST_TYPE_OPTIONS,
+  CONTEST_VISIBILITY_OPTIONS,
+} from "@/common/consts";
 
 export default function AdminManageContestPage() {
   const params = useParams<{ contestId: string }>();
@@ -195,7 +201,10 @@ export default function AdminManageContestPage() {
   const toggleContestStatus = async () => {
     if (!contest) return;
     const current = contest.status;
-    const next = current === "ongoing" ? "live" : "ongoing";
+    const next =
+      current === CONTEST_STATUS.ONGOING
+        ? CONTEST_STATUS.LIVE
+        : CONTEST_STATUS.ONGOING;
     try {
       setToggling(true);
       const updated = await adminContestsApi.update(contest.id, {
@@ -546,10 +555,11 @@ export default function AdminManageContestPage() {
                       }
                     >
                       <option value="">(no change)</option>
-                      <option value="live">live</option>
-                      <option value="ongoing">ongoing</option>
-                      <option value="completed">completed</option>
-                      <option value="archived">archived</option>
+                      {CONTEST_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex flex-col">
@@ -566,8 +576,11 @@ export default function AdminManageContestPage() {
                       }
                     >
                       <option value="">(no change)</option>
-                      <option value="public">public</option>
-                      <option value="private">private</option>
+                      {CONTEST_VISIBILITY_OPTIONS.map((visibility) => (
+                        <option key={visibility} value={visibility}>
+                          {visibility}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex flex-col">
@@ -584,8 +597,11 @@ export default function AdminManageContestPage() {
                       }
                     >
                       <option value="">(no change)</option>
-                      <option value="full">full</option>
-                      <option value="daily">daily</option>
+                      {CONTEST_TYPE_OPTIONS.map((contestType) => (
+                        <option key={contestType} value={contestType}>
+                          {contestType}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

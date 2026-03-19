@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
 from beanie import PydanticObjectId
-from datetime import datetime
 
 from app.models.team import Team
 from app.models.player import Player
@@ -11,6 +10,8 @@ from app.models.user import User
 from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse
 from app.utils.dependencies import get_current_active_user
 from app.models.admin.slot import Slot
+from app.services.contest_status import compute_contest_status
+from app.common.enums.contests import ContestStatus
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -117,10 +118,9 @@ async def create_team(
         if not contest:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contest_id")
 
-        # Prevent joining an ongoing contest
-        # Ongoing = status active/ongoing AND start_at <= now < end_at
-        now = datetime.utcnow()
-        if contest.status == "ongoing" and contest.start_at <= now < contest.end_at:
+        # Prevent joining an ongoing contest.
+        computed_status = compute_contest_status(contest)
+        if computed_status == ContestStatus.ONGOING:
              raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot create a team for an ongoing contest.",
@@ -287,17 +287,12 @@ async def update_team(
         "status": "active",
     }).to_list()
     if active_enrs:
-        from datetime import datetime as _dt
         contest_ids = [enr.contest_id for enr in active_enrs]
-        # Ongoing = status active AND start_at <= now < end_at
-        now = _dt.utcnow()
-        active_contest_count = await Contest.find({
-            "_id": {"$in": contest_ids},
-            "status": "ongoing",
-            "start_at": {"$lte": now},
-            "end_at": {"$gt": now},
-        }).count()
-        if active_contest_count > 0:
+        enrolled_contests = await Contest.find({"_id": {"$in": contest_ids}}).to_list()
+        has_ongoing_contest = any(
+            compute_contest_status(c) == ContestStatus.ONGOING for c in enrolled_contests
+        )
+        if has_ongoing_contest:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Team is locked due to an active contest. Try again when the contest is paused/off.",
