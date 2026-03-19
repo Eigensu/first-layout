@@ -88,8 +88,8 @@ export function ContestCard({
       if (isJoined) {
         return (
           <Link
-            href={`/contests/${contest.id}/team`}
-            className="inline-flex justify-center items-center px-4 py-2 rounded-lg border text-sm font-medium text-accent-pink-500 border-accent-pink-500/30 hover:bg-accent-pink-500/10"
+            href={`/teams?contest_id=${encodeURIComponent(String(contest.id))}`}
+            className="inline-flex justify-center items-center px-4 py-2 rounded-lg text-sm font-semibold bg-white text-primary-900 border border-white/90 shadow-md hover:bg-primary-50 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-700 transition-all"
             onClick={(e) => e.stopPropagation()}
           >
             View Team

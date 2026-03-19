@@ -103,7 +103,9 @@ export default function ContestDetailsPage() {
                   disabled={isCreationDisabled}
                   onClick={() => {
                     if (isCreationDisabled) return;
-                    const target = `/contests/${contest.id}/team`;
+                    const target = isJoined
+                      ? `/teams?contest_id=${encodeURIComponent(String(contest.id))}`
+                      : `/contests/${contest.id}/team`;
                     if (!isAuthenticated) {
                       router.push(
                         `/auth/login?next=${encodeURIComponent(target)}`,
