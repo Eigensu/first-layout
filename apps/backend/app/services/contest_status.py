@@ -1,7 +1,6 @@
 from app.common.enums.contests import ContestStatus
 from app.models.contest import Contest
 from app.utils.timezone import now_ist, to_ist
-from typing import Any, cast
 
 
 def compute_contest_status(contest: Contest) -> ContestStatus:
@@ -27,18 +26,20 @@ async def sync_contest_status(contest: Contest, *, persist: bool = True) -> Cont
         contest.status = computed
         contest.updated_at = now_ist()
         if persist:
-            await cast(Any, contest).save()
+            await contest.save()  # type: ignore[misc]
     return computed
 
 
-def contest_status_filter_clauses(status: ContestStatus, *, exclude_archived_for_time_window: bool = True):
+def contest_status_filter_clauses(
+    status: ContestStatus, *, exclude_archived_for_time_window: bool = True
+) -> list[object]:
     """Return Beanie filter clauses for status-based list queries."""
     now = now_ist()
 
     if status == ContestStatus.ARCHIVED:
         return [Contest.status == ContestStatus.ARCHIVED]
 
-    clauses = []
+    clauses: list[object] = []
     if exclude_archived_for_time_window:
         clauses.append(Contest.status != ContestStatus.ARCHIVED)
 
