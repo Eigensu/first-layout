@@ -1,14 +1,19 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import List, Dict
+from datetime import datetime
 from beanie import PydanticObjectId
 
 from app.models.team import Team
 from app.models.player import Player
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.models.team_edit_history import TeamEditHistory
 from app.models.contest import Contest
 from app.models.user import User
-from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse
-from app.utils.dependencies import get_current_active_user
+from app.schemas.team import (
+    TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse,
+    TeamEditHistoryEntry, TeamEditHistoryResponse,
+)
+from app.utils.dependencies import get_current_active_user, get_admin_user
 from app.models.admin.slot import Slot
 from app.services.contest_status import compute_contest_status
 from app.common.enums.contests import ContestStatus
@@ -398,6 +403,26 @@ async def update_team(
                         },
                     )
         
+        # --- Record edit history (snapshot old values) ---
+        changes: Dict[str, dict] = {}
+        trackable_fields = ["team_name", "player_ids", "captain_id", "vice_captain_id"]
+        for field in trackable_fields:
+            if field in update_data:
+                old_val = getattr(team, field, None)
+                new_val = update_data[field]
+                if old_val != new_val:
+                    changes[field] = {"old": old_val, "new": new_val}
+
+        if changes:
+            history_entry = TeamEditHistory(
+                team_id=team.id,
+                user_id=current_user.id,
+                action="update",
+                changes=changes,
+            )
+            await history_entry.insert()
+        # --- End history recording ---
+
         update_data["updated_at"] = datetime.utcnow()
         
         for key, value in update_data.items():
@@ -485,8 +510,21 @@ async def rename_team(
                 detail="Team is locked due to an active contest. Try again when the contest is paused/off.",
             )
     
+    # --- Record rename history ---
+    old_name = team.team_name
+    new_name = team_name.strip()
+    if old_name != new_name:
+        history_entry = TeamEditHistory(
+            team_id=team.id,
+            user_id=current_user.id,
+            action="rename",
+            changes={"team_name": {"old": old_name, "new": new_name}},
+        )
+        await history_entry.insert()
+    # --- End history recording ---
+
     # Update team name
-    team.team_name = team_name.strip()
+    team.team_name = new_name
     team.updated_at = datetime.utcnow()
     await team.save()
     
@@ -552,3 +590,52 @@ async def delete_team(
     await team.delete()
     
     return None
+
+
+@router.get("/{team_id}/history", response_model=TeamEditHistoryResponse)
+async def get_team_edit_history(
+    team_id: str,
+    current_user: User = Depends(get_admin_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """
+    Get edit history for a team (admin only)
+    """
+    try:
+        team = await Team.get(PydanticObjectId(team_id))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found"
+        )
+
+    if not team:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found"
+        )
+
+    q = TeamEditHistory.find(TeamEditHistory.team_id == team.id)
+    total = await q.count()
+    skip = (page - 1) * page_size
+    entries = await q.sort("-edited_at").skip(skip).limit(page_size).to_list()
+
+    # Resolve usernames
+    user_ids = list({e.user_id for e in entries})
+    users = await User.find({"_id": {"$in": user_ids}}).to_list()
+    user_map = {u.id: u.username for u in users}
+
+    history = [
+        TeamEditHistoryEntry(
+            id=str(e.id),
+            user_id=str(e.user_id),
+            username=user_map.get(e.user_id),
+            action=e.action,
+            changes=e.changes,
+            edited_at=e.edited_at,
+        )
+        for e in entries
+    ]
+
+    return TeamEditHistoryResponse(history=history, total=total)

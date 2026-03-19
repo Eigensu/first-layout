@@ -113,3 +113,22 @@ class TeamsListResponse(BaseModel):
                 "total": 1
             }
         }
+
+
+class TeamEditHistoryEntry(BaseModel):
+    """Schema for a single team edit history entry"""
+    id: str
+    user_id: str
+    username: Optional[str] = None
+    action: str  # "update" | "rename"
+    changes: dict  # {"field": {"old": ..., "new": ...}}
+    edited_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TeamEditHistoryResponse(BaseModel):
+    """Schema for paginated team edit history"""
+    history: List[TeamEditHistoryEntry]
+    total: int

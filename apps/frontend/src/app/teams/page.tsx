@@ -44,7 +44,7 @@ type Player = ApiPlayer & {
 };
 
 export default function TeamsPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const contestIdParam = searchParams?.get("contest_id") || "";
@@ -670,6 +670,7 @@ export default function TeamsPage() {
                   roleToSlotLabel={roleToSlotLabel}
                   getRoleAvatarGradient={getRoleAvatarGradient}
                   initialView="list"
+                  isAdmin={!!user?.is_admin}
                 />
               ))}
             </div>

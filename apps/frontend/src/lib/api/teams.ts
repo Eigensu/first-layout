@@ -157,3 +157,51 @@ export async function deleteTeam(teamId: string, token: string): Promise<void> {
     throw new Error(extractErrorMessage(error?.detail, "Failed to delete team"));
   }
 }
+
+/* ─── Edit History ─── */
+
+export interface TeamEditHistoryChange {
+  old: unknown;
+  new: unknown;
+}
+
+export interface TeamEditHistoryEntry {
+  id: string;
+  user_id: string;
+  username: string | null;
+  action: "update" | "rename";
+  changes: Record<string, TeamEditHistoryChange>;
+  edited_at: string;
+}
+
+export interface TeamEditHistoryResponse {
+  history: TeamEditHistoryEntry[];
+  total: number;
+}
+
+/**
+ * Get edit history for a team
+ */
+export async function getTeamEditHistory(
+  teamId: string,
+  token: string,
+  page = 1,
+  pageSize = 20
+): Promise<TeamEditHistoryResponse> {
+  const response = await fetch(
+    `${NEXT_PUBLIC_API_URL}/api/teams/${teamId}/history?page=${page}&page_size=${pageSize}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to fetch team history"));
+  }
+
+  return response.json();
+}
+
