@@ -96,13 +96,13 @@ async def create_contest(
 async def list_contests(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    status: Optional[str] = Query(None),
+    status: Optional[ContestStatus] = Query(None),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_admin_user),
 ):
     conditions = []
     if status:
-        conditions.extend(contest_status_filter_clauses(ContestStatus(status)))
+        conditions.extend(contest_status_filter_clauses(status))
 
     if search:
         from beanie.operators import Or, RegEx

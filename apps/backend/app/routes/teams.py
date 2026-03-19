@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
 from beanie import PydanticObjectId
+from datetime import datetime
 
 from app.models.team import Team
 from app.models.player import Player
@@ -12,6 +13,8 @@ from app.utils.dependencies import get_current_active_user
 from app.models.admin.slot import Slot
 from app.services.contest_status import compute_contest_status
 from app.common.enums.contests import ContestStatus
+from app.common.enums.enrollments import EnrollmentStatus
+from app.utils.timezone import now_ist
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -138,9 +141,16 @@ async def create_team(
                     },
                 )
     
+    user_id = current_user.id
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user is invalid"
+        )
+
     # Create team document
     team = Team(
-        user_id=current_user.id,
+        user_id=user_id,
         team_name=team_data.team_name,
         player_ids=team_data.player_ids,
         captain_id=team_data.captain_id,
@@ -149,7 +159,7 @@ async def create_team(
         contest_id=team_data.contest_id
     )
     
-    await team.insert()
+    await team.insert()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -288,11 +298,14 @@ async def update_team(
     }).to_list()
     if active_enrs:
         contest_ids = [enr.contest_id for enr in active_enrs]
-        enrolled_contests = await Contest.find({"_id": {"$in": contest_ids}}).to_list()
-        has_ongoing_contest = any(
-            compute_contest_status(c) == ContestStatus.ONGOING for c in enrolled_contests
-        )
-        if has_ongoing_contest:
+        now = now_ist()
+        active_contest_count = await Contest.find({
+            "_id": {"$in": contest_ids},
+            "status": {"$ne": ContestStatus.ARCHIVED},
+            "start_at": {"$lte": now},
+            "end_at": {"$gt": now},
+        }).count()
+        if active_contest_count > 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Team is locked due to an active contest. Try again when the contest is paused/off.",
@@ -403,7 +416,7 @@ async def update_team(
         for key, value in update_data.items():
             setattr(team, key, value)
         
-        await team.save()
+        await team.save()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -488,7 +501,7 @@ async def rename_team(
     # Update team name
     team.team_name = team_name.strip()
     team.updated_at = datetime.utcnow()
-    await team.save()
+    await team.save()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -545,10 +558,10 @@ async def delete_team(
     if active_enrollments:
         now = datetime.utcnow()
         for enr in active_enrollments:
-            enr.status = "removed"
+            enr.status = EnrollmentStatus.REMOVED
             enr.removed_at = now
-            await enr.save()
+            await enr.save()  # type: ignore[misc]
 
-    await team.delete()
+    await team.delete()  # type: ignore[misc]
     
     return None
