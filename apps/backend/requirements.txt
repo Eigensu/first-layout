@@ -21,6 +21,7 @@ email-validator==2.2.0
 
 # Utilities
 python-dateutil==2.8.2
+cloudinary==1.41.0
 
 # Excel/CSV Import
 openpyxl==3.1.5

@@ -53,6 +53,7 @@ export function useSponsorsSection() {
     active: boolean;
     priority: number;
   }>({ name: "", description: "", featured: false, active: true, priority: 1 });
+  const [editLogoFile, setEditLogoFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export function useSponsorsSection() {
 
   const openEdit = (s: Sponsor) => {
     setEditError(null);
+    setEditLogoFile(null);
     setEditingId(s.id);
     setEditForm({
       name: s.name ?? "",
@@ -125,7 +127,11 @@ export function useSponsorsSection() {
         active: editForm.active,
         priority: Number(editForm.priority) || undefined,
       });
+      if (editLogoFile) {
+        await uploadSponsorLogo(editingId, editLogoFile);
+      }
       await fetchSponsors();
+      setEditLogoFile(null);
       setIsEditOpen(false);
     } catch (e: any) {
       setEditError(e?.message ?? "Failed to update sponsor");
@@ -167,6 +173,10 @@ export function useSponsorsSection() {
     setCreateError(null);
     setCreating(true);
     try {
+      if (!logoFile && !form.logo.trim()) {
+        throw new Error("Please provide a logo URL or upload a logo image.");
+      }
+
       const created = await createSponsor({
         name: form.name.trim(),
         logo: form.logo.trim() || "pending",
@@ -178,7 +188,16 @@ export function useSponsorsSection() {
         priority: Number(form.priority) || undefined,
       });
       if (logoFile) {
-        await uploadSponsorLogo(created.id, logoFile);
+        try {
+          await uploadSponsorLogo(created.id, logoFile);
+        } catch (uploadErr: any) {
+          try {
+            await deleteSponsor(created.id);
+          } catch {
+            // Best-effort cleanup only.
+          }
+          throw new Error(uploadErr?.message ?? "Logo upload failed");
+        }
       }
       await fetchSponsors();
       setIsAddOpen(false);
@@ -245,6 +264,7 @@ export function useSponsorsSection() {
     editing,
     editError,
     editForm,
+    editLogoFile,
     editingId,
     deletingId,
     deleteError,
@@ -258,6 +278,7 @@ export function useSponsorsSection() {
     setLogoFile,
     setIsEditOpen,
     setEditForm,
+    setEditLogoFile,
     setPriorityTouched,
     // actions
     handleCreate,

@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, CONTENT_TYPES, AUTH, API, ROUTES, LS_KEYS } from '@/common/consts';
 
 // Create axios instance
@@ -13,6 +13,17 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Let the browser set multipart boundaries for FormData uploads.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+      if (config.headers instanceof AxiosHeaders) {
+        config.headers.delete('Content-Type');
+        config.headers.delete('content-type');
+      } else {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
+    }
+
     const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
     if (token && config.headers) {
       config.headers[AUTH.HEADER] = `${AUTH.BEARER_PREFIX}${token}`;
@@ -101,14 +112,26 @@ export default apiClient;
 export const getErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    const detailRaw = (error.response as any)?.data?.detail;
+    const responseData: unknown = error.response?.data;
+    let detailRaw: unknown;
+    if (responseData && typeof responseData === 'object' && 'detail' in responseData) {
+      detailRaw = (responseData as { detail?: unknown }).detail;
+    }
+
     let detail: string | undefined;
     if (typeof detailRaw === 'string') {
       detail = detailRaw;
     } else if (Array.isArray(detailRaw)) {
       // pydantic-style list of errors
       detail = detailRaw
-        .map((d: any) => d?.msg || d?.message || JSON.stringify(d))
+        .map((d: unknown) => {
+          if (d && typeof d === 'object') {
+            const obj = d as { msg?: unknown; message?: unknown };
+            if (typeof obj.msg === 'string') return obj.msg;
+            if (typeof obj.message === 'string') return obj.message;
+          }
+          return JSON.stringify(d);
+        })
         .join('; ');
     } else if (detailRaw && typeof detailRaw === 'object') {
       detail = JSON.stringify(detailRaw);

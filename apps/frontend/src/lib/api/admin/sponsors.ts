@@ -79,10 +79,7 @@ export async function uploadSponsorLogo(
   form.append("file", file);
   const response = await apiClient.post(
     `${API.PREFIX}/v1/sponsors/${sponsorId}/upload-logo`,
-    form,
-    {
-      headers: { "Content-Type": "multipart/form-data" },
-    }
+    form
   );
   return response.data;
 }

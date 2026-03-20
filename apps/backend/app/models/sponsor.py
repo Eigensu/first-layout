@@ -23,6 +23,8 @@ class Sponsor(Document):
     logo: Optional[str] = None
     # GridFS file id for the stored logo
     logo_file_id: Optional[str] = None
+    # Cloudinary public_id for future updates/deletes
+    logo_public_id: Optional[str] = None
     website: Optional[HttpUrl] = None
     description: Optional[str] = None
     featured: bool = False
