@@ -28,7 +28,7 @@ export default function Loading() {
         className="-mt-20 sm:mt-0 flex items-center gap-1 text-[20px] sm:text-[24px] md:text-[28px] font-semibold tracking-wide"
         style={{ color: "var(--accent-orange)" }}
       >
-        <span>Connecting to wallearena</span>
+        <span>Connecting to Wall-E Arena</span>
         <span className="dots">
           <span className="dot" />
           <span className="dot" />

@@ -54,7 +54,7 @@ export default function ContestDetailsPage() {
   return (
     <div className="max-w-7xl mx-auto p-4">
       {loading && (
-        <PageLoader message="wallearena is getting your contest..." />
+        <PageLoader message="Wall-E Arena is getting your contest..." />
       )}
       {error && <div className="text-red-600">{error}</div>}
       {contest && (
@@ -115,32 +115,28 @@ export default function ContestDetailsPage() {
                       router.push(target);
                     }
                   }}
-                  className={`w-full h-full rounded-3xl shadow-lg transition transform focus:outline-none focus:ring-4 focus:ring-primary/20 ${
-                    isCreationDisabled
+                  className={`w-full h-full rounded-3xl shadow-lg transition transform focus:outline-none focus:ring-4 focus:ring-primary/20 ${isCreationDisabled
                       ? "bg-white/50 backdrop-blur-sm cursor-not-allowed"
                       : "bg-gradient-to-br from-white via-primary-50 to-primary-100 hover:shadow-xl hover:scale-105 active:scale-95"
-                  }`}
+                    }`}
                 >
                   <div className="p-6 sm:p-8 lg:p-10 flex flex-col items-center justify-center text-center min-h-[240px] sm:min-h-[280px] lg:min-h-[300px] h-full">
                     <div
-                      className={`mb-5 p-4 rounded-2xl inline-flex ${
-                        isCreationDisabled ? "bg-gray-500/10" : "bg-primary-100"
-                      }`}
+                      className={`mb-5 p-4 rounded-2xl inline-flex ${isCreationDisabled ? "bg-gray-500/10" : "bg-primary-100"
+                        }`}
                     >
                       <User
-                        className={`w-12 h-12 ${
-                          isCreationDisabled
+                        className={`w-12 h-12 ${isCreationDisabled
                             ? "text-gray-600"
                             : "text-primary-700"
-                        }`}
+                          }`}
                       />
                     </div>
                     <h2
-                      className={`text-3xl sm:text-4xl font-black tracking-tight ${
-                        isCreationDisabled
+                      className={`text-3xl sm:text-4xl font-black tracking-tight ${isCreationDisabled
                           ? "text-gray-700"
                           : "text-primary-700"
-                      }`}
+                        }`}
                     >
                       {isJoined
                         ? "View Team"
@@ -149,11 +145,10 @@ export default function ContestDetailsPage() {
                           : "Make Team"}
                     </h2>
                     <p
-                      className={`mt-2 text-sm sm:text-base ${
-                        isCreationDisabled
+                      className={`mt-2 text-sm sm:text-base ${isCreationDisabled
                           ? "text-gray-600"
                           : "text-primary-700"
-                      }`}
+                        }`}
                     >
                       {isJoined
                         ? "Open your registered team"
@@ -162,11 +157,10 @@ export default function ContestDetailsPage() {
                           : "Assemble your squad and compete together"}
                     </p>
                     <div
-                      className={`mt-6 inline-flex items-center px-6 py-2.5 rounded-full text-sm font-semibold shadow transition ${
-                        isCreationDisabled
+                      className={`mt-6 inline-flex items-center px-6 py-2.5 rounded-full text-sm font-semibold shadow transition ${isCreationDisabled
                           ? "bg-gray-500 text-gray-200 cursor-not-allowed"
                           : "bg-gradient-primary text-white hover:shadow-lg"
-                      }`}
+                        }`}
                     >
                       {isJoined
                         ? "Go to Team"

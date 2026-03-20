@@ -48,7 +48,7 @@ const PageLoader: React.FC<{ message?: string }> = ({ message }) => (
   <div className="min-h-screen bg-bg-body flex items-center justify-center">
     <div className="text-center">
       <Spinner size="lg" className="mb-4 mx-auto" />
-      <p className="text-white">{message || "WalleArena is loading..."}</p>
+      <p className="text-white">{message || "Wall-E Arena is loading..."}</p>
     </div>
   </div>
 );
