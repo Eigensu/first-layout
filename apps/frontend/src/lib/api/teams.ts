@@ -1,4 +1,5 @@
 import { NEXT_PUBLIC_API_URL } from "@/config/env";
+import { extractErrorMessage } from "@/utils/errors";
 
 export interface TeamData {
   team_name: string;
@@ -43,8 +44,8 @@ export async function createTeam(teamData: TeamData, token: string): Promise<Tea
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to create team");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to create team"));
   }
 
   return response.json();
@@ -64,8 +65,8 @@ export async function getUserTeams(token: string, skip = 0, limit = 100): Promis
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to fetch teams");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to fetch teams"));
   }
 
   return response.json();
@@ -82,8 +83,8 @@ export async function getTeam(teamId: string, token: string): Promise<TeamRespon
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to fetch team");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to fetch team"));
   }
 
   return response.json();
@@ -107,8 +108,8 @@ export async function updateTeam(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to update team");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to update team"));
   }
 
   return response.json();
@@ -133,8 +134,8 @@ export async function renameTeam(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to rename team");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to rename team"));
   }
 
   return response.json();
@@ -152,7 +153,7 @@ export async function deleteTeam(teamId: string, token: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to delete team");
+    const error = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(error?.detail, "Failed to delete team"));
   }
 }

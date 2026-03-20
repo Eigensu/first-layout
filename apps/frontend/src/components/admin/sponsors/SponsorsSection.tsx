@@ -43,12 +43,14 @@ export function SponsorsSection() {
 
   // Local delete confirmation modal state
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   return (
     <div className="space-y-4">
       {/* Actions Bar */}
-      <Card>
+      <Card className="bg-white border-gray-200 shadow-sm">
         <CardBody className="p-4">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:w-auto">
@@ -59,16 +61,24 @@ export function SponsorsSection() {
                   placeholder="Search sponsors..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="ghost" size="sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              >
                 <Filter className="w-4 h-4 mr-2" />
                 Filter
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              >
                 <Upload className="w-4 h-4 mr-2" />
                 Import
               </Button>
@@ -119,7 +129,9 @@ export function SponsorsSection() {
                   <input
                     required
                     value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
                     placeholder="e.g., TechCorp"
                   />
@@ -127,20 +139,28 @@ export function SponsorsSection() {
                 {/* Row: Website & Logo URL (optional) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Website (optional)</label>
+                    <label className="block text-sm font-medium mb-1">
+                      Website (optional)
+                    </label>
                     <input
                       type="url"
                       value={form.website}
-                      onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, website: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
                       placeholder="https://example.com"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Logo URL (optional)</label>
+                    <label className="block text-sm font-medium mb-1">
+                      Logo URL (optional)
+                    </label>
                     <input
                       value={form.logo}
-                      onChange={(e) => setForm((f) => ({ ...f, logo: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, logo: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
                       placeholder="https://..."
                     />
@@ -148,7 +168,9 @@ export function SponsorsSection() {
                 </div>
                 {/* Row: Upload Logo */}
                 <div>
-                  <label className="block text-sm font-medium mb-1">Upload Logo (image/*)</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Upload Logo (image/*)
+                  </label>
                   <input
                     type="file"
                     accept="image/*"
@@ -195,7 +217,9 @@ export function SponsorsSection() {
                 </div>
                 {/* Priority input */}
                 <div>
-                  <label className="block text-sm font-medium mb-1">Priority</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Priority
+                  </label>
                   <input
                     type="number"
                     min={1}
@@ -213,30 +237,45 @@ export function SponsorsSection() {
                   <div className="mt-2 text-xs space-y-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-gray-500">Featured priorities</span>
+                        <span className="text-gray-500">
+                          Featured priorities
+                        </span>
                         {form.featured && (
-                          <span className="px-2 py-0.5 text-[10px] rounded bg-orange-100 text-orange-700">current group</span>
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-orange-100 text-orange-700">
+                            current group
+                          </span>
                         )}
                       </div>
                       {availableFeatured ? (
                         <div className="flex flex-wrap gap-2">
-                          {availableFeatured.gaps.slice(0, 10).map((n: number) => (
-                            <button
-                              type="button"
-                              key={`feat-gap-${n}`}
-                              onClick={() => {
-                                setForm((f) => ({ ...f, priority: n, featured: true }));
-                                if (!priorityTouched) setPriorityTouched(true);
-                              }}
-                              className={`px-2 py-1 rounded border text-xs ${form.priority === n && form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
-                            >
-                              {n}
-                            </button>
-                          ))}
+                          {availableFeatured.gaps
+                            .slice(0, 10)
+                            .map((n: number) => (
+                              <button
+                                type="button"
+                                key={`feat-gap-${n}`}
+                                onClick={() => {
+                                  setForm((f) => ({
+                                    ...f,
+                                    priority: n,
+                                    featured: true,
+                                  }));
+                                  if (!priorityTouched)
+                                    setPriorityTouched(true);
+                                }}
+                                className={`px-2 py-1 rounded border text-xs ${form.priority === n && form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
+                              >
+                                {n}
+                              </button>
+                            ))}
                           <button
                             type="button"
                             onClick={() => {
-                              setForm((f) => ({ ...f, priority: availableFeatured.next, featured: true }));
+                              setForm((f) => ({
+                                ...f,
+                                priority: availableFeatured.next,
+                                featured: true,
+                              }));
                               if (!priorityTouched) setPriorityTouched(true);
                             }}
                             className={`px-2 py-1 rounded border text-xs ${form.priority === availableFeatured.next && form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
@@ -245,36 +284,53 @@ export function SponsorsSection() {
                           </button>
                         </div>
                       ) : (
-                        <div className="text-gray-400">No suggestions (auth or network issue)</div>
+                        <div className="text-gray-400">
+                          No suggestions (auth or network issue)
+                        </div>
                       )}
                     </div>
 
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-gray-500">Non-featured priorities</span>
+                        <span className="text-gray-500">
+                          Non-featured priorities
+                        </span>
                         {!form.featured && (
-                          <span className="px-2 py-0.5 text-[10px] rounded bg-orange-100 text-orange-700">current group</span>
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-orange-100 text-orange-700">
+                            current group
+                          </span>
                         )}
                       </div>
                       {availableNonFeatured ? (
                         <div className="flex flex-wrap gap-2">
-                          {availableNonFeatured.gaps.slice(0, 10).map((n: number) => (
-                            <button
-                              type="button"
-                              key={`non-gap-${n}`}
-                              onClick={() => {
-                                setForm((f) => ({ ...f, priority: n, featured: false }));
-                                if (!priorityTouched) setPriorityTouched(true);
-                              }}
-                              className={`px-2 py-1 rounded border text-xs ${form.priority === n && !form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
-                            >
-                              {n}
-                            </button>
-                          ))}
+                          {availableNonFeatured.gaps
+                            .slice(0, 10)
+                            .map((n: number) => (
+                              <button
+                                type="button"
+                                key={`non-gap-${n}`}
+                                onClick={() => {
+                                  setForm((f) => ({
+                                    ...f,
+                                    priority: n,
+                                    featured: false,
+                                  }));
+                                  if (!priorityTouched)
+                                    setPriorityTouched(true);
+                                }}
+                                className={`px-2 py-1 rounded border text-xs ${form.priority === n && !form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
+                              >
+                                {n}
+                              </button>
+                            ))}
                           <button
                             type="button"
                             onClick={() => {
-                              setForm((f) => ({ ...f, priority: availableNonFeatured.next, featured: false }));
+                              setForm((f) => ({
+                                ...f,
+                                priority: availableNonFeatured.next,
+                                featured: false,
+                              }));
                               if (!priorityTouched) setPriorityTouched(true);
                             }}
                             className={`px-2 py-1 rounded border text-xs ${form.priority === availableNonFeatured.next && !form.featured ? "bg-orange-50 border-orange-400 text-orange-700" : "bg-gray-50 border-gray-300 text-gray-700"}`}
@@ -283,7 +339,9 @@ export function SponsorsSection() {
                           </button>
                         </div>
                       ) : (
-                        <div className="text-gray-400">No suggestions (auth or network issue)</div>
+                        <div className="text-gray-400">
+                          No suggestions (auth or network issue)
+                        </div>
                       )}
                     </div>
                   </div>
@@ -374,7 +432,12 @@ export function SponsorsSection() {
                     <input
                       type="checkbox"
                       checked={editForm.featured}
-                      onChange={(e) => setEditForm((f) => ({ ...f, featured: e.target.checked }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          featured: e.target.checked,
+                        }))
+                      }
                     />
                     Featured
                   </label>
@@ -382,18 +445,27 @@ export function SponsorsSection() {
                     <input
                       type="checkbox"
                       checked={editForm.active}
-                      onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, active: e.target.checked }))
+                      }
                     />
                     Active
                   </label>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Priority</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Priority
+                  </label>
                   <input
                     type="number"
                     min={1}
                     value={editForm.priority}
-                    onChange={(e) => setEditForm((f) => ({ ...f, priority: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setEditForm((f) => ({
+                        ...f,
+                        priority: Number(e.target.value),
+                      }))
+                    }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
                     placeholder="e.g., 1"
                     required
@@ -423,7 +495,7 @@ export function SponsorsSection() {
       )}
 
       {error && (
-        <Card>
+        <Card className="bg-white border-gray-200 shadow-sm">
           <CardBody className="p-4 text-red-700 bg-red-50 border border-red-200 rounded-lg">
             {error}
           </CardBody>
@@ -436,160 +508,290 @@ export function SponsorsSection() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-base font-semibold">Featured sponsors</h4>
-            <span className="text-xs text-gray-500">Assign priorities within this group</span>
+            <span className="text-xs text-gray-500">
+              Assign priorities within this group
+            </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {loading && Array.from({ length: 3 }).map((_, i) => (
-              <Card key={`loading-feat-${i}`}>
-                <CardBody className="p-6 animate-pulse">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-16 h-16 bg-gray-200 rounded-2xl" />
-                    <div className="flex gap-2">
-                      <div className="w-8 h-8 bg-gray-200 rounded" />
-                      <div className="w-8 h-8 bg-gray-200 rounded" />
-                    </div>
-                  </div>
-                  <div className="h-5 bg-gray-200 rounded w-2/3 mb-3" />
-                  <div className="space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-full" />
-                    <div className="h-4 bg-gray-200 rounded w-5/6" />
-                    <div className="h-4 bg-gray-200 rounded w-1/2" />
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-            {!loading && filtered
-              .filter((s) => s.featured)
-              .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
-              .map((sponsor) => (
-                <Card key={sponsor.id} hover>
-                  <CardBody className="p-6">
+            {loading &&
+              Array.from({ length: 3 }).map((_, i) => (
+                <Card
+                  key={`loading-feat-${i}`}
+                  className="bg-white border-gray-200 shadow-sm"
+                >
+                  <CardBody className="p-6 animate-pulse">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
-                        {sponsor.logo?.startsWith("http") || sponsor.logo?.startsWith("/api") ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={sponsor.logo} alt={`${sponsor.name} logo`} className="w-full h-full object-cover" />
-                        ) : (
-                          sponsor.name?.slice(0, 2).toUpperCase()
-                        )}
-                      </div>
+                      <div className="w-16 h-16 bg-gray-200 rounded-2xl" />
                       <div className="flex gap-2">
-                        <button className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors" aria-label={`Edit ${sponsor.name}`} onClick={() => openEdit(sponsor)}>
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label={`Delete ${sponsor.name}`} disabled={deletingId === sponsor.id} onClick={() => { setToDelete({ id: sponsor.id, name: sponsor.name }); setIsDeleteOpen(true); }}>
-                          {deletingId === sponsor.id ? <span className="text-xs">Deleting...</span> : <Trash2 className="w-4 h-4" />}
-                        </button>
+                        <div className="w-8 h-8 bg-gray-200 rounded" />
+                        <div className="w-8 h-8 bg-gray-200 rounded" />
                       </div>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{sponsor.name}</h3>
-                    {sponsor.website && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">Website:</span>
-                        <a href={sponsor.website} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[60%] text-right">{sponsor.website}</a>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">Status:</span>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>{sponsor.active ? "Active" : "Inactive"}</span>
+                    <div className="h-5 bg-gray-200 rounded w-2/3 mb-3" />
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-full" />
+                      <div className="h-4 bg-gray-200 rounded w-5/6" />
+                      <div className="h-4 bg-gray-200 rounded w-1/2" />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">Priority:</span>
-                      <span className="text-sm font-medium text-gray-800">{typeof sponsor.priority === "number" && sponsor.priority > 0 ? sponsor.priority : "—"}</span>
-                    </div>
-                    {typeof sponsor.featured !== "undefined" && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">Featured:</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.featured ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{sponsor.featured ? "Yes" : "No"}</span>
-                      </div>
-                    )}
                   </CardBody>
                 </Card>
               ))}
+            {!loading &&
+              filtered
+                .filter((s) => s.featured)
+                .sort(
+                  (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+                )
+                .map((sponsor) => (
+                  <Card
+                    key={sponsor.id}
+                    hover
+                    className="bg-white border-gray-200 shadow-sm"
+                  >
+                    <CardBody className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
+                          {sponsor.logo?.startsWith("http") ||
+                          sponsor.logo?.startsWith("/api") ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={sponsor.logo}
+                              alt={`${sponsor.name} logo`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            sponsor.name?.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                            aria-label={`Edit ${sponsor.name}`}
+                            onClick={() => openEdit(sponsor)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label={`Delete ${sponsor.name}`}
+                            disabled={deletingId === sponsor.id}
+                            onClick={() => {
+                              setToDelete({
+                                id: sponsor.id,
+                                name: sponsor.name,
+                              });
+                              setIsDeleteOpen(true);
+                            }}
+                          >
+                            {deletingId === sponsor.id ? (
+                              <span className="text-xs">Deleting...</span>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {sponsor.name}
+                      </h3>
+                      {sponsor.website && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500">
+                            Website:
+                          </span>
+                          <a
+                            href={sponsor.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[60%] text-right"
+                          >
+                            {sponsor.website}
+                          </a>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Status:</span>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                        >
+                          {sponsor.active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Priority:</span>
+                        <span className="text-sm font-medium text-gray-800">
+                          {typeof sponsor.priority === "number" &&
+                          sponsor.priority > 0
+                            ? sponsor.priority
+                            : "—"}
+                        </span>
+                      </div>
+                      {typeof sponsor.featured !== "undefined" && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500">
+                            Featured:
+                          </span>
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.featured ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}
+                          >
+                            {sponsor.featured ? "Yes" : "No"}
+                          </span>
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                ))}
           </div>
-          {!loading && !error && filtered.filter((s) => s.featured).length === 0 && (
-            <div className="text-sm text-gray-500">No featured sponsors.</div>
-          )}
+          {!loading &&
+            !error &&
+            filtered.filter((s) => s.featured).length === 0 && (
+              <div className="text-sm text-gray-500">No featured sponsors.</div>
+            )}
         </div>
 
         {/* Other (non-featured) section */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-base font-semibold">Other sponsors</h4>
-            <span className="text-xs text-gray-500">Assign priorities within this group</span>
+            <span className="text-xs text-gray-500">
+              Assign priorities within this group
+            </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {loading && Array.from({ length: 3 }).map((_, i) => (
-              <Card key={`loading-non-${i}`}>
-                <CardBody className="p-6 animate-pulse">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-16 h-16 bg-gray-200 rounded-2xl" />
-                    <div className="flex gap-2">
-                      <div className="w-8 h-8 bg-gray-200 rounded" />
-                      <div className="w-8 h-8 bg-gray-200 rounded" />
-                    </div>
-                  </div>
-                  <div className="h-5 bg-gray-200 rounded w-2/3 mb-3" />
-                  <div className="space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-full" />
-                    <div className="h-4 bg-gray-200 rounded w-5/6" />
-                    <div className="h-4 bg-gray-200 rounded w-1/2" />
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-            {!loading && filtered
-              .filter((s) => !s.featured)
-              .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
-              .map((sponsor) => (
-                <Card key={sponsor.id} hover>
-                  <CardBody className="p-6">
+            {loading &&
+              Array.from({ length: 3 }).map((_, i) => (
+                <Card
+                  key={`loading-non-${i}`}
+                  className="bg-white border-gray-200 shadow-sm"
+                >
+                  <CardBody className="p-6 animate-pulse">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
-                        {sponsor.logo?.startsWith("http") || sponsor.logo?.startsWith("/api") ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={sponsor.logo} alt={`${sponsor.name} logo`} className="w-full h-full object-cover" />
-                        ) : (
-                          sponsor.name?.slice(0, 2).toUpperCase()
-                        )}
-                      </div>
+                      <div className="w-16 h-16 bg-gray-200 rounded-2xl" />
                       <div className="flex gap-2">
-                        <button className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors" aria-label={`Edit ${sponsor.name}`} onClick={() => openEdit(sponsor)}>
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label={`Delete ${sponsor.name}`} disabled={deletingId === sponsor.id} onClick={() => { setToDelete({ id: sponsor.id, name: sponsor.name }); setIsDeleteOpen(true); }}>
-                          {deletingId === sponsor.id ? <span className="text-xs">Deleting...</span> : <Trash2 className="w-4 h-4" />}
-                        </button>
+                        <div className="w-8 h-8 bg-gray-200 rounded" />
+                        <div className="w-8 h-8 bg-gray-200 rounded" />
                       </div>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{sponsor.name}</h3>
-                    {sponsor.website && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">Website:</span>
-                        <a href={sponsor.website} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[60%] text-right">{sponsor.website}</a>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">Status:</span>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>{sponsor.active ? "Active" : "Inactive"}</span>
+                    <div className="h-5 bg-gray-200 rounded w-2/3 mb-3" />
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-full" />
+                      <div className="h-4 bg-gray-200 rounded w-5/6" />
+                      <div className="h-4 bg-gray-200 rounded w-1/2" />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">Priority:</span>
-                      <span className="text-sm font-medium text-gray-800">{typeof sponsor.priority === "number" && sponsor.priority > 0 ? sponsor.priority : "—"}</span>
-                    </div>
-                    {typeof sponsor.featured !== "undefined" && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">Featured:</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.featured ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{sponsor.featured ? "Yes" : "No"}</span>
-                      </div>
-                    )}
                   </CardBody>
                 </Card>
               ))}
+            {!loading &&
+              filtered
+                .filter((s) => !s.featured)
+                .sort(
+                  (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+                )
+                .map((sponsor) => (
+                  <Card
+                    key={sponsor.id}
+                    hover
+                    className="bg-white border-gray-200 shadow-sm"
+                  >
+                    <CardBody className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
+                          {sponsor.logo?.startsWith("http") ||
+                          sponsor.logo?.startsWith("/api") ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={sponsor.logo}
+                              alt={`${sponsor.name} logo`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            sponsor.name?.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                            aria-label={`Edit ${sponsor.name}`}
+                            onClick={() => openEdit(sponsor)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label={`Delete ${sponsor.name}`}
+                            disabled={deletingId === sponsor.id}
+                            onClick={() => {
+                              setToDelete({
+                                id: sponsor.id,
+                                name: sponsor.name,
+                              });
+                              setIsDeleteOpen(true);
+                            }}
+                          >
+                            {deletingId === sponsor.id ? (
+                              <span className="text-xs">Deleting...</span>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {sponsor.name}
+                      </h3>
+                      {sponsor.website && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500">
+                            Website:
+                          </span>
+                          <a
+                            href={sponsor.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[60%] text-right"
+                          >
+                            {sponsor.website}
+                          </a>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Status:</span>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                        >
+                          {sponsor.active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Priority:</span>
+                        <span className="text-sm font-medium text-gray-800">
+                          {typeof sponsor.priority === "number" &&
+                          sponsor.priority > 0
+                            ? sponsor.priority
+                            : "—"}
+                        </span>
+                      </div>
+                      {typeof sponsor.featured !== "undefined" && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500">
+                            Featured:
+                          </span>
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${sponsor.featured ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}
+                          >
+                            {sponsor.featured ? "Yes" : "No"}
+                          </span>
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                ))}
           </div>
-          {!loading && !error && filtered.filter((s) => !s.featured).length === 0 && (
-            <div className="text-sm text-gray-500">No other sponsors.</div>
-          )}
+          {!loading &&
+            !error &&
+            filtered.filter((s) => !s.featured).length === 0 && (
+              <div className="text-sm text-gray-500">No other sponsors.</div>
+            )}
         </div>
       </div>
       {/* Delete Confirmation Modal */}
@@ -615,14 +817,18 @@ export function SponsorsSection() {
                 </div>
               )}
               <p className="text-sm text-gray-700">
-                Are you sure you want to permanently delete <span className="font-medium">{toDelete.name}</span>? This action cannot be undone.
+                Are you sure you want to permanently delete{" "}
+                <span className="font-medium">{toDelete.name}</span>? This
+                action cannot be undone.
               </p>
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => deletingId !== toDelete.id && setIsDeleteOpen(false)}
+                onClick={() =>
+                  deletingId !== toDelete.id && setIsDeleteOpen(false)
+                }
               >
                 Cancel
               </Button>

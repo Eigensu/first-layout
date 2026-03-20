@@ -11,6 +11,7 @@ import {
   type EnrollmentResponse,
 } from "@/lib/api/public/contests";
 import { PageLoader } from "@/components";
+import { getImageUrl } from "@/lib/utils";
 
 export default function ContestDetailsPage() {
   const { isAuthenticated } = useAuth();
@@ -70,10 +71,10 @@ export default function ContestDetailsPage() {
           <div className="text-center mb-2 -mt-12">
             <div className="flex justify-center mt-0">
               <Image
-                src={
-                  contest.logo_url ||
-                  "/world-tower-premier-league-season-2-sponsors/title-sponsor-2.png"
-                }
+                src={getImageUrl(
+                  contest.logo_url,
+                  "/world-tower-premier-league-season-2-sponsors/title-sponsor-2.png",
+                )}
                 alt="Contest Logo"
                 width={180}
                 height={180}
@@ -93,11 +94,7 @@ export default function ContestDetailsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch">
             {/* Make/View team side (first) */}
             {(() => {
-              const now = new Date();
-              const startAt = new Date(contest.start_at);
-              const endAt = new Date(contest.end_at);
-              const isContestOngoing =
-                contest.status === "ongoing" && now >= startAt && now < endAt;
+              const isContestOngoing = contest.status === "ongoing";
 
               const isCreationDisabled = !isJoined && isContestOngoing;
 
@@ -106,7 +103,9 @@ export default function ContestDetailsPage() {
                   disabled={isCreationDisabled}
                   onClick={() => {
                     if (isCreationDisabled) return;
-                    const target = `/contests/${contest.id}/team`;
+                    const target = isJoined
+                      ? `/teams?contest_id=${encodeURIComponent(String(contest.id))}`
+                      : `/contests/${contest.id}/team`;
                     if (!isAuthenticated) {
                       router.push(
                         `/auth/login?next=${encodeURIComponent(target)}`,

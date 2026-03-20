@@ -1,9 +1,17 @@
 import apiClient from "../client";
+import type {
+  ContestStatus,
+  ContestVisibility,
+  PointsScope,
+  ContestType,
+} from "@/common/consts/contest";
 
-export type ContestStatus = "live" | "ongoing" | "completed" | "archived";
-export type ContestVisibility = "public" | "private";
-export type PointsScope = "time_window" | "snapshot";
-export type ContestType = "daily" | "full";
+export type {
+  ContestStatus,
+  ContestVisibility,
+  PointsScope,
+  ContestType,
+};
 
 export interface Contest {
   id: string;

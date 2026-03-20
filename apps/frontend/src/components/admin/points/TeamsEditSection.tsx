@@ -35,7 +35,7 @@ export function TeamsEditSection() {
   const [selectedContestId, setSelectedContestId] = useState<string>("");
   const selectedContest = useMemo(
     () => contests.find((c) => c.id === selectedContestId) || null,
-    [contests, selectedContestId]
+    [contests, selectedContestId],
   );
 
   const fetchAll = async () => {
@@ -124,11 +124,12 @@ export function TeamsEditSection() {
     }
     // sort players by name within team
     Array.from(groups.values()).forEach((arr) =>
-      arr.sort((a: Player, b: Player) => a.name.localeCompare(b.name))
+      arr.sort((a: Player, b: Player) => a.name.localeCompare(b.name)),
     );
     // sort team names
     let entries = Array.from(groups.entries()).sort(
-      (a: [string, Player[]], b: [string, Player[]]) => a[0].localeCompare(b[0])
+      (a: [string, Player[]], b: [string, Player[]]) =>
+        a[0].localeCompare(b[0]),
     );
     // If a daily contest with allowed_teams is selected, filter to those
     if (
@@ -137,7 +138,7 @@ export function TeamsEditSection() {
       selectedContest.allowed_teams?.length
     ) {
       const allowed = new Set(
-        selectedContest.allowed_teams.map((t) => (t || "").trim())
+        selectedContest.allowed_teams.map((t) => (t || "").trim()),
       );
       entries = entries.filter(([teamName]) => allowed.has(teamName));
     }
@@ -147,7 +148,7 @@ export function TeamsEditSection() {
   const visibleTeams = useMemo(() => {
     if (!teamFilter) return teams;
     return teams.filter(([name]) =>
-      name.toLowerCase().includes(teamFilter.toLowerCase())
+      name.toLowerCase().includes(teamFilter.toLowerCase()),
     );
   }, [teams, teamFilter]);
 
@@ -160,7 +161,7 @@ export function TeamsEditSection() {
           editTextMap[p.id] ?? formatPoints(contestPointsMap[p.id] ?? 0);
         const rawNum = Number(rawText);
         const normalized = Number(
-          formatPoints(Number.isNaN(rawNum) ? 0 : rawNum)
+          formatPoints(Number.isNaN(rawNum) ? 0 : rawNum),
         );
         return { player_id: p.id, points: normalized };
       });
@@ -196,18 +197,20 @@ export function TeamsEditSection() {
         <CardHeader className="p-4 border-b space-y-3">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-orange-500" />
-            <h2 className="text-lg font-semibold">Edit Players by Teams</h2>
+            <h2 className="text-lg font-semibold text-text-main">
+              Edit Players by Teams
+            </h2>
           </div>
           {/* Contest selector */}
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <label className="text-sm text-gray-700 whitespace-nowrap">
+              <label className="text-sm text-text-muted whitespace-nowrap">
                 Select contest
               </label>
               <select
                 value={selectedContestId}
                 onChange={(e) => setSelectedContestId(e.target.value)}
-                className="flex-1 sm:flex-none min-w-[220px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                className="flex-1 sm:flex-none min-w-[220px] px-3 py-2 border border-border-subtle rounded-lg bg-bg-card text-text-main focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               >
                 <option value="" disabled>
                   {contestsLoading ? "Loading contests..." : "Choose a contest"}
@@ -223,12 +226,12 @@ export function TeamsEditSection() {
               placeholder="Filter teams..."
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
-              className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="w-full sm:w-64 px-3 py-2 border border-border-subtle rounded-lg bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               disabled={!selectedContest}
             />
           </div>
           {selectedContest && (
-            <div className="text-xs text-gray-600">
+            <div className="text-xs text-text-muted">
               <span className="font-medium">Contest:</span>{" "}
               {selectedContest.name} ·{" "}
               {new Date(selectedContest.start_at).toLocaleString()} →{" "}
@@ -246,7 +249,7 @@ export function TeamsEditSection() {
         </CardHeader>
         <CardBody className="p-0">
           {!selectedContest ? (
-            <div className="flex items-center justify-center py-12 text-gray-600">
+            <div className="flex items-center justify-center py-12 text-text-muted">
               Please select a contest to edit player points by teams.
             </div>
           ) : loading ? (
@@ -262,12 +265,12 @@ export function TeamsEditSection() {
             <div className="divide-y">
               {visibleTeams.map(([teamName, teamPlayers]) => (
                 <div key={teamName} className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-gray-900">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                    <h3 className="text-base font-semibold text-text-main">
                       {teamName}
                     </h3>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-text-muted">
                         {teamPlayers.length} players
                       </span>
                       <Button
@@ -282,23 +285,23 @@ export function TeamsEditSection() {
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 border-b border-gray-200">
+                      <thead className="bg-bg-elevated border-b border-border-subtle">
                         <tr>
-                          <th className="px-3 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-4 py-2 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
                             Player
                           </th>
-                          <th className="px-3 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-4 py-2 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
                             Points (3 decimals)
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-bg-card divide-y divide-border-subtle">
                         {teamPlayers.map((p) => (
-                          <tr key={p.id} className="hover:bg-gray-50">
-                            <td className="px-3 sm:px-4 py-3 text-sm text-gray-900">
+                          <tr key={p.id} className="hover:bg-bg-elevated/60">
+                            <td className="px-3 sm:px-4 py-3 text-sm text-text-main">
                               {p.name}
                             </td>
-                            <td className="px-3 sm:px-4 py-3 text-sm font-semibold text-gray-900">
+                            <td className="px-3 sm:px-4 py-3 text-sm font-semibold text-text-main">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -317,7 +320,7 @@ export function TeamsEditSection() {
                                 onBlur={(e) => {
                                   const raw = Number(e.target.value);
                                   const num = Number(
-                                    formatPoints(Number.isNaN(raw) ? 0 : raw)
+                                    formatPoints(Number.isNaN(raw) ? 0 : raw),
                                   );
                                   setContestPointsMap((prev) => ({
                                     ...prev,
@@ -328,7 +331,7 @@ export function TeamsEditSection() {
                                     [p.id]: formatPoints(num),
                                   }));
                                 }}
-                                className="w-28 sm:w-32 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                className="w-28 sm:w-32 px-2 py-1 border border-border-subtle rounded-md bg-bg-card text-text-main placeholder:text-text-muted focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                               />
                             </td>
                           </tr>
@@ -339,7 +342,7 @@ export function TeamsEditSection() {
                 </div>
               ))}
               {visibleTeams.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
+                <div className="text-center py-12 text-text-muted">
                   No teams match your filter.
                 </div>
               )}

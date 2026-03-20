@@ -55,41 +55,12 @@ export default function HomePage() {
     loadActive();
   }, []);
 
-  // Load carousel images - use sponsor logos as temporary carousel
+  // Load carousel images
   useEffect(() => {
     const loadCarousel = async () => {
       try {
         setLoadingCarousel(true);
-
-        // Try to get carousel images first
-        let images = await getActiveCarouselImages();
-
-        // If no carousel images, use sponsor logos as carousel
-        if (images.length === 0) {
-          try {
-            const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/sponsors/?active=true&page_size=10`,
-            );
-            if (response.ok) {
-              const data = await response.json();
-              // Convert sponsors to carousel format
-              images = data.sponsors.map((sponsor: any, index: number) => ({
-                _id: sponsor._id,
-                title: sponsor.name,
-                subtitle: sponsor.description || `${sponsor.tier} Sponsor`,
-                image_url: sponsor.logo,
-                link_url: sponsor.website,
-                display_order: index,
-                active: true,
-                created_at: sponsor.created_at,
-                updated_at: sponsor.updated_at,
-              }));
-            }
-          } catch (e) {
-            console.error("Failed to load sponsors for carousel:", e);
-          }
-        }
-
+        const images = await getActiveCarouselImages();
         setCarouselImages(images);
       } catch (e) {
         console.error("Failed to load carousel images:", e);
@@ -189,42 +160,75 @@ export default function HomePage() {
                 <HeroCarousel images={carouselImages} />
               ) : (
                 // Fallback hero section when no carousel images
-                <div className="w-full h-64 md:h-80 bg-gradient-to-br from-primary-100 to-primary-50 rounded-3xl flex items-center justify-center border border-primary-200 shadow-lg">
-                  <div className="text-center px-6">
-                    <Image
-                      src="/logo.jpeg"
-                      alt="Wall-E Arena"
-                      width={200}
-                      height={200}
-                      className="rounded-3xl shadow-2xl object-cover mx-auto mb-6"
-                      priority
-                    />
-                    <h1 className="text-4xl sm:text-5xl font-extrabold text-primary-700 tracking-tight leading-tight mb-4">
-                      World Tower Premier League
-                    </h1>
-                    <p className="text-lg sm:text-xl text-gray-700 mb-8 max-w-xl mx-auto leading-relaxed">
-                      Build your dream team, compete with friends, and rise to
-                      the top!
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <div className="w-full relative overflow-hidden bg-gradient-to-b from-[#1E1136] to-[#120822] border border-white/10 rounded-3xl py-8 md:py-12 flex items-center justify-center shadow-2xl">
+                  {/* Decorative backgrounds */}
+                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute -top-[30%] -right-[10%] w-[70%] h-[70%] rounded-full bg-primary-600/20 blur-[100px]" />
+                    <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full bg-brand-pink/20 blur-[100px]" />
+                  </div>
+
+                  <div className="text-center px-6 relative z-10 w-full max-w-4xl mx-auto flex flex-col items-center">
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.5 }}
+                      className="mb-4 md:mb-6"
+                    >
+                      <div className="relative w-20 h-20 md:w-28 md:h-28 mx-auto bg-white/5 p-2 rounded-[1.5rem] backdrop-blur-sm border border-white/10 shadow-xl overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-brand opacity-0 group-hover:opacity-10 transition-opacity duration-500" />
+                        <Image
+                          src="/logo.jpeg"
+                          alt="Wall-E Arena"
+                          fill
+                          className="object-contain p-1 rounded-[1.2rem]"
+                          priority
+                          sizes="(max-width: 768px) 80px, 112px"
+                        />
+                      </div>
+                    </motion.div>
+                    
+                    <motion.h1 
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
+                      className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-3"
+                    >
+                      Walle Arena
+                    </motion.h1>
+                    
+                    <motion.p 
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.2 }}
+                      className="text-base sm:text-lg text-white/70 mb-6 max-w-xl mx-auto leading-relaxed"
+                    >
+                      Build your dream team, compete with friends, and rise to the top!
+                    </motion.p>
+                    
+                    <motion.div 
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                      className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full"
+                    >
                       {isAuthenticated ? (
                         <Link
                           href="/contests"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-brand shadow-lg hover:shadow-pink-strong transition-all duration-300 group"
+                          className="inline-flex items-center justify-center px-6 py-2.5 md:py-3 rounded-full text-sm md:text-base font-bold text-white bg-gradient-brand shadow-lg hover:shadow-pink-strong transition-all duration-300 group min-w-[180px]"
                         >
                           Explore Contests
-                          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                          <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </Link>
                       ) : (
                         <Link
                           href="/auth/login"
-                          className="inline-flex items-center px-10 py-4 rounded-full text-lg font-semibold text-white bg-gradient-brand shadow-lg hover:shadow-pink-strong transition-all duration-300 group"
+                          className="inline-flex items-center justify-center px-6 py-2.5 md:py-3 rounded-full text-sm md:text-base font-bold text-white bg-gradient-brand shadow-lg hover:shadow-pink-strong transition-all duration-300 group min-w-[180px]"
                         >
                           Get Started
-                          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                          <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </Link>
                       )}
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               )}

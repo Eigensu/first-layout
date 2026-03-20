@@ -24,36 +24,34 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
 }) => {
   return (
     <div className="relative flex items-center gap-2 p-2 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 transition-all">
-      {isCaptain && (
-        <div className="absolute top-0 right-0 p-[2px]">
-          <Badge
-            variant="warning"
-            size="sm"
-            className="shadow-sm text-[10px] px-1.5 py-0.5"
-          >
-            C
-          </Badge>
-        </div>
-      )}
-      {isViceCaptain && (
-        <div className="absolute top-0 right-0 p-[2px]">
-          <Badge
-            variant="secondary"
-            size="sm"
-            className="shadow-sm text-[10px] px-1.5 py-0.5"
-          >
-            VC
-          </Badge>
-        </div>
-      )}
       {/* Player Avatar */}
       <Avatar name={player.name} src={player.image} size="sm" />
 
       {/* Player Info */}
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-gray-900 text-sm truncate">
-          {player.name}
-        </h4>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h4 className="font-semibold text-gray-900 text-sm truncate">
+            {player.name}
+          </h4>
+          {isCaptain && (
+            <Badge
+              variant="warning"
+              size="sm"
+              className="shrink-0 shadow-sm text-[9px] px-1.5 py-0 leading-none bg-orange-500 text-white border border-orange-600"
+            >
+              C
+            </Badge>
+          )}
+          {isViceCaptain && (
+            <Badge
+              variant="secondary"
+              size="sm"
+              className="shrink-0 shadow-sm text-[9px] px-1.5 py-0 leading-none bg-violet-600 text-white border border-violet-700"
+            >
+              VC
+            </Badge>
+          )}
+        </div>
         <p className="text-xs text-gray-500 truncate">{player.team}</p>
       </div>
 
@@ -77,7 +75,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
             }
           `}
         >
-          {isCaptain ? "Captain ✓" : "C"}
+          {isCaptain ? "Captain" : "C"}
         </button>
         <button
           onClick={(e) => {
@@ -99,7 +97,7 @@ export const CaptainSelectionCard: React.FC<CaptainSelectionCardProps> = ({
             }
           `}
         >
-          {isViceCaptain ? "V.Captain ✓" : "VC"}
+          {isViceCaptain ? "V.Captain" : "VC"}
         </button>
       </div>
     </div>

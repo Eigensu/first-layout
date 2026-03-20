@@ -147,8 +147,8 @@ export default function TeamsPage() {
     const fetchPlayers = async () => {
       try {
         const url = contestIdParam
-          ? `${API_BASE_URL}/api/players?contest_id=${encodeURIComponent(contestIdParam)}`
-          : `${API_BASE_URL}/api/players`;
+          ? `${API_BASE_URL}/api/players?contest_id=${encodeURIComponent(contestIdParam)}&limit=1000`
+          : `${API_BASE_URL}/api/players?limit=1000`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to load players");
         const data: ApiPlayer[] = await res.json();
@@ -264,7 +264,7 @@ export default function TeamsPage() {
           try {
             const data = await publicContestsApi.teamInContest(
               contestIdParam,
-              t.id
+              t.id,
             );
             results[t.id] = data;
           } catch (_) {
@@ -290,7 +290,7 @@ export default function TeamsPage() {
         setLoadingContests(true);
         const res = await publicContestsApi.list({ page_size: 100 });
         const open = res.contests.filter(
-          (c) => c.status !== "completed" && c.status !== "archived"
+          (c) => c.status !== "completed" && c.status !== "archived",
         );
         setContests(open);
       } catch (e) {
@@ -313,7 +313,7 @@ export default function TeamsPage() {
           enrollments.sort(
             (a, b) =>
               new Date(b.enrolled_at).getTime() -
-              new Date(a.enrolled_at).getTime()
+              new Date(a.enrolled_at).getTime(),
           );
           const latest = enrollments[0];
           try {
@@ -401,7 +401,7 @@ export default function TeamsPage() {
     } catch (err: any) {
       showAlert(
         `Error: ${err.message || "Failed to delete team"}`,
-        "Delete failed"
+        "Delete failed",
       );
     } finally {
       setDeletingTeamId(null);
@@ -439,7 +439,7 @@ export default function TeamsPage() {
       const updatedTeam = await renameTeam(
         teamId,
         editingTeamName.trim(),
-        token
+        token,
       );
       setTeams((prev) => prev.map((t) => (t.id === teamId ? updatedTeam : t)));
       setEditingTeamId(null);
@@ -447,7 +447,7 @@ export default function TeamsPage() {
     } catch (err: any) {
       showAlert(
         `Error: ${err.message || "Failed to rename team"}`,
-        "Rename failed"
+        "Rename failed",
       );
     } finally {
       setRenamingTeamId(null);
@@ -480,7 +480,7 @@ export default function TeamsPage() {
       const updated = await updateTeam(
         actionTeamId,
         { captain_id: actionPlayerId },
-        token
+        token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     } catch (e: any) {
@@ -499,7 +499,7 @@ export default function TeamsPage() {
       const updated = await updateTeam(
         actionTeamId,
         { vice_captain_id: actionPlayerId },
-        token
+        token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     } catch (e: any) {
@@ -520,7 +520,7 @@ export default function TeamsPage() {
     const team = teams.find((t) => t.id === actionTeamId);
     if (!team) return;
     const newIds = team.player_ids.map((id) =>
-      id === actionPlayerId ? newPlayerId : id
+      id === actionPlayerId ? newPlayerId : id,
     );
     // If the replaced player was captain/VC, transfer to the new player
     const payload: Partial<{

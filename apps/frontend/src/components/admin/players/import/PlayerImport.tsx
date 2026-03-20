@@ -150,7 +150,11 @@ export function PlayerImport({ onSuccess, onClose }: PlayerImportProps) {
                 </label>
                 <select
                   value={options.conflict}
-                  onChange={(e) => updateConflictOption(e.target.value as any)}
+                  onChange={(e) =>
+                    updateConflictOption(
+                      e.target.value as "skip" | "update" | "error",
+                    )
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="skip">Skip</option>
@@ -166,7 +170,11 @@ export function PlayerImport({ onSuccess, onClose }: PlayerImportProps) {
                 </label>
                 <select
                   value={options.slot_strategy}
-                  onChange={(e) => updateSlotStrategy(e.target.value as any)}
+                  onChange={(e) =>
+                    updateSlotStrategy(
+                      e.target.value as "lookup" | "create" | "ignore",
+                    )
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="lookup">Lookup Only</option>
@@ -233,13 +241,25 @@ export function PlayerImport({ onSuccess, onClose }: PlayerImportProps) {
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-3">
         {result?.dry_run && result.invalid_rows === 0 && (
-          <Button variant="primary" onClick={handleConfirmImport}>
-            <CheckCircle2 className="w-4 h-4 mr-2" />
+          <Button
+            variant="primary"
+            onClick={handleConfirmImport}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+            )}
             Confirm & Import
           </Button>
         )}
         {!result && file && (
-          <Button variant="primary" onClick={handleImport} disabled={loading}>
+          <Button
+            variant="primary"
+            onClick={() => handleImport()}
+            disabled={loading}
+          >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (

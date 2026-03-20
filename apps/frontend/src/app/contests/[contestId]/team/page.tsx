@@ -13,6 +13,7 @@ import {
   updateTeam,
   type TeamResponse,
 } from "@/lib/api/teams";
+import { parseApiError } from "@/utils/errors";
 import {
   publicContestsApi,
   type EnrollmentResponse,
@@ -119,7 +120,7 @@ export default function ContestTeamBuilderPage() {
   useEffect(() => {
     if (isAuthenticated === false && contestId) {
       router.push(
-        `${ROUTES.LOGIN}?next=${encodeURIComponent(`/contests/${contestId}/team`)}`
+        `${ROUTES.LOGIN}?next=${encodeURIComponent(`/contests/${contestId}/team`)}`,
       );
     }
   }, [isAuthenticated, contestId, router]);
@@ -135,7 +136,7 @@ export default function ContestTeamBuilderPage() {
         if (!mounted) return;
         const e = Array.isArray(mine)
           ? mine.find(
-              (x) => x.contest_id === contestId && x.status === "active"
+              (x) => x.contest_id === contestId && x.status === "active",
             )
           : undefined;
         setEnrollment(e || null);
@@ -206,7 +207,7 @@ export default function ContestTeamBuilderPage() {
 
   const confirmReplace = (newPlayerId: string) => {
     setSelectedPlayers((prev) =>
-      prev.map((id) => (id === replaceTargetId ? newPlayerId : id))
+      prev.map((id) => (id === replaceTargetId ? newPlayerId : id)),
     );
     // Transfer captain/VC if target had it
     setCaptainId((c) => (c === replaceTargetId ? newPlayerId : c));
@@ -269,12 +270,27 @@ export default function ContestTeamBuilderPage() {
           try {
             await publicContestsApi.enroll(selectedContestId, created.id);
           } catch (e: any) {
-            showAlert(
-              e?.response?.data?.detail ||
-                e?.message ||
-                "Failed to enroll in contest",
-              "Enrollment failed"
-            );
+            let errorMsg = "Failed to enroll in contest";
+            const detail = e?.response?.data?.detail;
+            if (detail) {
+              if (typeof detail === "string") {
+                errorMsg = detail;
+              } else if (Array.isArray(detail) && detail[0]?.msg) {
+                const loc = Array.isArray(detail[0].loc)
+                  ? detail[0].loc[detail[0].loc.length - 1]
+                  : "";
+                errorMsg = loc ? `${loc}: ${detail[0].msg}` : detail[0].msg;
+              } else {
+                try {
+                  errorMsg = JSON.stringify(detail);
+                } catch {
+                  errorMsg = String(detail);
+                }
+              }
+            } else if (e?.message) {
+              errorMsg = e.message;
+            }
+            showAlert(errorMsg, "Enrollment failed");
           }
         }
         gotoTeams();
@@ -292,7 +308,7 @@ export default function ContestTeamBuilderPage() {
 
   // Prepare selected player objects for quick rendering in the Selected panel
   const selectedPlayerObjs = players.filter((p) =>
-    selectedPlayers.includes(p.id)
+    selectedPlayers.includes(p.id),
   ) as unknown as Player[];
 
   return (
@@ -336,7 +352,7 @@ export default function ContestTeamBuilderPage() {
                 variant="primary"
                 onClick={() =>
                   router.push(
-                    `/teams?contest_id=${encodeURIComponent(String(contestId || ""))}`
+                    `/teams?contest_id=${encodeURIComponent(String(contestId || ""))}`,
                   )
                 }
               >

@@ -72,3 +72,16 @@ export function debounce<T extends (...args: any[]) => void>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }
+
+export function getImageUrl(path: string | null | undefined, fallback: string = ""): string {
+  if (!path) return fallback;
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("blob:") || path.startsWith("data:")) {
+    return path;
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (apiUrl && path.startsWith("/api")) {
+    return `${apiUrl}${path}`;
+  }
+  // If it's starting with a slash but not /api (e.g. /Contests/logo.png), return as is
+  return path;
+}

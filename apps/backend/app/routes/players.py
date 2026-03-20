@@ -28,7 +28,7 @@ def serialize_player(player: Player) -> PlayerOut:
 async def list_players(
     slot: Optional[str] = Query(None, description="Filter players by Slot ObjectId string"),
     contest_id: Optional[str] = Query(None, description="If provided, filter by allowed teams for daily contest"),
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(1000, ge=1, le=5000),
     skip: int = Query(0, ge=0),
 ):
     """Get list of players with optional filtering by slot (ObjectId string)."""

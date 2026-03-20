@@ -11,6 +11,10 @@ from app.models.user import User
 from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse
 from app.utils.dependencies import get_current_active_user
 from app.models.admin.slot import Slot
+from app.services.contest_status import compute_contest_status
+from app.common.enums.contests import ContestStatus
+from app.common.enums.enrollments import EnrollmentStatus
+from app.utils.timezone import now_ist
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -117,10 +121,9 @@ async def create_team(
         if not contest:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contest_id")
 
-        # Prevent joining an ongoing contest
-        # Ongoing = status active/ongoing AND start_at <= now < end_at
-        now = datetime.utcnow()
-        if contest.status == "ongoing" and contest.start_at <= now < contest.end_at:
+        # Prevent joining an ongoing contest.
+        computed_status = compute_contest_status(contest)
+        if computed_status == ContestStatus.ONGOING:
              raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot create a team for an ongoing contest.",
@@ -138,9 +141,16 @@ async def create_team(
                     },
                 )
     
+    user_id = current_user.id
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user is invalid"
+        )
+
     # Create team document
     team = Team(
-        user_id=current_user.id,
+        user_id=user_id,
         team_name=team_data.team_name,
         player_ids=team_data.player_ids,
         captain_id=team_data.captain_id,
@@ -149,7 +159,7 @@ async def create_team(
         contest_id=team_data.contest_id
     )
     
-    await team.insert()
+    await team.insert()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -287,13 +297,11 @@ async def update_team(
         "status": "active",
     }).to_list()
     if active_enrs:
-        from datetime import datetime as _dt
         contest_ids = [enr.contest_id for enr in active_enrs]
-        # Ongoing = status active AND start_at <= now < end_at
-        now = _dt.utcnow()
+        now = now_ist()
         active_contest_count = await Contest.find({
             "_id": {"$in": contest_ids},
-            "status": "ongoing",
+            "status": {"$ne": ContestStatus.ARCHIVED},
             "start_at": {"$lte": now},
             "end_at": {"$gt": now},
         }).count()
@@ -408,7 +416,7 @@ async def update_team(
         for key, value in update_data.items():
             setattr(team, key, value)
         
-        await team.save()
+        await team.save()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -493,7 +501,7 @@ async def rename_team(
     # Update team name
     team.team_name = team_name.strip()
     team.updated_at = datetime.utcnow()
-    await team.save()
+    await team.save()  # type: ignore[misc]
     
     return TeamResponse(
         id=str(team.id),
@@ -550,10 +558,10 @@ async def delete_team(
     if active_enrollments:
         now = datetime.utcnow()
         for enr in active_enrollments:
-            enr.status = "removed"
+            enr.status = EnrollmentStatus.REMOVED
             enr.removed_at = now
-            await enr.save()
+            await enr.save()  # type: ignore[misc]
 
-    await team.delete()
+    await team.delete()  # type: ignore[misc]
     
     return None

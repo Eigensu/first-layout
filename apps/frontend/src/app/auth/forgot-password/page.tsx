@@ -25,13 +25,13 @@ export default function ForgotPasswordRequestPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone }),
-        }
+        },
       );
       // Always generic
       if (!res.ok) {
         // Still proceed to verify to avoid enumeration UX differences
       }
-      setMessage("If the phone exists, an OTP has been sent.");
+      setMessage("If the phone exists, you will receive a call with the OTP.");
       const params = new URLSearchParams({ phone });
       router.push(`/auth/forgot-password/verify?${params.toString()}`);
     } catch (err: any) {
@@ -90,7 +90,7 @@ export default function ForgotPasswordRequestPage() {
             className="w-full bg-gradient-primary text-white font-semibold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
             disabled={loading}
           >
-            {loading ? "Sending..." : "Send OTP"}
+            {loading ? "Requesting Call..." : "Get OTP via Call"}
           </Button>
         </form>
       </div>
