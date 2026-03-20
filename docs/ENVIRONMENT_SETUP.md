@@ -104,6 +104,13 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 # API Configuration
 API_HOST=0.0.0.0
 API_PORT=8000
+
+# Cloudinary (media uploads)
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+CLOUDINARY_SECURE=true
+CLOUDINARY_DEFAULT_FOLDER=walle
 ```
 
 ### Optional External Services
@@ -111,6 +118,19 @@ API_PORT=8000
 ```bash
 REDIS_URL=
 CRICKET_API_KEY=
+```
+
+### Cloudinary (required for sponsor logo uploads)
+
+```bash
+# Create a free account at https://cloudinary.com and copy these from Dashboard
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+
+# Optional
+CLOUDINARY_SECURE=true
+CLOUDINARY_DEFAULT_FOLDER=walle
 ```
 
 ## How It Works

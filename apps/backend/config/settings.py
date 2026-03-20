@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     cricket_api_key: Optional[str] = Field(default=None, alias="CRICKET_API_KEY")
     payment_gateway_key: Optional[str] = Field(default=None, alias="PAYMENT_GATEWAY_KEY")
     email_service_key: Optional[str] = Field(default=None, alias="EMAIL_SERVICE_KEY")
+
+    # Cloudinary
+    cloudinary_cloud_name: Optional[str] = Field(default=None, alias="CLOUDINARY_CLOUD_NAME")
+    cloudinary_api_key: Optional[str] = Field(default=None, alias="CLOUDINARY_API_KEY")
+    cloudinary_api_secret: Optional[str] = Field(default=None, alias="CLOUDINARY_API_SECRET")
+    cloudinary_secure: bool = Field(default=True, alias="CLOUDINARY_SECURE")
+    cloudinary_default_folder: str = Field(default="walle", alias="CLOUDINARY_DEFAULT_FOLDER")
     
      # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")

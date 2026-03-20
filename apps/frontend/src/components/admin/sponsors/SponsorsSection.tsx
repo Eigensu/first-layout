@@ -33,6 +33,8 @@ export function SponsorsSection() {
     editError,
     editForm,
     setEditForm,
+    editLogoFile,
+    setEditLogoFile,
     openEdit,
     handleUpdate,
     // delete
@@ -98,7 +100,7 @@ export function SponsorsSection() {
       {/* Add Sponsor Modal */}
       {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 max-h-[85vh] flex flex-col">
+          <div className="bg-white text-gray-900 rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">Add Sponsor</h3>
               <button
@@ -192,6 +194,24 @@ export function SponsorsSection() {
                     rows={3}
                     placeholder="Short description..."
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Upload New Logo (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setEditLogoFile(e.target.files?.[0] ?? null)
+                    }
+                    className="w-full"
+                  />
+                  {editLogoFile && (
+                    <p className="mt-1 text-xs text-gray-600">
+                      Selected: {editLogoFile.name}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-6">
                   <label className="inline-flex items-center gap-2 text-sm">
@@ -372,7 +392,7 @@ export function SponsorsSection() {
       {/* Edit Sponsor Modal */}
       {isEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 max-h-[85vh] flex flex-col">
+          <div className="bg-white text-gray-900 rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">Edit Sponsor</h3>
               <button
@@ -797,7 +817,7 @@ export function SponsorsSection() {
       {/* Delete Confirmation Modal */}
       {isDeleteOpen && toDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
+          <div className="bg-white text-gray-900 rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">Delete Sponsor</h3>
               <button

@@ -90,18 +90,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
 
   const visibleItems = React.useMemo(() => {
     if (isAuthenticated) {
-      const hasDashboard = items.some((it) => it.id === "dashboard");
-      if (hasDashboard) return items;
-
-      return [
-        {
-          id: "dashboard",
-          label: "Dashboard",
-          href: "/dashboard",
-          icon: <LayoutDashboard className="w-4 h-4" />,
-        },
-        ...items,
-      ];
+      return items;
     }
     const allow = new Set(["home", "leaderboard", "about"]);
     return items.filter((it) => allow.has(it.id));

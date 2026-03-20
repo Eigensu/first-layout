@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Response
+from fastapi.responses import RedirectResponse
 from typing import Optional
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
@@ -15,10 +16,10 @@ from app.schemas.sponsor import (
 )
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import (
-    upload_sponsor_logo_to_gridfs,
     open_sponsor_logo_stream,
     delete_sponsor_logo_from_gridfs,
 )
+from app.utils.cloudinary import upload_image, delete_image
 
 router = APIRouter(prefix="/api/v1/sponsors", tags=["sponsors"])
 
@@ -293,9 +294,11 @@ async def delete_sponsor(
             detail="Sponsor not found"
         )
     
-    # Try to delete logo from GridFS if it exists
+    # Try to delete logo from the storage provider used for this sponsor.
     if sponsor.logo_file_id:
         await delete_sponsor_logo_from_gridfs(sponsor.logo_file_id)
+    if sponsor.logo_public_id:
+        await delete_image(sponsor.logo_public_id)
     
     await sponsor.delete()
     return None
@@ -324,20 +327,28 @@ async def upload_sponsor_logo(
             detail="Sponsor not found"
         )
     
-    # Delete old logo if it exists in GridFS
+    # Delete previous logo if it exists in either storage backend.
     if sponsor.logo_file_id:
         await delete_sponsor_logo_from_gridfs(sponsor.logo_file_id)
+    if sponsor.logo_public_id:
+        await delete_image(sponsor.logo_public_id)
     
-    # Save new logo to GridFS
+    # Save new logo to Cloudinary.
     try:
-        file_id = await upload_sponsor_logo_to_gridfs(file, filename_prefix=f"sponsor_{sponsor_id}")
-        # Update sponsor with API URL and file id
-        sponsor.logo_file_id = file_id
-        sponsor.logo = f"/api/v1/sponsors/{sponsor_id}/logo"
+        upload_result = await upload_image(
+            file,
+            folder="sponsors",
+            public_id_prefix=f"sponsor_{sponsor_id}",
+        )
+        uploaded_logo_url = str(upload_result["secure_url"])
+        sponsor.logo = uploaded_logo_url
+        sponsor.logo_public_id = upload_result["public_id"]
+        # Keep this null to indicate the asset is no longer stored in GridFS.
+        sponsor.logo_file_id = None
         sponsor.updated_at = datetime.utcnow()
         await sponsor.save()
         return UploadResponse(
-            url=sponsor.logo,
+            url=uploaded_logo_url,
             message="Logo uploaded successfully"
         )
     except HTTPException:
@@ -352,8 +363,16 @@ async def upload_sponsor_logo(
 @router.get("/{sponsor_id}/logo")
 async def get_sponsor_logo(sponsor_id: str):
     sponsor = await Sponsor.get(sponsor_id)
-    if not sponsor or not sponsor.logo_file_id:
+    if not sponsor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+
+    # New logos are stored on Cloudinary and served via direct URL.
+    if sponsor.logo_public_id and sponsor.logo:
+        return RedirectResponse(url=sponsor.logo)
+
+    if not sponsor.logo_file_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+
     stream, content_type = await open_sponsor_logo_stream(sponsor.logo_file_id)
     data = await stream.read()
     return Response(content=data, media_type=content_type)

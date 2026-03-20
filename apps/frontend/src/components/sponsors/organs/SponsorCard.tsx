@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { ExternalLink, Award } from "lucide-react";
-import Image from "next/image";
 import { getSponsorLogo } from "@/components/sponsors/assets";
 import { useState } from "react";
 
@@ -32,8 +31,11 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
     name: sponsor.name,
     description: sponsor.description,
   });
-  const displayLogo = localLogo ?? sponsor.logo;
-  const [imgSrc, setImgSrc] = useState(displayLogo);
+  const primaryLogo = sponsor.logo?.trim() || localLogo || "";
+  const fallbackLogo =
+    localLogo && localLogo !== primaryLogo ? localLogo : undefined;
+  const [imgSrc, setImgSrc] = useState(primaryLogo);
+  const [imageFailed, setImageFailed] = useState(!primaryLogo);
 
   return (
     <motion.div
@@ -61,18 +63,29 @@ export function SponsorCard({ sponsor, featured = false }: SponsorCardProps) {
       <div
         className={`relative h-48 ${cardTheme.bg} flex items-center justify-center p-8`}
       >
-        <div className="relative w-full h-full">
-          <Image
-            src={imgSrc}
-            alt={`${sponsor.name} logo`}
-            fill
-            className="object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            onError={() => {
-              if (imgSrc !== sponsor.logo) setImgSrc(sponsor.logo);
-            }}
-          />
-        </div>
+        {imageFailed ? (
+          <div className="flex h-full w-full items-center justify-center rounded-xl border border-border-subtle bg-bg-card-soft text-3xl font-bold text-text-main/80">
+            {(sponsor.name || "?").slice(0, 2).toUpperCase()}
+          </div>
+        ) : (
+          <div className="relative w-full h-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imgSrc}
+              alt={`${sponsor.name} logo`}
+              className="h-full w-full object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => {
+                if (fallbackLogo && imgSrc !== fallbackLogo) {
+                  setImgSrc(fallbackLogo);
+                  return;
+                }
+                setImageFailed(true);
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Content */}

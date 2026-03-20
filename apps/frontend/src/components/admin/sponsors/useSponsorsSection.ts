@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Sponsor } from "@/types/sponsor";
 import { getSponsors } from "@/lib/api/sponsors";
+import { getErrorMessage } from "@/lib/api/client";
 import {
   createSponsor,
   uploadSponsorLogo,
@@ -53,6 +54,7 @@ export function useSponsorsSection() {
     active: boolean;
     priority: number;
   }>({ name: "", description: "", featured: false, active: true, priority: 1 });
+  const [editLogoFile, setEditLogoFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -62,8 +64,8 @@ export function useSponsorsSection() {
       setLoading(true);
       const data = await getSponsors({ active: true });
       setSponsors(data);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load sponsors");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -76,8 +78,8 @@ export function useSponsorsSection() {
         setLoading(true);
         const data = await getSponsors({ active: true });
         if (mounted) setSponsors(data);
-      } catch (e: any) {
-        if (mounted) setError(e?.message ?? "Failed to load sponsors");
+      } catch (e: unknown) {
+        if (mounted) setError(getErrorMessage(e));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -93,8 +95,8 @@ export function useSponsorsSection() {
     try {
       await deleteSponsor(id);
       await fetchSponsors();
-    } catch (e: any) {
-      setDeleteError(e?.message ?? "Failed to delete sponsor");
+    } catch (e: unknown) {
+      setDeleteError(getErrorMessage(e));
     } finally {
       setDeletingId(null);
     }
@@ -102,6 +104,7 @@ export function useSponsorsSection() {
 
   const openEdit = (s: Sponsor) => {
     setEditError(null);
+    setEditLogoFile(null);
     setEditingId(s.id);
     setEditForm({
       name: s.name ?? "",
@@ -125,10 +128,14 @@ export function useSponsorsSection() {
         active: editForm.active,
         priority: Number(editForm.priority) || undefined,
       });
+      if (editLogoFile) {
+        await uploadSponsorLogo(editingId, editLogoFile);
+      }
       await fetchSponsors();
+      setEditLogoFile(null);
       setIsEditOpen(false);
-    } catch (e: any) {
-      setEditError(e?.message ?? "Failed to update sponsor");
+    } catch (e: unknown) {
+      setEditError(getErrorMessage(e));
     } finally {
       setEditing(false);
     }
@@ -167,6 +174,10 @@ export function useSponsorsSection() {
     setCreateError(null);
     setCreating(true);
     try {
+      if (!logoFile && !form.logo.trim()) {
+        throw new Error("Please provide a logo URL or upload a logo image.");
+      }
+
       const created = await createSponsor({
         name: form.name.trim(),
         logo: form.logo.trim() || "pending",
@@ -178,13 +189,22 @@ export function useSponsorsSection() {
         priority: Number(form.priority) || undefined,
       });
       if (logoFile) {
-        await uploadSponsorLogo(created.id, logoFile);
+        try {
+          await uploadSponsorLogo(created.id, logoFile);
+        } catch (uploadErr: unknown) {
+          try {
+            await deleteSponsor(created.id);
+          } catch {
+            // Best-effort cleanup only.
+          }
+          throw new Error(getErrorMessage(uploadErr));
+        }
       }
       await fetchSponsors();
       setIsAddOpen(false);
       resetForm();
-    } catch (err: any) {
-      setCreateError(err?.message || "Failed to create sponsor");
+    } catch (err: unknown) {
+      setCreateError(getErrorMessage(err));
     } finally {
       setCreating(false);
     }
@@ -245,6 +265,7 @@ export function useSponsorsSection() {
     editing,
     editError,
     editForm,
+    editLogoFile,
     editingId,
     deletingId,
     deleteError,
@@ -258,6 +279,7 @@ export function useSponsorsSection() {
     setLogoFile,
     setIsEditOpen,
     setEditForm,
+    setEditLogoFile,
     setPriorityTouched,
     // actions
     handleCreate,
