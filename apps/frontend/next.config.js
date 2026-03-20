@@ -42,6 +42,18 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "api-lpcl.wallearena.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "walle-third.eigensu.in",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "mscsuper.blr1.digitaloceanspaces.com",
         port: "",
         pathname: "/**",
