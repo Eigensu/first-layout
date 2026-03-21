@@ -21,7 +21,6 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
   disabled = false,
   variant = "default",
 }) => {
-  // Visual accent based on team initial; simple deterministic color
   const getAvatarGradient = () => undefined;
 
   if (compact) {
