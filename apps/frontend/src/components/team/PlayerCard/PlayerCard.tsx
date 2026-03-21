@@ -28,7 +28,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     return (
       <div
         className={`
-          flex items-center gap-2 sm:gap-3 p-2 sm:p-4 rounded-xl border-2 transition-all
+          flex items-center gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border-2 transition-all
           ${
             disabled && !isSelected
               ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
@@ -50,13 +50,15 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
         {/* Player Info */}
         <div className="flex-1 min-w-0">
-          <h4
-            className={`font-semibold text-xs sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
-          >
-            {player.name}
-          </h4>
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-0 sm:mt-1">
-            <span className="text-[10px] sm:text-xs text-gray-500 flex items-center gap-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <h4
+              className={`font-semibold text-xs sm:text-sm truncate ${isSelected ? "text-white" : "text-gray-900"}`}
+            >
+              {player.name}
+            </h4>
+            <span
+              className={`shrink-0 text-[10px] sm:text-xs ${isSelected ? "text-white/80" : "text-gray-500"} flex items-center gap-1`}
+            >
               <svg
                 className="w-3 h-3"
                 fill="none"
