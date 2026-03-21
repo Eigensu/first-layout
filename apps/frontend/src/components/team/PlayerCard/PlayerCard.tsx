@@ -50,9 +50,15 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
         {/* Player Info */}
         <div className="flex-1 min-w-0">
-          <h4
-            className={`font-semibold text-xs sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-0 sm:mt-1">
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <h4
+              className={`font-semibold text-xs sm:text-sm truncate ${isSelected ? "text-white" : "text-gray-900"}`}
+            >
+              {player.name}
+            </h4>
+            <span
+              className={`shrink-0 text-[9px] sm:text-[11px] leading-none ${isSelected ? "text-white/75" : "text-gray-500"} flex items-center gap-1`}
+            >
               <svg
                 className="w-2.5 h-2.5 sm:w-3 sm:h-3"
                 fill="none"
@@ -131,14 +137,22 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
       <div className={`p-3 ${variant === "captain" ? "sm:p-3" : "sm:p-4"}`}>
         {/* Player Header */}
         <div
+          className={`flex items-center justify-between ${variant === "captain" ? "mb-2" : "mb-3 sm:mb-4"}`}
+        >
+          <div className="flex items-center space-x-2 sm:space-x-3">
             <Avatar
+              name={player.name}
               src={player.image}
               size={variant === "captain" ? "lg" : "md"}
               gradientClassName={getAvatarGradient()}
             />
 
             <div>
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <h4
+                  className={`font-semibold ${variant === "captain" ? "text-sm sm:text-base" : "text-sm sm:text-base"} ${isSelected ? "text-white" : "text-gray-900"} truncate`}
                 >
+                  {player.name}
                 </h4>
                 {isCaptain && (
                   <Badge
