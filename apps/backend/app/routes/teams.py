@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List, Dict
+from typing import List, Dict, Optional
 from beanie import PydanticObjectId
 from datetime import datetime
 
@@ -19,6 +19,14 @@ from app.utils.timezone import now_ist
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
+async def _get_dynamic_max_players_from_slots() -> Optional[int]:
+    """Compute maximum team size from slot configuration using total min_select."""
+    slots = await Slot.find_all().to_list()
+    if not slots:
+        return None
+    return sum(max(0, slot.min_select) for slot in slots)
+
+
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 async def create_team(
     team_data: TeamCreate,
@@ -28,6 +36,13 @@ async def create_team(
     Create a new fantasy team for the current user
     """
     # Validate that captain and vice-captain are in the player list
+    max_players_allowed = await _get_dynamic_max_players_from_slots()
+    if max_players_allowed is not None and len(team_data.player_ids) > max_players_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {max_players_allowed} players allowed",
+        )
+
     if team_data.captain_id not in team_data.player_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -341,6 +356,13 @@ async def update_team(
             
             # Recalculate total value and validate per-slot constraints if player_ids changed
             if "player_ids" in update_data:
+                max_players_allowed = await _get_dynamic_max_players_from_slots()
+                if max_players_allowed is not None and len(player_ids) > max_players_allowed:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Maximum {max_players_allowed} players allowed",
+                    )
+
                 # Convert string IDs to PydanticObjectId
                 player_object_ids = []
                 for pid in player_ids:
