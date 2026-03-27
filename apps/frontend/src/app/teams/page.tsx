@@ -20,11 +20,13 @@ import {
   type Contest as PublicContest,
   type ContestTeamResponse,
 } from "@/lib/api/public/contests";
+import { fetchSlots, type ApiSlot } from "@/lib/api/public/slots";
 import { ReplacePlayerModal } from "@/components/team/Edit/ReplacePlayerModal";
 // Team viewer components
 import { ActionModal } from "@teamviewer/molecules/ActionModal";
 import { HeroHeader } from "@teamviewer/molecules/HeroHeader";
 import { TeamViewer } from "@teamviewer/organisms/TeamViewer";
+import { EditPlayersModal } from "@teamviewer/organisms/EditPlayersModal";
 import type { TeamViewMode } from "@teamviewer/types";
 
 type ApiPlayer = {
@@ -33,7 +35,7 @@ type ApiPlayer = {
   team?: string;
   role?: string;
   price: number;
-  slot: number;
+  slot: string | null;
   points?: number;
   image_url?: string | null;
 };
@@ -62,6 +64,10 @@ export default function TeamsPage() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [updatingTeamId, setUpdatingTeamId] = useState<string | null>(null);
+  // Edit squad (live contests)
+  const [editPlayersTeamId, setEditPlayersTeamId] = useState<string | null>(null);
+  const [savingPlayers, setSavingPlayers] = useState(false);
+  const [slots, setSlots] = useState<ApiSlot[]>([]);
   // Contests state for join action
   const [contests, setContests] = useState<PublicContest[]>([]);
   const [loadingContests, setLoadingContests] = useState(false);
@@ -98,51 +104,54 @@ export default function TeamsPage() {
   const [contestDataByTeam, setContestDataByTeam] = useState<
     Record<string, ContestTeamResponse>
   >({});
+  // Contest status per team (derived)
+  const [contestStatusByTeam, setContestStatusByTeam] = useState<Record<string, string>>({});
+
 
   // When navigating from a contest (with contest_id in URL), only show teams enrolled in that contest
   const visibleTeams = contestIdParam
     ? teams.filter((t) => enrollmentByTeam[t.id]?.contestId === contestIdParam)
     : teams;
 
-  const normalizeRole = (role: string): string => {
-    const r = role.toLowerCase();
-    if (r === "batsman" || r === "batsmen") return "Batsman";
-    if (r === "bowler") return "Bowler";
-    if (r === "all-rounder" || r === "allrounder") return "All-Rounder";
-    if (r === "wicket-keeper" || r === "wicketkeeper") return "Wicket-Keeper";
-    return role;
-  };
-
   const roleToSlotLabel = (role: string): string => {
-    const r = normalizeRole(role);
-    if (r === "Batsman") return "Slot 1";
-    if (r === "Bowler") return "Slot 2";
-    if (r === "All-Rounder") return "Slot 3";
-    if (r === "Wicket-Keeper") return "Slot 4";
-    return r;
+    return role ? role.toUpperCase() : "PLAYER";
   };
 
-  const slotToRole = (slot: number): string => {
-    if (slot === 1) return "Batsman";
-    if (slot === 2) return "Bowler";
-    if (slot === 3) return "All-Rounder";
-    if (slot === 4) return "Wicket-Keeper";
-    return "Batsman";
+  const slotToRole = (slotId: string | null, availableSlots: ApiSlot[]): string => {
+    if (!slotId) return "Player";
+    const slot = availableSlots.find(s => s.id === slotId);
+    if (slot) return slot.name;
+    // Fallbacks if slots aren't loaded yet
+    return "Player";
   };
 
   const getRoleAvatarGradient = (role: string) => {
     const r = role.toLowerCase();
-    if (r === "batsman" || r === "batsmen")
+    if (r.includes("batsman") || r.includes("batsmen"))
       return "bg-gradient-to-br from-amber-400 to-yellow-600";
-    if (r === "bowler") return "bg-gradient-to-br from-blue-500 to-indigo-600";
-    if (r === "all-rounder" || r === "allrounder")
+    if (r.includes("bowler")) return "bg-gradient-to-br from-blue-500 to-indigo-600";
+    if (r.includes("all-rounder") || r.includes("allrounder"))
       return "bg-gradient-to-br from-emerald-400 to-teal-600";
-    if (r === "wicket-keeper" || r === "wicketkeeper")
+    if (r.includes("wicket-keeper") || r.includes("wicketkeeper") || r.includes("wk"))
       return "bg-gradient-to-br from-purple-500 to-pink-600";
-    return undefined;
+    // Fallback gradient
+    return "bg-gradient-to-br from-gray-500 to-slate-600";
   };
 
-  // Fetch players (respect contest_id to filter allowed teams for daily contests)
+  // Fetch slots
+  useEffect(() => {
+    fetchSlots()
+      .then(setSlots)
+      .catch((err) => {
+        console.error("Failed to load slots:", err);
+        // Keep a safe default so dependent logic can still proceed.
+        setSlots([]);
+      });
+  }, []);
+
+  const totalMaxSelected = slots.reduce((acc, s) => acc + (s.max_select || 0), 0) || 16;
+  const slotLimits = slots.reduce((acc, s) => ({ ...acc, [s.id]: s.max_select || 4 }), {} as Record<string, number>);
+
   useEffect(() => {
     const fetchPlayers = async () => {
       try {
@@ -154,8 +163,9 @@ export default function TeamsPage() {
         const data: ApiPlayer[] = await res.json();
         const mapped: Player[] = data.map((p) => ({
           ...p,
-          role: slotToRole(p.slot),
+          role: slotToRole(p.slot, slots),
           image: p.image_url || undefined,
+          slot: p.slot || null,
           stats: { matches: 0 },
         }));
         setPlayers(mapped);
@@ -164,8 +174,9 @@ export default function TeamsPage() {
       }
     };
 
+    // Always fetch players. If slots are unavailable/empty, slotToRole falls back to "Player".
     fetchPlayers();
-  }, [contestIdParam]);
+  }, [contestIdParam, slots]);
 
   // Load per-team enrollments and resolve contest names
   useEffect(() => {
@@ -282,6 +293,16 @@ export default function TeamsPage() {
       mounted = false;
     };
   }, [contestIdParam, teams, enrollmentByTeam]);
+
+  // Derive contest status per team whenever enrollments or contests change
+  useEffect(() => {
+    const map: Record<string, string> = {};
+    for (const [teamId, { contestId }] of Object.entries(enrollmentByTeam)) {
+      const contest = contests.find((c) => c.id === contestId);
+      if (contest) map[teamId] = contest.status;
+    }
+    setContestStatusByTeam(map);
+  }, [enrollmentByTeam, contests]);
 
   // Fetch public contests (open ones)
   useEffect(() => {
@@ -515,6 +536,33 @@ export default function TeamsPage() {
     setShowReplaceModal(true);
   };
 
+  // ── Edit squad (player add/remove + C/VC change) ────────────────────────────
+  const handleSavePlayers = async (payload: {
+    player_ids: string[];
+    captain_id: string;
+    vice_captain_id: string;
+  }) => {
+    if (!editPlayersTeamId) return;
+    try {
+      setSavingPlayers(true);
+      const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
+      if (!token) {
+        showAlert(
+          "Your session has expired. Please log in again to save squad changes.",
+          "Not authenticated",
+        );
+        return;
+      }
+      const updated = await updateTeam(editPlayersTeamId, payload, token);
+      setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setEditPlayersTeamId(null);
+    } catch (e: any) {
+      showAlert(e?.message || "Failed to save squad changes", "Save failed");
+    } finally {
+      setSavingPlayers(false);
+    }
+  };
+
   const confirmReplace = async (newPlayerId: string) => {
     if (!actionTeamId || !actionPlayerId) return;
     const team = teams.find((t) => t.id === actionTeamId);
@@ -667,8 +715,8 @@ export default function TeamsPage() {
                   onOpenPlayerActions={(pid: string) =>
                     openPlayerActions(team.id, pid)
                   }
-                  roleToSlotLabel={roleToSlotLabel}
-                  getRoleAvatarGradient={getRoleAvatarGradient}
+                  contestStatus={contestStatusByTeam[team.id]}
+                  onEditPlayers={() => setEditPlayersTeamId(team.id)}
                   initialView="list"
                 />
               ))}
@@ -684,6 +732,35 @@ export default function TeamsPage() {
         onMakeViceCaptain={doMakeViceCaptain}
         saving={updatingTeamId === actionTeamId}
       />
+
+      {/* Edit Squad Modal (live contests only) */}
+      {editPlayersTeamId && (() => {
+        const et = teams.find((t) => t.id === editPlayersTeamId);
+        if (!et) return null;
+        return (
+          <EditPlayersModal
+            isOpen={!!editPlayersTeamId}
+            onClose={() => setEditPlayersTeamId(null)}
+            teamName={et.team_name}
+            currentPlayerIds={et.player_ids}
+            captainId={et.captain_id}
+            viceCaptainId={et.vice_captain_id}
+            allPlayers={players.map((p) => ({
+              id: p.id,
+              name: p.name,
+              team: p.team,
+              role: p.role,
+              image: p.image,
+              points: p.points,
+              slot: p.slot || undefined,
+            }))}
+            requiredCount={totalMaxSelected}
+            slotLimits={slotLimits}
+            saving={savingPlayers}
+            onSave={handleSavePlayers}
+          />
+        );
+      })()}
 
       {/* Replace Modal (shows all players + search) */}
       <ReplacePlayerModal
