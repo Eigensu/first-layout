@@ -21,14 +21,13 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
   disabled = false,
   variant = "default",
 }) => {
-  // Visual accent based on team initial; simple deterministic color
   const getAvatarGradient = () => undefined;
 
   if (compact) {
     return (
       <div
         className={`
-          flex items-center gap-2 sm:gap-3 p-2 sm:p-4 rounded-xl border-2 transition-all
+          flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg border-2 transition-all
           ${
             disabled && !isSelected
               ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
@@ -50,15 +49,17 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
         {/* Player Info */}
         <div className="flex-1 min-w-0">
-          <h4
-            className={`font-semibold text-xs sm:text-base truncate ${isSelected ? "text-white" : "text-gray-900"}`}
-          >
-            {player.name}
-          </h4>
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-0 sm:mt-1">
-            <span className="text-[10px] sm:text-xs text-gray-500 flex items-center gap-1">
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <h4
+              className={`font-semibold text-xs sm:text-sm truncate ${isSelected ? "text-white" : "text-gray-900"}`}
+            >
+              {player.name}
+            </h4>
+            <span
+              className={`shrink-0 text-[9px] sm:text-[11px] leading-none ${isSelected ? "text-white/75" : "text-gray-500"} flex items-center gap-1`}
+            >
               <svg
-                className="w-3 h-3"
+                className="w-2.5 h-2.5 sm:w-3 sm:h-3"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -91,10 +92,10 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
 
         {/* Right Side: Score and Checkbox */}
-        <div className="flex flex-col items-end gap-0.5 sm:gap-1">
+        <div className="flex flex-col items-end gap-0.5">
           <div
             className={`
-              w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex items-center justify-center transition-all
+              w-4 h-4 sm:w-[18px] sm:h-[18px] rounded-full border-2 flex items-center justify-center transition-all
               ${isSelected ? "bg-primary-500 border-primary-500 scale-110" : "border-gray-300"}
             `}
           >
