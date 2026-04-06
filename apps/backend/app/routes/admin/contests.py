@@ -225,6 +225,15 @@ async def enroll_teams(
             # skip duplicates silently
             continue
 
+        existing_for_user = await TeamContestEnrollment.find_one(
+            (TeamContestEnrollment.user_id == team.user_id)
+            & (TeamContestEnrollment.contest_id == contest.id)
+            & (TeamContestEnrollment.status == EnrollmentStatus.ACTIVE)
+        )
+        if existing_for_user:
+            # one active team per user per contest
+            continue
+
         enr = TeamContestEnrollment(
             team_id=team.id,
             user_id=team.user_id,

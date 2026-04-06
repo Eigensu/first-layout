@@ -139,7 +139,7 @@ async def create_team(
         # Prevent joining an ongoing contest.
         computed_status = compute_contest_status(contest)
         if computed_status == ContestStatus.ONGOING:
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot create a team for an ongoing contest.",
             )
@@ -162,6 +162,16 @@ async def create_team(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user is invalid"
         )
+
+    if team_data.contest_id:
+        existing_contest_team = await Team.find_one(
+            (Team.user_id == user_id) & (Team.contest_id == team_data.contest_id)
+        )
+        if existing_contest_team:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You can create only one team per contest"
+            )
 
     # Create team document
     team = Team(

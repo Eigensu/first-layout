@@ -339,6 +339,9 @@ async def enroll_in_contest(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
+    if str(team.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="You can only enroll your own team")
+
     # Only allow non-owners to view when contest is ONGOING
     computed_status = compute_contest_status(contest)
     is_owner = current_user is not None and str(team.user_id) == str(current_user.id)
@@ -378,6 +381,17 @@ async def enroll_in_contest(
             status=existing.status,
             enrolled_at=existing.enrolled_at,
             removed_at=existing.removed_at,
+        )
+
+    existing_user_enrollment = await TeamContestEnrollment.find_one({
+        "user_id": current_user.id,
+        "contest_id": contest.id,
+        "status": EnrollmentStatus.ACTIVE,
+    })
+    if existing_user_enrollment:
+        raise HTTPException(
+            status_code=409,
+            detail="You can enroll only one team in this contest",
         )
 
     # Create enrollment without baseline fields (points will be contest-scoped)
