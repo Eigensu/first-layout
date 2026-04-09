@@ -9,9 +9,10 @@ export function extractErrorMessage(detail: any, defaultMessage: string = "An er
   if (typeof detail === "string") return detail;
 
   // Handle custom per-slot validation errors
-  if (detail.message && Array.isArray(detail.violations)) {
+  if (typeof detail.message === "string" && Array.isArray(detail.violations)) {
     const lines = [detail.message];
     detail.violations.forEach((v: any) => {
+      if (!v || typeof v !== "object") return;
       const name = v.slot?.name || "Slot";
       const actual = v.actual ?? 0;
       const min = v.expected?.min_select ?? 0;

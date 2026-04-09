@@ -91,7 +91,11 @@ function PlayerRow({
         >
           {player.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={player.image} alt={player.name} className="w-full h-full object-cover" />
+            <img
+              src={player.image}
+              alt={player.name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             getInitials(player.name)
           )}
@@ -99,7 +103,9 @@ function PlayerRow({
         {(isCaptain || isViceCaptain) && (
           <span
             className={`absolute -top-1 -right-1 w-4 h-4 rounded-full text-[7px] font-extrabold flex items-center justify-center ring-1 ring-bg-card ${
-              isCaptain ? "bg-amber-400 text-amber-900" : "bg-purple-400 text-purple-900"
+              isCaptain
+                ? "bg-amber-400 text-amber-900"
+                : "bg-purple-400 text-purple-900"
             }`}
           >
             {isCaptain ? "C" : "VC"}
@@ -109,7 +115,9 @@ function PlayerRow({
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text-main truncate">{player.name}</p>
+        <p className="text-sm font-medium text-text-main truncate">
+          {player.name}
+        </p>
         <p className="text-[11px] text-text-muted truncate">{player.team}</p>
       </div>
 
@@ -149,8 +157,8 @@ function PlayerRow({
           selected
             ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
             : disableAdd
-            ? "bg-white/5 text-white/20 cursor-not-allowed"
-            : "bg-primary-600/20 text-primary-300 hover:bg-primary-600/30"
+              ? "bg-white/5 text-white/20 cursor-not-allowed"
+              : "bg-primary-600/20 text-primary-300 hover:bg-primary-600/30"
         }`}
         title={selected ? "Remove from squad" : disableReason}
       >
@@ -174,9 +182,13 @@ export function EditPlayersModal({
   saving,
   onSave,
 }: EditPlayersModalProps) {
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => [...currentPlayerIds]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => [
+    ...currentPlayerIds,
+  ]);
   const [captainId, setCaptainId] = useState<string>(initialCaptainId || "");
-  const [viceCaptainId, setViceCaptainId] = useState<string>(initialViceCaptainId || "");
+  const [viceCaptainId, setViceCaptainId] = useState<string>(
+    initialViceCaptainId || "",
+  );
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"squad" | "available">("squad");
 
@@ -200,7 +212,11 @@ export function EditPlayersModal({
     return map;
   }, [allPlayers]);
   const count = selectedIds.length;
-  const isValid = count === requiredCount && captainId && viceCaptainId && captainId !== viceCaptainId;
+  const isValid =
+    count === requiredCount &&
+    captainId &&
+    viceCaptainId &&
+    captainId !== viceCaptainId;
 
   const selectedCountBySlot = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -222,9 +238,13 @@ export function EditPlayersModal({
       }
       const player = playerById[id];
       const sid = String(player?.slot || "");
-      const currentSlotCount = selectedCountBySlot[sid] || 0;
+      const currentSlotCount = prev.reduce((count, selectedId) => {
+        const selectedPlayer = playerById[selectedId];
+        return String(selectedPlayer?.slot || "") === sid ? count + 1 : count;
+      }, 0);
       const limit = slotLimits[sid] || 4;
-      if (prev.length >= requiredCount || currentSlotCount >= limit) return prev;
+      if (prev.length >= requiredCount || currentSlotCount >= limit)
+        return prev;
       return [...prev, id];
     });
   };
@@ -241,8 +261,22 @@ export function EditPlayersModal({
 
   // Filtered players
   const q = query.toLowerCase();
-  const squadPlayers = allPlayers.filter((p) => selectedSet.has(p.id) && (q ? p.name.toLowerCase().includes(q) || (p.team || "").toLowerCase().includes(q) : true));
-  const availablePlayers = allPlayers.filter((p) => !selectedSet.has(p.id) && (q ? p.name.toLowerCase().includes(q) || (p.team || "").toLowerCase().includes(q) : true));
+  const squadPlayers = allPlayers.filter(
+    (p) =>
+      selectedSet.has(p.id) &&
+      (q
+        ? p.name.toLowerCase().includes(q) ||
+          (p.team || "").toLowerCase().includes(q)
+        : true),
+  );
+  const availablePlayers = allPlayers.filter(
+    (p) =>
+      !selectedSet.has(p.id) &&
+      (q
+        ? p.name.toLowerCase().includes(q) ||
+          (p.team || "").toLowerCase().includes(q)
+        : true),
+  );
 
   const displayed = tab === "squad" ? squadPlayers : availablePlayers;
 
@@ -252,8 +286,8 @@ export function EditPlayersModal({
     count === requiredCount
       ? "text-emerald-400"
       : count > requiredCount
-      ? "text-red-400"
-      : "text-amber-400";
+        ? "text-red-400"
+        : "text-amber-400";
 
   return (
     <>
@@ -291,7 +325,9 @@ export function EditPlayersModal({
             {/* Counter */}
             <span className={`text-sm font-bold tabular-nums ${counterColor}`}>
               {count}
-              <span className="text-white/30 font-normal">/{requiredCount}</span>
+              <span className="text-white/30 font-normal">
+                /{requiredCount}
+              </span>
             </span>
             <button
               onClick={onClose}
@@ -308,8 +344,8 @@ export function EditPlayersModal({
             {!captainId && !viceCaptainId
               ? "Tap a player to assign Captain and Vice-Captain."
               : !captainId
-              ? "Please assign a Captain."
-              : "Please assign a Vice-Captain."}
+                ? "Please assign a Captain."
+                : "Please assign a Vice-Captain."}
           </div>
         )}
         {captainId && viceCaptainId && captainId === viceCaptainId && (
@@ -330,7 +366,9 @@ export function EditPlayersModal({
                   : "text-white/40 hover:text-white/70"
               }`}
             >
-              {t === "squad" ? `My Squad (${count})` : `Available (${availablePlayers.length})`}
+              {t === "squad"
+                ? `My Squad (${count})`
+                : `Available (${availablePlayers.length})`}
             </button>
           ))}
         </div>
@@ -350,7 +388,9 @@ export function EditPlayersModal({
         {/* Player list */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
           {displayed.length === 0 && (
-            <p className="text-center text-white/30 text-sm py-6">No players found.</p>
+            <p className="text-center text-white/30 text-sm py-6">
+              No players found.
+            </p>
           )}
           {displayed.map((p) => {
             const sid = String(p.slot || "");
@@ -361,8 +401,8 @@ export function EditPlayersModal({
             const disableReason = isTotalFull
               ? `Squad is full (${requiredCount} players)`
               : isSlotFull
-              ? `Slot is full (max ${limit})`
-              : "Add to squad";
+                ? `Slot is full (max ${limit})`
+                : "Add to squad";
 
             return (
               <PlayerRow
@@ -374,7 +414,9 @@ export function EditPlayersModal({
                 onToggle={() => toggle(p.id)}
                 onMakeCaptain={() => makeCaptain(p.id)}
                 onMakeViceCaptain={() => makeViceCaptain(p.id)}
-                disableAdd={!selectedSet.has(p.id) && (isTotalFull || isSlotFull)}
+                disableAdd={
+                  !selectedSet.has(p.id) && (isTotalFull || isSlotFull)
+                }
                 disableReason={disableReason}
               />
             );
@@ -386,7 +428,11 @@ export function EditPlayersModal({
           <button
             onClick={() => {
               if (!isValid) return;
-              onSave({ player_ids: selectedIds, captain_id: captainId, vice_captain_id: viceCaptainId });
+              onSave({
+                player_ids: selectedIds,
+                captain_id: captainId,
+                vice_captain_id: viceCaptainId,
+              });
             }}
             disabled={!isValid || saving}
             className="w-full py-3 rounded-xl bg-gradient-brand text-white text-sm font-bold shadow-lg shadow-primary-900/40 hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
