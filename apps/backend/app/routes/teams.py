@@ -165,7 +165,8 @@ async def create_team(
 
     if team_data.contest_id:
         existing_contest_team = await Team.find_one(
-            (Team.user_id == user_id) & (Team.contest_id == team_data.contest_id)
+            Team.user_id == user_id,
+            Team.contest_id == team_data.contest_id
         )
         if existing_contest_team:
             raise HTTPException(
