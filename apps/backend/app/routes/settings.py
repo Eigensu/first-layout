@@ -3,6 +3,17 @@ from app.models.settings import GlobalSettings
 from app.utils.gridfs import open_contest_logo_stream
 
 router = APIRouter(prefix="/api/settings", tags=["Public Settings"])
+from app.schemas.settings import GlobalSettingsResponse
+
+@router.get("", response_model=GlobalSettingsResponse)
+async def get_public_settings():
+    """Get public system settings like constraints"""
+    settings = await GlobalSettings.get_instance()
+    return GlobalSettingsResponse(
+        min_players_per_team=settings.min_players_per_team,
+        max_players_per_team=settings.max_players_per_team,
+        default_contest_logo_file_id=settings.default_contest_logo_file_id,
+    )
 
 @router.get("/logo")
 async def get_default_logo():

@@ -71,6 +71,8 @@ export default function ContestTeamBuilderPage() {
     selectedCountBySlot,
     canNextForActiveSlot,
     isFirstSlot,
+    globalSettings,
+    contest,
     // isLastSlot,
 
     // handlers
@@ -379,6 +381,7 @@ export default function ContestTeamBuilderPage() {
                 selectedCountBySlot={selectedCountBySlot}
                 slotLimits={SLOT_LIMITS}
                 totalMax={TOTAL_MAX || 12}
+                globalSettings={globalSettings}
                 onClearAll={handleClearAll}
                 onSetActiveSlot={setActiveSlotId}
                 onPlayerSelect={handlePlayerSelect}

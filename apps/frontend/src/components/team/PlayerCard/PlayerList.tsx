@@ -6,7 +6,7 @@ import type { PlayerListProps } from "./types";
 
 const PLAYERS_PER_PAGE = 10;
 
-export const PlayerList: React.FC<PlayerListProps> = ({
+export const PlayerList: React.FC<PlayerListProps & { onPlayerSelect: (playerId: string, onError?: (msg: string) => void) => void }> = ({
   players,
   selectedPlayers,
   captainId,
@@ -62,14 +62,19 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
   const handleSelect = (playerId: string) => {
     const already = selectedPlayers.includes(playerId);
-    if (already) return onPlayerSelect(playerId);
+    if (already) {
+       onPlayerSelect(playerId);
+       return;
+    }
     if (!canSelectMoreTotal) {
       onBlockedSelect?.(
         `You can select at most ${maxSelections} players in total.`
       );
       return;
     }
-    onPlayerSelect(playerId);
+    onPlayerSelect(playerId, (msg: string) => {
+      onBlockedSelect?.(msg);
+    });
   };
 
   return (

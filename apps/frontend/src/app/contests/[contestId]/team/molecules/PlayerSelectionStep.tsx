@@ -23,7 +23,7 @@ interface PlayerSelectionStepProps {
   // Handlers
   onClearAll: () => void;
   onSetActiveSlot: (slotId: string) => void;
-  onPlayerSelect: (playerId: string) => void;
+  onPlayerSelect: (playerId: string, onError?: (msg: string) => void) => void;
   onBlockSelect: (reason: string) => void;
   onNextSlot: () => void;
   onPrevSlot: () => void;
@@ -33,6 +33,7 @@ interface PlayerSelectionStepProps {
   isFirstSlot: boolean;
   canNextForActiveSlot: boolean;
   isLastSlot: boolean;
+  globalSettings?: any;
 }
 
 export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
@@ -63,6 +64,7 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
   isFirstSlot,
   canNextForActiveSlot,
   isLastSlot,
+  globalSettings,
 }) => {
   return (
     <StepCard
@@ -136,6 +138,12 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
               return `Meet the minimum required players in each Slot and press Next to proceed.`;
             })()}
           </div>
+          {globalSettings && (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-500/10 text-blue-600 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
+              <span className="font-semibold block sm:inline">Team Constraint: </span>
+              Select min {globalSettings.min_players_per_team} and max {globalSettings.max_players_per_team} players from a single team.
+            </div>
+          )}
           {/* Player list - now full width */}{" "}
           <div>
             <div className="flex overflow-x-auto gap-1.5 mb-2 sm:mb-4 pb-1 -mx-2 px-2 scrollbar-hide">

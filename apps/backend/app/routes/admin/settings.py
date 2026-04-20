@@ -12,6 +12,40 @@ class UploadResponse(BaseModel):
     url: str
     message: str
 
+from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
+
+@router.get("", response_model=GlobalSettingsResponse)
+async def get_settings(
+    current_user: User = Depends(get_admin_user),
+):
+    settings = await GlobalSettings.get_instance()
+    return GlobalSettingsResponse(
+        min_players_per_team=settings.min_players_per_team,
+        max_players_per_team=settings.max_players_per_team,
+        default_contest_logo_file_id=settings.default_contest_logo_file_id,
+    )
+
+@router.put("", response_model=GlobalSettingsResponse)
+async def update_settings(
+    data: GlobalSettingsUpdate,
+    current_user: User = Depends(get_admin_user),
+):
+    settings = await GlobalSettings.get_instance()
+    
+    if data.min_players_per_team is not None:
+        settings.min_players_per_team = data.min_players_per_team
+    if data.max_players_per_team is not None:
+        settings.max_players_per_team = data.max_players_per_team
+        
+    settings.updated_at = now_ist()
+    await settings.save()
+    
+    return GlobalSettingsResponse(
+        min_players_per_team=settings.min_players_per_team,
+        max_players_per_team=settings.max_players_per_team,
+        default_contest_logo_file_id=settings.default_contest_logo_file_id,
+    )
+
 @router.post("/logo", response_model=UploadResponse)
 async def upload_default_logo(
     file: UploadFile = File(..., description="Default contest logo image"),

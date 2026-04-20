@@ -82,6 +82,19 @@ async def create_team(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Some player IDs are invalid"
         )
+        
+    from app.models.settings import GlobalSettings
+    settings = await GlobalSettings.get_instance()
+    
+    # Enforce team maximum constraints (Hard Block)
+    from collections import Counter
+    team_counts = Counter(p.team for p in players if p.team)
+    for t_name, count in team_counts.items():
+        if count > settings.max_players_per_team:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot select more than {settings.max_players_per_team} players from team {t_name}"
+            )
 
     # Enforce per-slot constraints
     # Count players per slot (ignore players without a slot)
@@ -155,6 +168,16 @@ async def create_team(
                         "allowed_teams": contest.allowed_teams,
                     },
                 )
+                
+        # Check team minimum constraints (Soft Block / Final Check)
+        if max_players_allowed is not None and len(team_data.player_ids) == max_players_allowed:
+            if contest.contest_type == "daily" and contest.allowed_teams and len(contest.allowed_teams) == 2:
+                for req_team in contest.allowed_teams:
+                    if team_counts.get(req_team, 0) < settings.min_players_per_team:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Must select at least {settings.min_players_per_team} players from team {req_team}"
+                        )
     
     user_id = current_user.id
     if user_id is None:
@@ -386,6 +409,19 @@ async def update_team(
                         )
                 players = await Player.find({"_id": {"$in": player_object_ids}}).to_list()
                 update_data["total_value"] = sum(player.price for player in players)
+                
+                from app.models.settings import GlobalSettings
+                settings = await GlobalSettings.get_instance()
+                
+                # Enforce team maximum constraints (Hard Block)
+                from collections import Counter
+                team_counts = Counter(p.team for p in players if p.team)
+                for t_name, count in team_counts.items():
+                    if count > settings.max_players_per_team:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Cannot select more than {settings.max_players_per_team} players from team {t_name}"
+                        )
 
                 # If team belongs to a daily contest with restrictions, enforce allowed teams
                 if team.contest_id:
@@ -404,6 +440,16 @@ async def update_team(
                                     "allowed_teams": contest.allowed_teams,
                                 },
                             )
+                        
+                        # Check team minimum constraints (Soft Block / Final Check)
+                        if max_players_allowed is not None and len(player_ids) == max_players_allowed:
+                            if contest and contest.contest_type == "daily" and contest.allowed_teams and len(contest.allowed_teams) == 2:
+                                for req_team in contest.allowed_teams:
+                                    if team_counts.get(req_team, 0) < settings.min_players_per_team:
+                                        raise HTTPException(
+                                            status_code=status.HTTP_400_BAD_REQUEST,
+                                            detail=f"Must select at least {settings.min_players_per_team} players from team {req_team}"
+                                        )
 
                 # Per-slot constraints validation (same as create)
                 slot_counts: Dict[str, int] = {}

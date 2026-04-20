@@ -11,6 +11,8 @@ class GlobalSettings(Document):
     """
     id: str = Field(default="global")  # Fixed ID
     default_contest_logo_file_id: Optional[str] = None
+    min_players_per_team: int = Field(default=1, description="Minimum number of players required from a single team when finalizing a team.")
+    max_players_per_team: int = Field(default=7, description="Maximum restrict limit of players that can be drafted from a single team.")
     updated_at: datetime = Field(default_factory=now_ist)
 
     class Settings:

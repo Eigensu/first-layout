@@ -6,6 +6,8 @@ import {
   fetchHotPlayerIds,
   type ApiPlayer,
 } from "@/lib/api/public/players";
+import { fetchGlobalSettings, type ApiGlobalSettings } from "@/lib/api/public/settings";
+import { publicContestsApi, type Contest } from "@/lib/api/public/contests";
 
 export type UIBuildPlayer = Player & { slotId: string };
 
@@ -26,6 +28,9 @@ export function useTeamBuilder(
   const [slots, setSlots] = useState<ApiSlot[]>([]);
   const [activeSlotId, setActiveSlotId] = useState<string>("");
   const [isStep1Collapsed, setIsStep1Collapsed] = useState(false);
+  
+  const [globalSettings, setGlobalSettings] = useState<ApiGlobalSettings | null>(null);
+  const [contest, setContest] = useState<Contest | null>(null);
 
   // Limits per slot from backend
   const SLOT_LIMITS = useMemo(() => {
@@ -53,7 +58,19 @@ export function useTeamBuilder(
         setLoading(true);
         setError(null);
 
-        const slotsList = await fetchSlots();
+        const [slotsList, settings] = await Promise.all([
+          fetchSlots(),
+          fetchGlobalSettings(),
+        ]);
+        if (!cancelled) setGlobalSettings(settings);
+
+        if (contestId && !cancelled) {
+          try {
+            const contestData = await publicContestsApi.get(contestId);
+            setContest(contestData);
+          } catch (_) {}
+        }
+
         // Sort slots numerically by number embedded in name or code (fallback to name)
         const numFrom = (s: { name: string; code: string }) => {
           const nameNum = Number(s.name.match(/\d+/)?.[0] ?? NaN);
@@ -139,6 +156,35 @@ export function useTeamBuilder(
     return counts;
   }, [selectedPlayers, players]);
 
+  const selectedCountByTeam = useMemo(() => {
+    const counts: Record<string, number> = {};
+    selectedPlayers.forEach((id) => {
+      const p = players.find((mp) => mp.id === id);
+      if (!p || !p.team) return;
+      counts[p.team] = (counts[p.team] || 0) + 1;
+    });
+    return counts;
+  }, [selectedPlayers, players]);
+
+  const canAddFromTeam = useCallback((teamId: string) => {
+    if (!globalSettings) return true;
+    return (selectedCountByTeam[teamId] || 0) < globalSettings.max_players_per_team;
+  }, [selectedCountByTeam, globalSettings]);
+
+  const isRosterValid = useMemo(() => {
+    if (TOTAL_MAX > 0 && selectedPlayers.length !== TOTAL_MAX) return false;
+    
+    // Check team minimums if it's a 2-team daily contest
+    if (contest && contest.contest_type === "daily" && contest.allowed_teams?.length === 2 && globalSettings) {
+      for (const team of contest.allowed_teams) {
+        if ((selectedCountByTeam[team] || 0) < globalSettings.min_players_per_team) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }, [selectedPlayers.length, TOTAL_MAX, contest, globalSettings, selectedCountByTeam]);
+
   const canNextForActiveSlot = useMemo(() => {
     const s = slots.find((sl) => sl.id === activeSlotId);
     const minRequired = s?.min_select ?? 4;
@@ -172,29 +218,42 @@ export function useTeamBuilder(
   }, [slots]);
 
   const handlePlayerSelect = useCallback(
-    (playerId: string) => {
+    (playerId: string, onError?: (msg: string) => void) => {
       setSelectedPlayers((prev) => {
         if (prev.includes(playerId)) {
           return prev.filter((id) => id !== playerId);
         }
         // Enforce total selection limit across all slots
         if (TOTAL_MAX > 0 && prev.length >= TOTAL_MAX) {
+          onError?.(`You can only select up to ${TOTAL_MAX} players total.`);
           return prev;
         }
         const player = players.find((p) => p.id === playerId);
         if (!player) return prev;
+        
+        // Enforce global team max limit
+        if (
+          globalSettings &&
+          player.team &&
+          (selectedCountByTeam[player.team] || 0) >= globalSettings.max_players_per_team
+        ) {
+          onError?.(`You can only select a maximum of ${globalSettings.max_players_per_team} players from a single team (${player.team}).`);
+          return prev;
+        }
+
         const currentSlotCount = prev.filter((id) => {
           const p = players.find((mp) => mp.id === id);
           return (p as any)?.slotId === player.slotId;
         }).length;
         const slotLimit = SLOT_LIMITS[player.slotId] || 4;
         if (currentSlotCount >= slotLimit) {
+          onError?.(`You have reached the maximum allowed players for the ${player.role || "this"} slot.`);
           return prev;
         }
         return [...prev, playerId];
       });
     },
-    [players, SLOT_LIMITS, TOTAL_MAX]
+    [players, SLOT_LIMITS, TOTAL_MAX, globalSettings, selectedCountByTeam]
   );
 
   const handleSetCaptain = useCallback((playerId: string) => {
@@ -225,9 +284,14 @@ export function useTeamBuilder(
     // derived
     SLOT_LIMITS,
     selectedCountBySlot,
+    selectedCountByTeam,
     canNextForActiveSlot,
     isFirstSlot,
+    canAddFromTeam,
+    isRosterValid,
     TOTAL_MAX,
+    globalSettings,
+    contest,
 
     // setters/handlers
     setSelectedPlayers,
