@@ -5,6 +5,7 @@ from beanie.operators import Or, RegEx
 from datetime import datetime
 from pydantic import BaseModel
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from app.utils.timezone import now_ist, to_ist
 from app.utils.gridfs import open_contest_logo_stream
 
@@ -405,7 +406,13 @@ async def enroll_in_contest(
         status=EnrollmentStatus.ACTIVE,
         enrolled_at=now_ist(),
     )
-    await enr.insert()  # type: ignore
+    try:
+        await enr.insert()  # type: ignore
+    except DuplicateKeyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="You can enroll only one team in this contest",
+        ) from exc
 
     return EnrollmentResponse(
         id=str(enr.id),

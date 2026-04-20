@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { playersApi, Player, GetPlayersParams } from "@/lib/api/admin/players";
 import { slotsApi } from "@/lib/api/admin/slots";
 
+type SlotOption = { id: string; label: string };
+
 export function usePlayersSection() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -11,7 +13,9 @@ export function usePlayersSection() {
   const [page, setPage] = useState(1);
   const [totalPlayers, setTotalPlayers] = useState(0);
   const [slotMap, setSlotMap] = useState<Record<string, string>>({});
+  const [slotOptions, setSlotOptions] = useState<SlotOption[]>([]);
   const [showImport, setShowImport] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const pageSize = 10;
   const totalPages = Math.ceil(totalPlayers / pageSize);
@@ -46,10 +50,14 @@ export function usePlayersSection() {
     try {
       const response = await slotsApi.getSlots();
       const slotMap: Record<string, string> = {};
+      const options: SlotOption[] = [];
       response.slots.forEach((slot) => {
-        slotMap[slot.id] = slot.code || slot.name;
+        const label = slot.code || slot.name;
+        slotMap[slot.id] = label;
+        options.push({ id: slot.id, label });
       });
       setSlotMap(slotMap);
+      setSlotOptions(options);
     } catch (err: any) {
       console.error("Error fetching slots:", err);
     }
@@ -64,6 +72,35 @@ export function usePlayersSection() {
       fetchPlayers(); // Refresh list
     } catch (err: any) {
       alert(err?.response?.data?.detail || "Failed to delete player");
+    }
+  };
+
+  const handleDeleteAllPlayers = async () => {
+    const confirmed = confirm(
+      "This will permanently delete ALL players and clear player data from teams. Continue?",
+    );
+    if (!confirmed) return;
+
+    const phrase = window.prompt(
+      "Type DELETE_ALL_PLAYERS to confirm:",
+      "",
+    );
+    if (phrase !== "DELETE_ALL_PLAYERS") {
+      alert("Cancelled: confirmation phrase did not match.");
+      return;
+    }
+
+    try {
+      setDeletingAll(true);
+      const result = await playersApi.deleteAllPlayers(phrase);
+      await fetchPlayers();
+      alert(
+        `${result.message}\nDeleted: ${result.players_deleted}\nTeams cleared: ${result.teams_cleared}`,
+      );
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || "Failed to delete all players");
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -123,13 +160,16 @@ export function usePlayersSection() {
     pageSize,
     totalPages,
     slotMap,
+    slotOptions,
     showImport,
+    deletingAll,
 
     // Actions
     setSearchQuery,
     setStatusFilter,
     setPage,
     handleDelete,
+    handleDeleteAllPlayers,
     openImport,
     closeImport,
     handleImportSuccess,

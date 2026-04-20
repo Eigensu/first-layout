@@ -33,6 +33,7 @@ export default function AdminManageContestPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingLeaderboard, setExportingLeaderboard] = useState(false);
   // Per-contest player points state
   const [playerPoints, setPlayerPoints] = useState<
     PlayerPointsResponseItem[] | null
@@ -302,6 +303,29 @@ export default function AdminManageContestPage() {
     }
   };
 
+  const exportLeaderboardExcel = async () => {
+    if (!contest) return;
+    try {
+      setExportingLeaderboard(true);
+      const { blob, filename } = await adminContestsApi.exportLeaderboard(
+        contest.id,
+      );
+
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      showAlert(e?.message || "Failed to export leaderboard", "Export failed");
+    } finally {
+      setExportingLeaderboard(false);
+    }
+  };
+
   useEffect(() => {
     if (!contestId) return;
     (async () => {
@@ -354,6 +378,14 @@ export default function AdminManageContestPage() {
             Admin · Manage Contest
           </h1>
           <div className="flex gap-2">
+            <Button
+              onClick={exportLeaderboardExcel}
+              disabled={!contest || exportingLeaderboard}
+            >
+              {exportingLeaderboard
+                ? "Exporting..."
+                : "Export Leaderboard (Excel)"}
+            </Button>
             <Button variant="secondary" onClick={loadContest}>
               Refresh
             </Button>
