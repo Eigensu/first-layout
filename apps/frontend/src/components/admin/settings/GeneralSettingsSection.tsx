@@ -119,7 +119,7 @@ export function GeneralSettingsSection() {
                       min_players_per_team: parseInt(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                  className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
 
@@ -145,21 +145,21 @@ export function GeneralSettingsSection() {
                       max_players_per_team: parseInt(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                  className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
             </div>
           </div>
 
           <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
-            <p className="text-xs text-text-muted italic">
+            <p className="text-xs text-gray-500 italic max-w-sm">
               * These settings override constraints globally across all active contests.
             </p>
             <Button
               variant="primary"
               onClick={handleSave}
               disabled={saving}
-              className="px-6"
+              className="px-6 flex items-center whitespace-nowrap"
             >
               {saving ? (
                 <>
