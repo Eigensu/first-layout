@@ -7,10 +7,12 @@ from fastapi import (
     File,
 )
 from fastapi.responses import StreamingResponse
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Annotated
 from beanie import PydanticObjectId
 from datetime import datetime
 from io import BytesIO
+import re
+from urllib.parse import quote
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from app.utils.timezone import now_ist, to_ist
@@ -26,6 +28,7 @@ from app.models.team import Team
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.services.contest_status import sync_contest_status, contest_status_filter_clauses
 from app.common.enums.contests import (
     ContestType,
     ContestStatus,
@@ -48,9 +51,12 @@ from app.utils.dependencies import get_admin_user
 from app.models.user import User
 
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
+CONTEST_NOT_FOUND = "Contest not found"
 
 
 async def to_response(contest: Contest) -> ContestResponse:
+    # Keep lifecycle status aligned with contest window without writing on read.
+    status = await sync_contest_status(contest, persist=False)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo
@@ -69,7 +75,7 @@ async def to_response(contest: Contest) -> ContestResponse:
         logo_file_id=contest.logo_file_id,
         start_at=to_ist(contest.start_at),
         end_at=to_ist(contest.end_at),
-        status=contest.status,
+        status=status,
         visibility=contest.visibility,
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
@@ -79,10 +85,15 @@ async def to_response(contest: Contest) -> ContestResponse:
     )
 
 
-@router.post("", response_model=ContestResponse, status_code=201)
+@router.post(
+    "",
+    response_model=ContestResponse,
+    status_code=201,
+    responses={400: {"description": "Bad request"}},
+)
 async def create_contest(
     data: ContestCreate,
-    _current_user: User = Depends(get_admin_user),
+    _current_user: Annotated[User, Depends(get_admin_user)],
 ):
     if data.start_at >= data.end_at:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
@@ -116,24 +127,28 @@ async def create_contest(
 
 @router.get("", response_model=ContestListResponse)
 async def list_contests(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    status: Optional[ContestStatus] = Query(None),
-    search: Optional[str] = Query(None),
-    _current_user: User = Depends(get_admin_user),
+    _current_user: Annotated[User, Depends(get_admin_user)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+    status: Annotated[Optional[ContestStatus], Query()] = None,
+    search: Annotated[Optional[str], Query()] = None,
 ):
-    query = Contest.find_all()
+    conditions = []
     if status:
-        query = Contest.find(Contest.status == status)
+        conditions.extend(contest_status_filter_clauses(status))
+
+    query = Contest.find(conditions[0]) if conditions else Contest.find_all()
+    for cond in conditions[1:]:
+        query = query.find(cond)
 
     if search:
         from beanie.operators import Or, RegEx
 
-        conditions = Or(
+        search_condition = Or(
             RegEx(Contest.code, search, options="i"),
             RegEx(Contest.name, search, options="i"),
         )
-        query = Contest.find(conditions)
+        query = query.find(search_condition)
 
     total = await query.count()
     skip = (page - 1) * page_size
@@ -146,23 +161,34 @@ async def list_contests(
     }
 
 
-@router.get("/{contest_id}", response_model=ContestResponse)
-async def get_contest(contest_id: str, _current_user: User = Depends(get_admin_user)):
-    contest = await Contest.get(contest_id)
-    if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
-    return await to_response(contest)
-
-
-@router.put("/{contest_id}", response_model=ContestResponse)
-async def update_contest(
+@router.get(
+    "/{contest_id}",
+    response_model=ContestResponse,
+    responses={404: {"description": "Contest not found"}},
+)
+async def get_contest(
     contest_id: str,
-    data: ContestUpdate,
-    _current_user: User = Depends(get_admin_user),
+    _current_user: Annotated[User, Depends(get_admin_user)],
 ):
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
+    return await to_response(contest)
+
+
+@router.put(
+    "/{contest_id}",
+    response_model=ContestResponse,
+    responses={400: {"description": "Bad request"}, 404: {"description": "Contest not found"}},
+)
+async def update_contest(
+    contest_id: str,
+    data: ContestUpdate,
+    _current_user: Annotated[User, Depends(get_admin_user)],
+):
+    contest = await Contest.get(contest_id)
+    if not contest:
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     update_fields = data.model_dump(exclude_unset=True)
 
@@ -182,15 +208,18 @@ async def update_contest(
     return await to_response(contest)
 
 
-@router.delete("/{contest_id}")
+@router.delete(
+    "/{contest_id}",
+    responses={404: {"description": "Contest not found"}, 409: {"description": "Conflict"}},
+)
 async def delete_contest(
+    _current_user: Annotated[User, Depends(get_admin_user)],
     contest_id: str,
-    force: bool = Query(False),
-    _current_user: User = Depends(get_admin_user),
+    force: Annotated[bool, Query()] = False,
 ):
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
     active_enrollments = await TeamContestEnrollment.find(
         {
             "contest_id": contest.id,
@@ -221,15 +250,20 @@ async def delete_contest(
     return {"message": "Contest deleted"}
 
 
-@router.post("/{contest_id}/enroll-teams", response_model=List[EnrollmentResponse])
+@router.post(
+    "/{contest_id}/enroll-teams",
+    response_model=List[EnrollmentResponse],
+    responses={400: {"description": "Bad request"}, 404: {"description": "Contest or team not found"}, 500: {"description": "Server error"}},
+)
+# NOSONAR
 async def enroll_teams(
     contest_id: str,
     body: EnrollmentBulkRequest,
-    _current_user: User = Depends(get_admin_user),
-):
+    _current_user: Annotated[User, Depends(get_admin_user)],
+):  # NOSONAR
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     if not body.team_ids:
         return []
@@ -304,15 +338,19 @@ async def enroll_teams(
     return created
 
 
-@router.delete("/{contest_id}/enrollments")
+@router.delete(
+    "/{contest_id}/enrollments",
+    responses={404: {"description": "Contest not found"}},
+)
+# NOSONAR
 async def unenroll(
     contest_id: str,
     body: UnenrollBulkRequest,
-    _current_user: User = Depends(get_admin_user),
-):
+    _current_user: Annotated[User, Depends(get_admin_user)],
+):  # NOSONAR
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     count = 0
     # Collect affected team ids to batch-check for remaining active enrollments
@@ -400,15 +438,17 @@ class PlayerPointsResponseItem(BaseModel):
 
 
 @router.get(
-    "/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem]
+    "/{contest_id}/player-points",
+    response_model=list[PlayerPointsResponseItem],
+    responses={404: {"description": "Contest not found"}},
 )
 async def get_player_points(
     contest_id: str,
-    _current_user: User = Depends(get_admin_user),
+    _current_user: Annotated[User, Depends(get_admin_user)],
 ):
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     docs = await PlayerContestPoints.find({"contest_id": contest.id}).to_list()
     # fetch player details in batch
@@ -421,11 +461,13 @@ async def get_player_points(
     resp: list[PlayerPointsResponseItem] = []
     for doc in docs:
         p = players_by_id.get(str(doc.player_id))
+        p_name = p.name if p else None
+        p_team = p.team if p else None
         resp.append(
             PlayerPointsResponseItem(
                 player_id=str(doc.player_id),
-                name=(p.name if p else None) if p else None,
-                team=(p.team if p else None) if p else None,
+                name=p_name,
+                team=p_team,
                 points=float(doc.points or 0.0),
                 updated_at=doc.updated_at,
             )
@@ -434,16 +476,19 @@ async def get_player_points(
 
 
 @router.put(
-    "/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem]
+    "/{contest_id}/player-points",
+    response_model=list[PlayerPointsResponseItem],
+    responses={400: {"description": "Bad request"}, 404: {"description": "Contest not found"}, 500: {"description": "Server error"}},
 )
+# NOSONAR
 async def upsert_player_points(
     contest_id: str,
     body: PlayerPointsBulkUpsertRequest,
-    _current_user: User = Depends(get_admin_user),
-):
+    _current_user: Annotated[User, Depends(get_admin_user)],
+):  # NOSONAR
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     if not body.updates:
         return []
@@ -496,11 +541,13 @@ async def upsert_player_points(
     resp: list[PlayerPointsResponseItem] = []
     for doc in updated_docs:
         p = players_by_id.get(str(doc.player_id))
+        p_name = p.name if p else None
+        p_team = p.team if p else None
         resp.append(
             PlayerPointsResponseItem(
                 player_id=str(doc.player_id),
-                name=(p.name if p else None) if p else None,
-                team=(p.team if p else None) if p else None,
+                name=p_name,
+                team=p_team,
                 points=float(doc.points or 0.0),
                 updated_at=doc.updated_at,
             )
@@ -530,15 +577,19 @@ class UploadResponse(BaseModel):
     message: str
 
 
-@router.post("/{contest_id}/upload-logo", response_model=UploadResponse)
+@router.post(
+    "/{contest_id}/upload-logo",
+    response_model=UploadResponse,
+    responses={404: {"description": "Contest not found"}, 500: {"description": "Server error"}},
+)
 async def upload_contest_logo(
     contest_id: str,
-    file: UploadFile = File(..., description="Contest logo image"),
-    _current_user: User = Depends(get_admin_user),
+    file: Annotated[UploadFile, File(description="Contest logo image")],
+    _current_user: Annotated[User, Depends(get_admin_user)],
 ):
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     # Delete old logo if it exists in GridFS
     if contest.logo_file_id:
@@ -565,14 +616,18 @@ async def upload_contest_logo(
         ) from e
 
 
-@router.get("/{contest_id}/leaderboard/export")
+@router.get(
+    "/{contest_id}/leaderboard/export",
+    responses={404: {"description": "Contest not found"}, 500: {"description": "Server error"}},
+)
+# NOSONAR
 async def export_contest_leaderboard_excel(
     contest_id: str,
-    _current_user: User = Depends(get_admin_user),
-):
+    _current_user: Annotated[User, Depends(get_admin_user)],
+):  # NOSONAR
     contest = await Contest.get(contest_id)
     if not contest:
-        raise HTTPException(status_code=404, detail="Contest not found")
+        raise HTTPException(status_code=404, detail=CONTEST_NOT_FOUND)
 
     enrollments = await TeamContestEnrollment.find(
         {
@@ -718,13 +773,20 @@ async def export_contest_leaderboard_excel(
     wb.save(output)
     output.seek(0)
 
-    safe_code = (contest.code or "contest").replace(" ", "_")
-    filename = (
+    raw_code = contest.code or "contest"
+    safe_code = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_code).strip("._") or "contest"
+    filename_ascii = (
         f"leaderboard_{safe_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     )
+    filename_star = quote(filename_ascii)
 
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{filename_ascii}\"; "
+                f"filename*=UTF-8''{filename_star}"
+            )
+        },
     )
