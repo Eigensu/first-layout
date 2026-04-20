@@ -8,7 +8,7 @@ import { PlayerTableRow } from "./PlayerTableRow";
 import { Pagination } from "./Pagination";
 import { usePlayersSection } from "./usePlayersSection";
 import { useState } from "react";
-import { EditPointsModal } from "./EditPointsModal";
+import { PlayerFormModal } from "./PlayerFormModal";
 import type { Player } from "@/lib/api/admin/players";
 
 export function PlayersSection() {
@@ -23,19 +23,25 @@ export function PlayersSection() {
     pageSize,
     totalPages,
     slotMap,
+    slotOptions,
     showImport,
     setSearchQuery,
     setStatusFilter,
     setPage,
     handleDelete,
+    handleDeleteAllPlayers,
     openImport,
     closeImport,
     handleImportSuccess,
     refresh,
+    deletingAll,
   } = usePlayersSection();
 
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-  const closeEdit = () => setEditingPlayer(null);
+  const [addingPlayer, setAddingPlayer] = useState(false);
+
+  const closeEditModal = () => setEditingPlayer(null);
+  const closeAddModal = () => setAddingPlayer(false);
 
   return (
     <div className="space-y-4">
@@ -70,11 +76,23 @@ export function PlayersSection() {
               </div>
             </div>
             <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteAllPlayers}
+                disabled={deletingAll}
+              >
+                {deletingAll ? "Deleting All..." : "Delete All Players"}
+              </Button>
               <Button variant="secondary" size="sm" onClick={openImport}>
                 <Upload className="w-4 h-4 mr-2" />
                 Import
               </Button>
-              <Button variant="primary" size="sm">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setAddingPlayer(true)}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Player
               </Button>
@@ -132,7 +150,7 @@ export function PlayersSection() {
                         player={player}
                         slotMap={slotMap}
                         onDelete={handleDelete}
-                        onEditPoints={(p) => setEditingPlayer(p)}
+                        onEditPoints={(p: Player) => setEditingPlayer(p)}
                       />
                     ))}
                   </tbody>
@@ -166,11 +184,22 @@ export function PlayersSection() {
         </div>
       )}
 
-      {/* Edit Points Modal */}
+      {/* Add/Edit Player Modals */}
+      {addingPlayer && (
+        <PlayerFormModal
+          mode="add"
+          slotOptions={slotOptions}
+          onClose={closeAddModal}
+          onSaved={refresh}
+        />
+      )}
+
       {editingPlayer && (
-        <EditPointsModal
+        <PlayerFormModal
+          mode="edit"
           player={editingPlayer}
-          onClose={closeEdit}
+          slotOptions={slotOptions}
+          onClose={closeEditModal}
           onSaved={refresh}
         />
       )}

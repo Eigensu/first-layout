@@ -52,6 +52,14 @@ export interface GetPlayersParams {
   sort_order?: 'asc' | 'desc';
 }
 
+export interface DeleteAllPlayersResponse {
+  message: string;
+  players_before: number;
+  players_deleted: number;
+  contest_points_deleted: number;
+  teams_cleared: number;
+}
+
 export const playersApi = {
   /**
    * Get all players with pagination and filters
@@ -90,5 +98,17 @@ export const playersApi = {
    */
   deletePlayer: async (id: string): Promise<void> => {
     await apiClient.delete(`/api/admin/players/${id}`);
+  },
+
+  /**
+   * Delete all players (admin only, guarded by a confirmation phrase)
+   */
+  deleteAllPlayers: async (
+    confirmationPhrase = 'DELETE_ALL_PLAYERS'
+  ): Promise<DeleteAllPlayersResponse> => {
+    const response = await apiClient.delete('/api/admin/players/bulk/all', {
+      params: { confirm: confirmationPhrase },
+    });
+    return response.data;
   },
 };
