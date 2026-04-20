@@ -4,7 +4,7 @@ import { SearchInput } from "./SearchInput";
 import { Pagination } from "./Pagination";
 import type { PlayerListProps } from "./types";
 
-const PLAYERS_PER_PAGE = 10;
+const PLAYERS_PER_PAGE = 20;
 
 export const PlayerList: React.FC<PlayerListProps> = ({
   players,
@@ -42,7 +42,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       list = list.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
-          p.team.toLowerCase().includes(query)
+          p.team.toLowerCase().includes(query),
       );
     }
     return list;
@@ -65,7 +65,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     if (already) return onPlayerSelect(playerId);
     if (!canSelectMoreTotal) {
       onBlockedSelect?.(
-        `You can select at most ${maxSelections} players in total.`
+        `You can select at most ${maxSelections} players in total.`,
       );
       return;
     }
