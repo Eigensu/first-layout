@@ -89,6 +89,11 @@ export interface PlayerPointsBulkUpsertRequest {
   updates: { player_id: string; points: number }[];
 }
 
+export interface LeaderboardExportResponse {
+  blob: Blob;
+  filename: string;
+}
+
 export const adminContestsApi = {
   list: async (params?: { page?: number; page_size?: number; status?: ContestStatus; search?: string }): Promise<ContestListResponse> => {
     const response = await apiClient.get('/api/admin/contests', { params });
@@ -136,5 +141,22 @@ export const adminContestsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
+  },
+  exportLeaderboard: async (contestId: string): Promise<LeaderboardExportResponse> => {
+    const response = await apiClient.get(`/api/admin/contests/${contestId}/leaderboard/export`, {
+      responseType: 'blob',
+    });
+
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    let filename = `leaderboard_${contestId}.xlsx`;
+    const match = contentDisposition?.match(/filename=([^;]+)/i);
+    if (match?.[1]) {
+      filename = match[1].trim().replace(/^"|"$/g, '');
+    }
+
+    return {
+      blob: response.data as Blob,
+      filename,
+    };
   },
 };

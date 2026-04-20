@@ -1,7 +1,8 @@
-from beanie import Document, Indexed, PydanticObjectId
+from beanie import Document, PydanticObjectId
 from pydantic import Field
 from datetime import datetime
 from typing import Optional
+from pymongo import IndexModel
 from app.common.enums.enrollments import EnrollmentStatus
 
 
@@ -24,4 +25,10 @@ class TeamContestEnrollment(Document):
             "user_id",
             [("contest_id", 1), ("status", 1)],
             [("team_id", 1), ("contest_id", 1), ("status", 1)],
+            IndexModel(
+                [("contest_id", 1), ("user_id", 1)],
+                unique=True,
+                partialFilterExpression={"status": EnrollmentStatus.ACTIVE.value},
+                name="uniq_active_user_per_contest",
+            ),
         ]
