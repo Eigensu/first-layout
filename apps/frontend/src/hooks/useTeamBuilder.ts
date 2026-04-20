@@ -9,7 +9,7 @@ import {
 import { fetchGlobalSettings, type ApiGlobalSettings } from "@/lib/api/public/settings";
 import { publicContestsApi, type Contest } from "@/lib/api/public/contests";
 
-export type UIBuildPlayer = Player & { slotId: string };
+export type UIBuildPlayer = Player & { slotId: string; role?: string };
 
 export function useTeamBuilder(
   contestId?: string,
