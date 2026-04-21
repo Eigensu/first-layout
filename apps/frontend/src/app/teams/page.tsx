@@ -717,7 +717,7 @@ export default function TeamsPage() {
                   }
                   contestStatus={contestStatusByTeam[team.id]}
                   onEditPlayers={() => setEditPlayersTeamId(team.id)}
-                  initialView="list"
+                  initialView="pitch"
                 />
               ))}
             </div>
