@@ -678,7 +678,7 @@ export default function TeamsPage() {
           <>
             {/* Create New Team Button - Hidden on mobile */}
             <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-text-main">
+              <h2 className="text-lg sm:text-xl font-bold text-text-main">
                 Your Teams ({visibleTeams.length})
               </h2>
               <div className="w-full sm:w-auto flex items-center gap-2">

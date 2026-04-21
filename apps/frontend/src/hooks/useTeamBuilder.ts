@@ -71,19 +71,10 @@ export function useTeamBuilder(
           } catch (_) {}
         }
 
-        // Sort slots numerically by number embedded in name or code (fallback to name)
-        const numFrom = (s: { name: string; code: string }) => {
-          const nameNum = Number(s.name.match(/\d+/)?.[0] ?? NaN);
-          if (!Number.isNaN(nameNum)) return nameNum;
-          const codeNum = Number(s.code.match(/\d+/)?.[0] ?? NaN);
-          if (!Number.isNaN(codeNum)) return codeNum;
-          return Number.MAX_SAFE_INTEGER;
-        };
+        // Sort slots naturally (alphabetically with numeric awareness)
+        // This ensures orders like a1, a2, a3, b1, b2...
         const sortedSlots = [...slotsList].sort((a, b) => {
-          const an = numFrom(a);
-          const bn = numFrom(b);
-          if (an !== bn) return an - bn;
-          return a.name.localeCompare(b.name);
+          return a.name.localeCompare(b.name, undefined, { numeric: true });
         });
         if (!cancelled) {
           setSlots(sortedSlots);

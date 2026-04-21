@@ -17,36 +17,17 @@ export interface PitchFormationProps {
 // Each position is [left%, top%] representing percentage from top-left
 // Adjusted for mobile (taller aspect ratio) - positions spread more vertically
 const FIELD_POSITIONS = {
-  // Top arc (boundary) - 3 positions spread along top curve
-  topArc: [
-    [25, 12], // top-left
-    [50, 9], // top-center
-    [75, 12], // top-right
+  // Rectangular grid layout for court sports
+  outfield: [
+    // Layer 1: Alternating Top/Bottom primary rows (8 total: 4 top, 4 bottom)
+    [20, 16], [20, 84], [40, 16], [40, 84], [60, 16], [60, 84], [80, 16], [80, 84],
+    // Layer 2: Alternating Mid-court fillers (Center-aligned)
+    [50, 32], [50, 68], [30, 32], [70, 68],
+    [70, 32], [30, 68], [12, 50], [88, 50],
   ],
-  // Upper middle arc - 4 positions
-  upperMiddle: [
-    [12, 28], // far left
-    [37, 24], // left of center
-    [63, 24], // right of center
-    [88, 28], // far right
-  ],
-  // Center (stumps area) - 2 positions for captain/VC
   stumps: [
-    [40, 48], // left of stumps
-    [60, 48], // right of stumps
-  ],
-  // Lower middle arc - 4 positions
-  lowerMiddle: [
-    [12, 68], // far left
-    [37, 72], // left of center
-    [63, 72], // right of center
-    [88, 68], // far right
-  ],
-  // Bottom arc (boundary) - 3 positions spread along bottom curve
-  bottomArc: [
-    [25, 82], // bottom-left
-    [50, 86], // bottom-center
-    [75, 82], // bottom-right
+    [30, 50], // Captain (more spaced)
+    [70, 50], // Vice-Captain (more spaced)
   ],
 };
 
@@ -76,14 +57,8 @@ export function PitchFormation({
     (p) => !stumpsPlayerIds.has(p.id)
   );
 
-  // Distribute remaining players across field positions
-  // Order: top arc, upper middle sides, lower middle sides, bottom arc
-  const allOutfieldPositions = [
-    ...FIELD_POSITIONS.topArc,
-    ...FIELD_POSITIONS.upperMiddle,
-    ...FIELD_POSITIONS.lowerMiddle,
-    ...FIELD_POSITIONS.bottomArc,
-  ];
+  // Distribute remaining players across balanced field positions
+  const allOutfieldPositions = FIELD_POSITIONS.outfield;
 
   // Assign players to positions evenly distributed
   const playerPositions: { player: PitchPlayer; left: number; top: number }[] =
@@ -139,7 +114,7 @@ export function PitchFormation({
             top: `${FIELD_POSITIONS.stumps[index][1]}%`,
           }}
         >
-          <PitchPlayerCard player={player} onClick={onPlayerClick} size="md" />
+          <PitchPlayerCard player={player} onClick={onPlayerClick} size="sm" />
         </div>
       ))}
     </div>

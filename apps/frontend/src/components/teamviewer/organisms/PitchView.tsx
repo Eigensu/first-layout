@@ -35,14 +35,14 @@ export function PitchView({
         <div
           className={cn(
             "relative mx-auto",
-            "w-full max-w-2xl",
-            "aspect-[3/4] md:aspect-[4/3]",
+            "w-full max-w-md",
+            "aspect-[2/3]",
             "rounded-2xl md:rounded-3xl overflow-hidden",
             "border-2 md:border-4 border-primary-400/40"
           )}
           style={{
-            backgroundImage: "url('/ground.png')",
-            backgroundSize: "cover",
+            backgroundImage: "url('/ground2.jfif')",
+            backgroundSize: "100% 100%",
             backgroundPosition: "center",
           }}
         >
