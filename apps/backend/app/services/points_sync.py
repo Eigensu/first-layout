@@ -3,12 +3,16 @@ import logging
 import httpx
 from pymongo import UpdateOne
 from app.models.player import Player
+from app.models.team import Team
+from app.models.player_contest_points import PlayerContestPoints
+from app.models.contest import Contest
 from datetime import datetime
+from beanie import PydanticObjectId
 
 # Setup logger for the sync service
 logger = logging.getLogger("app.services.points_sync")
 
-# Direct Firebase URL extracted from the worker source for reliability
+# Direct Firebase URL
 FIREBASE_URL = "https://exquisitepremierleague-8da3a-default-rtdb.asia-southeast1.firebasedatabase.app/tournaments.json"
 SYNC_INTERVAL_SECONDS = 300  # 5 minutes
 
@@ -16,13 +20,11 @@ SYNC_INTERVAL_SECONDS = 300  # 5 minutes
 def calculate_points(p):
     """
     Replicates the point calculation logic from the original MVP worker script.
-    Formula: ((Balls)/2) + ((Runs+Bonus)*2) + (NotOuts*15) + (Wickets*25) - (Economy*5) + (Fielding*5)
     """
     stats = p.get("stats", {})
     if not stats:
         return 0.0
 
-    # Extract stats with defaults
     bat_balls = stats.get("bat_balls", 0) or 0
     bat_runs = stats.get("bat_runs", 0) or 0
     bat_bonus = stats.get("bat_bonus", 0) or 0
@@ -37,17 +39,14 @@ def calculate_points(p):
     field_runouts = stats.get("field_runouts", 0) or 0
     field_stumping = stats.get("field_stumping", stats.get("field_stumpings", 0)) or 0
 
-    # 1. Batting & Basic Bowling points
     points = (float(bat_balls) / 2.0) + \
              ((float(bat_runs) + float(bat_bonus)) * 2.0) + \
              (float(bat_not_outs) * 15.0) + \
              (float(ball_wickets) * 25.0)
              
-    # 2. Economy penalty: ((Runs / Balls) * 6) * 5
     if ball_balls > 0:
         points -= ((float(ball_runs) / float(ball_balls)) * 6.0) * 5.0
         
-    # 3. Fielding points (5 per action)
     points += (float(field_catches) * 5.0) + \
               (float(field_cb) * 5.0) + \
               (float(field_runouts) * 5.0) + \
@@ -58,10 +57,11 @@ def calculate_points(p):
 
 async def sync_player_points():
     """
-    Fetches raw tournament data from Firebase and calculates points for each player.
+    Comprehensive sync: Updates global player points, per-contest points, and team totals.
     """
-    logger.info("Initiating player points sync from Firebase database...")
+    logger.info("Initiating comprehensive points sync from Firebase...")
     
+    # 1. Fetch data from Firebase
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             response = await client.get(FIREBASE_URL)
@@ -74,46 +74,89 @@ async def sync_player_points():
             logger.error(f"Failed to fetch data from Firebase: {exc}")
             return
 
-    bulk_operations = []
-    processed_players = 0
-    
-    # tournaments structure: {"kids": {"players": {...}}, "mens": {...}, ...}
+    # 2. Map Firebase names to calculated points
+    name_points_map = {}
     for category in tournaments.values():
         if not isinstance(category, dict):
             continue
-            
         players_dict = category.get("players", {})
         if not isinstance(players_dict, dict):
             continue
-            
         for p in players_dict.values():
             name = p.get("name")
-            if not name:
-                continue
-                
-            points = calculate_points(p)
-            processed_players += 1
+            if name:
+                name_points_map[name.strip()] = calculate_points(p)
+
+    if not name_points_map:
+        logger.warning("No player data found in Firebase to sync.")
+        return
+
+    # 3. Get necessary data from MongoDB
+    db_players = await Player.find_all().to_list()
+    active_contests = await Contest.find(Contest.status != "archived").to_list()
+    
+    player_bulk = []
+    contest_points_bulk = []
+    
+    # 4. Prepare updates for Players and Contest Points
+    now = datetime.utcnow()
+    for db_p in db_players:
+        # Match by name (trimmed and case-insensitive)
+        name_key = db_p.name.strip()
+        if name_key in name_points_map:
+            new_points = name_points_map[name_key]
             
-            bulk_operations.append(
+            # Global Player update
+            player_bulk.append(
                 UpdateOne(
-                    {"name": name},
-                    {"$set": {
-                        "points": points,
-                        "updated_at": datetime.utcnow()
-                    }}
+                    {"_id": db_p.id},
+                    {"$set": {"points": new_points, "updated_at": now}}
+                )
+            )
+            
+            # Per-Contest Points update (This fixes the 'Edit by Teams' admin page)
+            for contest in active_contests:
+                contest_points_bulk.append(
+                    UpdateOne(
+                        {"player_id": db_p.id, "contest_id": contest.id},
+                        {"$set": {"points": new_points, "updated_at": now}},
+                        upsert=True
+                    )
+                )
+
+    # 5. Execute bulk writes
+    if player_bulk:
+        # Use motor collection for raw bulk write speed
+        raw_db = Player.get_motor_collection().database
+        await raw_db.players.bulk_write(player_bulk, ordered=False)
+        
+        if contest_points_bulk:
+            await raw_db.player_contest_points.bulk_write(contest_points_bulk, ordered=False)
+            
+        logger.info(f"Sync: Updated {len(player_bulk)} players across {len(active_contests)} active contests.")
+
+        # 6. Recalculate Team Totals
+        # We fetch all teams and sum their player points based on the updated player data
+        all_teams = await Team.find_all().to_list()
+        team_bulk = []
+        
+        # Build lookup for refreshed points
+        p_map = {str(p.id): p.points for p in await Player.find_all().to_list()}
+
+        for team in all_teams:
+            total = sum(p_map.get(pid, 0.0) for pid in team.player_ids)
+            team_bulk.append(
+                UpdateOne(
+                    {"_id": team.id},
+                    {"$set": {"total_points": float(total), "updated_at": now}}
                 )
             )
 
-    if not bulk_operations:
-        logger.warning("No valid player data found in Firebase to sync.")
-        return
-
-    try:
-        collection = Player.get_motor_collection()
-        result = await collection.bulk_write(bulk_operations, ordered=False)
-        logger.info(f"Points sync completed. Processed: {processed_players}, Matched: {result.matched_count}, Modified: {result.modified_count}")
-    except Exception as exc:
-        logger.error(f"Failed to perform bulk database update: {exc}")
+        if team_bulk:
+            await raw_db.teams.bulk_write(team_bulk, ordered=False)
+            logger.info(f"Sync: Recalculated total points for {len(team_bulk)} teams.")
+    else:
+        logger.warning("Sync: No player matches found between Firebase and Database names.")
 
 
 async def start_sync_loop():
