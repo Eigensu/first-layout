@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
+import asyncio
 from datetime import datetime
 from config.settings import settings
 import logging
@@ -22,10 +23,12 @@ from app.routes.admin import (
     users_teams_router as admin_users_teams_router,
     settings_router as admin_settings_router,
 )
+from app.services.points_sync import start_sync_loop
+
 
 # Logging configuration
 logging.basicConfig(
-    level=logging.CRITICAL,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("app.startup")
@@ -35,8 +38,16 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
     # Startup: Connect to MongoDB
     await connect_to_mongo()
+    
+    # Start the background points sync task
+    app.state.points_sync_task = asyncio.create_task(start_sync_loop())
+    
     yield
-    # Shutdown: Close MongoDB connection
+    
+    # Shutdown: Cancel the background task and close DB connection
+    if hasattr(app.state, 'points_sync_task'):
+        app.state.points_sync_task.cancel()
+        
     await close_mongo_connection()
 
 
