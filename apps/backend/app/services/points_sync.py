@@ -7,7 +7,7 @@ from app.models.player import Player
 from app.models.team import Team
 from app.models.contest import Contest
 from config.settings import settings
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 # Setup logger for the sync service
 logger = logging.getLogger("app.services.points_sync")
@@ -116,7 +116,7 @@ async def sync_player_points():
     active_contests = await Contest.find(Contest.status != "archived").to_list()
 
     # 4. Prepare updates for Players and Contest Points
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     player_bulk, contest_points_bulk, matched_db_names = _build_player_and_contest_updates(
         db_players,
         active_contests,
