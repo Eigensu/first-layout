@@ -1,4 +1,3 @@
-import os
 import re
 from typing import Optional
 from functools import lru_cache
@@ -58,11 +57,26 @@ class Settings(BaseSettings):
     otp_expiry_seconds: int = Field(default=600, alias="OTP_EXPIRY_SECONDS")
     otp_max_attempts: int = Field(default=5, alias="OTP_MAX_ATTEMPTS")
     reset_token_ttl_seconds: int = Field(default=600, alias="RESET_TOKEN_TTL_SECONDS")
+
+    # MVP points sync
+    mvp_points_source_url: str = Field(
+        default="https://mvp-epl.up.railway.app/api/mvp",
+        alias="MVP_POINTS_SOURCE_URL",
+    )
+    mvp_points_sync_timeout_seconds: float = Field(
+        default=15.0,
+        alias="MVP_POINTS_SYNC_TIMEOUT_SECONDS",
+    )
+    mvp_points_sync_interval_seconds: int = Field(
+        default=300,
+        alias="MVP_POINTS_SYNC_INTERVAL_SECONDS",
+    )
     
     @property
     def cors_origins_list(self) -> list[str]:
         """Convert CORS origins string to list and support wildcard patterns."""
-        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        cors_origins = str(self.cors_origins)
+        origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
         return origins
 
     @property
@@ -97,17 +111,20 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         """Check if running in production."""
-        return self.node_env.lower() == "production"
+        node_env = str(self.node_env)
+        return node_env.lower() == "production"
     
     @property
     def is_development(self) -> bool:
         """Check if running in development."""
-        return self.node_env.lower() == "development"
+        node_env = str(self.node_env)
+        return node_env.lower() == "development"
     
     @property
     def is_test(self) -> bool:
         """Check if running in test mode."""
-        return self.node_env.lower() == "test"
+        node_env = str(self.node_env)
+        return node_env.lower() == "test"
     
     class Config:
         # Load from .env file in the monorepo root
@@ -121,7 +138,8 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    return Settings()
+    # BaseSettings resolves required values from env/.env at runtime.
+    return Settings()  # pyright: ignore[reportCallIssue]
 
 
 # Global settings instance
