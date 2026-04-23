@@ -57,12 +57,16 @@ async def _fetch_mvp_points_map() -> dict[str, float]:
         name_points_map[name] = points
 
     if invalid_count:
-        logger.warning("MVP sync: skipped %s invalid records from source payload.", invalid_count)
+        logger.warning(
+            "MVP sync: skipped %s invalid records from source payload.", invalid_count
+        )
 
     return name_points_map
 
 
-def _build_player_and_contest_updates(db_players, active_contests, name_points_map, now):
+def _build_player_and_contest_updates(
+    db_players, active_contests, name_points_map, now
+):
     player_bulk = []
     contest_points_bulk = []
     matched_db_names = set()
@@ -77,8 +81,7 @@ def _build_player_and_contest_updates(db_players, active_contests, name_points_m
 
         player_bulk.append(
             UpdateOne(
-                {"_id": db_p.id},
-                {"$set": {"points": new_points, "updated_at": now}}
+                {"_id": db_p.id}, {"$set": {"points": new_points, "updated_at": now}}
             )
         )
 
@@ -87,7 +90,7 @@ def _build_player_and_contest_updates(db_players, active_contests, name_points_m
                 UpdateOne(
                     {"player_id": db_p.id, "contest_id": contest.id},
                     {"$set": {"points": new_points, "updated_at": now}},
-                    upsert=True
+                    upsert=True,
                 )
             )
 
@@ -104,7 +107,9 @@ async def sync_player_points():
     try:
         name_points_map = await _fetch_mvp_points_map()
     except (httpx.RequestError, httpx.HTTPStatusError, ValueError, TypeError) as exc:
-        logger.error("Failed to fetch/parse MVP source data from %s: %s", MVP_SOURCE_URL, exc)
+        logger.error(
+            "Failed to fetch/parse MVP source data from %s: %s", MVP_SOURCE_URL, exc
+        )
         return
 
     if not name_points_map:
@@ -117,11 +122,13 @@ async def sync_player_points():
 
     # 4. Prepare updates for Players and Contest Points
     now = datetime.now(timezone.utc)
-    player_bulk, contest_points_bulk, matched_db_names = _build_player_and_contest_updates(
-        db_players,
-        active_contests,
-        name_points_map,
-        now,
+    player_bulk, contest_points_bulk, matched_db_names = (
+        _build_player_and_contest_updates(
+            db_players,
+            active_contests,
+            name_points_map,
+            now,
+        )
     )
 
     source_names = set(name_points_map.keys())
@@ -133,10 +140,12 @@ async def sync_player_points():
         # Use motor collection for raw bulk write speed
         raw_db = Player.get_motor_collection().database
         await raw_db.players.bulk_write(player_bulk, ordered=False)
-        
+
         if contest_points_bulk:
-            await raw_db.player_contest_points.bulk_write(contest_points_bulk, ordered=False)
-            
+            await raw_db.player_contest_points.bulk_write(
+                contest_points_bulk, ordered=False
+            )
+
         logger.info(
             "Sync: Updated %s players across %s active contests.",
             len(player_bulk),
@@ -147,16 +156,18 @@ async def sync_player_points():
         # We fetch all teams and sum their player points based on the updated player data
         all_teams = await Team.find_all().to_list()
         team_bulk = []
-        
+
         # Build lookup for refreshed points
-        p_map = {str(p.id): float(p.points or 0.0) for p in await Player.find_all().to_list()}
+        p_map = {
+            str(p.id): float(p.points or 0.0) for p in await Player.find_all().to_list()
+        }
 
         for team in all_teams:
             total = sum(p_map.get(str(pid), 0.0) for pid in team.player_ids)
             team_bulk.append(
                 UpdateOne(
                     {"_id": team.id},
-                    {"$set": {"total_points": float(total), "updated_at": now}}
+                    {"$set": {"total_points": float(total), "updated_at": now}},
                 )
             )
 
@@ -193,7 +204,13 @@ async def start_sync_loop():
         except asyncio.CancelledError:
             logger.info("Player points synchronization task cancelled.")
             raise
-        except (httpx.RequestError, httpx.HTTPStatusError, ValueError, TypeError, PyMongoError) as exc:
+        except (
+            httpx.RequestError,
+            httpx.HTTPStatusError,
+            ValueError,
+            TypeError,
+            PyMongoError,
+        ) as exc:
             logger.error("Unexpected error in sync loop: %s", exc)
-        
+
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)
