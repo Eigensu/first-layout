@@ -71,16 +71,48 @@ async def sync_players_from_sheet(credentials_path: str, spreadsheet_id: str, sh
                     player.points = total_points
                     await player.save()
                     updated_count += 1
-                    updated_player_ids.append(str(player.id))
+                    updated_player_ids.append(player.id) # Store ObjectId directly
             else:
                 not_found_count += 1
                 logger.warning(f"Player '{player_name}' (Team: '{team_name}') not found in DB.")
                 
-        # Recalculate team points if any player points were updated
+        # Update Contest Points and Recalculate team points if any player points were updated
         if updated_player_ids:
+            from app.models.player_contest_points import PlayerContestPoints
+            from app.models.contest import Contest
+            
+            logger.info("Updating PlayerContestPoints for all contests...")
+            contests = await Contest.find_all().to_list()
+            now = datetime.utcnow()
+            
+            # For each updated player, update their points in all contests
+            for pid in updated_player_ids:
+                # We need the points value
+                p = await Player.get(pid)
+                if not p: continue
+                
+                for contest in contests:
+                    pcp = await PlayerContestPoints.find_one({
+                        "contest_id": contest.id,
+                        "player_id": pid
+                    })
+                    if pcp:
+                        pcp.points = p.points
+                        pcp.updated_at = now
+                        await pcp.save()
+                    else:
+                        pcp = PlayerContestPoints(
+                            contest_id=contest.id,
+                            player_id=pid,
+                            points=p.points,
+                            updated_at=now
+                        )
+                        await pcp.insert()
+
             logger.info("Recalculating team points for updated players...")
-            # Find all teams that contain at least one of the updated players
-            impacted_teams = await Team.find({"player_ids": {"$in": updated_player_ids}}).to_list()
+            # Teams store player_ids as string representations of ObjectId
+            str_updated_player_ids = [str(pid) for pid in updated_player_ids]
+            impacted_teams = await Team.find({"player_ids": {"$in": str_updated_player_ids}}).to_list()
             
             # Fetch all players needed across all impacted teams in a single query
             all_player_ids = set()
