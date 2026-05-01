@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     cloudinary_secure: bool = Field(default=True, alias="CLOUDINARY_SECURE")
     cloudinary_default_folder: str = Field(default="walle", alias="CLOUDINARY_DEFAULT_FOLDER")
     
+    # Google sheet
+    sync_secret: str = Field(default="super-secret-sync-token", alias="SYNC_SECRET")
+    google_credentials_json: Optional[str] = Field(default=None, alias="GOOGLE_CREDENTIALS_JSON")
+    
      # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")
     twofactor_template_name: Optional[str] = Field(default=None, alias="TWOFACTOR_TEMPLATE_NAME")

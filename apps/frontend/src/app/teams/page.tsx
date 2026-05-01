@@ -774,7 +774,15 @@ export default function TeamsPage() {
           role: roleToSlotLabel(p.role || ""),
           points: p.points,
         }))}
-        excludeIds={[]}
+        filter={
+          actionPlayerId
+            ? (p) =>
+                p.role ===
+                roleToSlotLabel(
+                  players.find((pl) => pl.id === actionPlayerId)?.role || ""
+                )
+            : undefined
+        }
         onSelect={confirmReplace}
       />
       <Footer />

@@ -26,6 +26,12 @@ cloudinary==1.41.0
 # Excel/CSV Import
 openpyxl==3.1.5
 
+# Google Sheets Sync
+google-api-python-client==2.108.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.1.0
+gspread==5.12.0
+
 # Development dependencies - Updated versions
 black==24.10.0
 isort==5.13.2

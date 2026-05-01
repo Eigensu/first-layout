@@ -133,7 +133,7 @@ export function PitchPlayerCard({
         )}
         title={player.name}
       >
-        {player.name.split(" ").pop() || player.name}
+        {player.name}
       </div>
 
       {/* Points Badge - Clean and modern */}

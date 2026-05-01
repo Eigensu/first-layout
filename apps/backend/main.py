@@ -14,6 +14,7 @@ from app.routes.players_hot import router as players_hot_router
 from app.routes.slots import router as slots_router
 from app.routes.teams import router as teams_router
 from app.routes.carousel import router as carousel_router
+from app.routes.sync import router as sync_router
 from app.routes.admin import (
     players_router as admin_players_router,
     slots_router as admin_slots_router,
@@ -63,6 +64,7 @@ app.add_middleware(
 logger.info("CORS exact origins: %s", settings.cors_exact_origins)
 logger.info("CORS origin regex: %s", settings.cors_origin_regex)
 
+
 # Include routers
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -81,6 +83,7 @@ app.include_router(players_hot_router)
 app.include_router(slots_router)
 app.include_router(teams_router)
 app.include_router(carousel_router)
+app.include_router(sync_router)
 
 # Files are served via API streaming endpoints (GridFS); no static uploads mount required
 

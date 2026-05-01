@@ -109,7 +109,7 @@ function PlayerChip({
 
       {/* Name */}
       <span className="text-[10px] text-text-main font-medium leading-tight text-center line-clamp-2 w-full">
-        {player.name.split(" ").slice(-1)[0]}
+        {player.name}
       </span>
 
       {/* Points */}
