@@ -14,6 +14,10 @@ import {
   Settings,
   LogOut,
   Info,
+  Calendar,
+  Map,
+  Camera,
+  Shield,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -66,6 +70,30 @@ const DEFAULT_ITEMS: PillNavItem[] = [
     href: "/sponsors",
     icon: <Star className="w-4 h-4" />,
   },
+  {
+    id: "schedule",
+    label: "Schedule",
+    href: "/schedule",
+    icon: <Calendar className="w-4 h-4" />,
+  },
+  {
+    id: "court-map",
+    label: "Court Map",
+    href: "/court-map",
+    icon: <Map className="w-4 h-4" />,
+  },
+  {
+    id: "league-teams",
+    label: "League Teams",
+    href: "/league-teams",
+    icon: <Shield className="w-4 h-4" />,
+  },
+  {
+    id: "photos",
+    label: "Photos",
+    href: "/photos",
+    icon: <Camera className="w-4 h-4" />,
+  },
   // {
   //   id: "about",
   //   label: "About",
@@ -92,7 +120,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
     if (isAuthenticated) {
       return items;
     }
-    const allow = new Set(["home", "leaderboard", "about"]);
+    const allow = new Set(["home", "leaderboard", "about", "schedule", "court-map", "league-teams", "photos", "contests", "sponsors"]);
     return items.filter((it) => allow.has(it.id));
   }, [isAuthenticated, items]);
 

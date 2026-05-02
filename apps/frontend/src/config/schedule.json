@@ -1,0 +1,2126 @@
+[
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "AB",
+    "points": "2.0",
+    "court": "14.0",
+    "details": "SESSION 1"
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "AB",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "AB",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "AB",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "AB",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "CC",
+    "points": "2.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "CC",
+    "points": "2.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "CC",
+    "points": "2.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "CC",
+    "points": "2.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.00-8.30",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "WW",
+    "points": "2.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "WW",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "WW",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "WW",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "BB",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "BB",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "BB",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "BB",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "8.30-9.00",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "AA",
+    "points": "3.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "AA",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "AA",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "AA",
+    "points": "3.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "AA",
+    "points": "3.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Paramount Rangers",
+    "team2": "Maru Royals",
+    "category": "CW",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Dink Dawgs",
+    "team2": "Pickle Ballers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Su's Crew",
+    "team2": "Smash Bros",
+    "category": "CW",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Giants",
+    "category": "CW",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Legends",
+    "team2": "Pickle Pals",
+    "category": "CW",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Paddle Battle",
+    "team2": "Dink Responsibly",
+    "category": "CW",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.00-9.30",
+    "team1": "Modani Mavericks",
+    "team2": "Grand Slammers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "BREAK (15 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "AB",
+    "points": "2.0",
+    "court": "14.0",
+    "details": "SESSION 2"
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "AB",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "AB",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "AB",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "AB",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "AB",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "CC",
+    "points": "2.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "CC",
+    "points": "2.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "CC",
+    "points": "2.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "CC",
+    "points": "2.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "9.45-10.15",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "CC",
+    "points": "2.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "WW",
+    "points": "2.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "WW",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "WW",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "WW",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "WW",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "BB",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "BB",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "BB",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "BB",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.15-10.45",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "BB",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "AA",
+    "points": "3.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "AA",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "AA",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "AA",
+    "points": "3.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "AA",
+    "points": "3.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "AA",
+    "points": "3.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Pickle Pals",
+    "team2": "Dink Responsibly",
+    "category": "CW",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Giants",
+    "team2": "Grand Slammers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Sanghavi Smashers",
+    "team2": "Legends",
+    "category": "CW",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Pickle Ballers",
+    "team2": "Smash Bros",
+    "category": "CW",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Maru Royals",
+    "team2": "Modani Mavericks",
+    "category": "CW",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Paramount Rangers",
+    "team2": "Dink Dawgs",
+    "category": "CW",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "10.45-11.15",
+    "team1": "Su's Crew",
+    "team2": "Paddle Battle",
+    "category": "CW",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "LUNCH BREAK (45 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "AB",
+    "points": "2.0",
+    "court": "14.0",
+    "details": "SESSION 3"
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "AB",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "AB",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "AB",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "AB",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "CC",
+    "points": "2.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "CC",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "CC",
+    "points": "2.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.00-12.30",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "CC",
+    "points": "2.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "WW",
+    "points": "2.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "WW",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "WW",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "WW",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "BB",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "BB",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "BB",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "BB",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "12.30-1.00",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "BB",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "AA",
+    "points": "3.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "AA",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "AA",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "AA",
+    "points": "3.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "AA",
+    "points": "3.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Dink Dawgs",
+    "team2": "Modani Mavericks",
+    "category": "CW",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Sanghavi Smashers",
+    "team2": "Pickle Pals",
+    "category": "CW",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Paramount Rangers",
+    "team2": "Pickle Ballers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Maru Royals",
+    "team2": "Su's Crew",
+    "category": "CW",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Giants",
+    "team2": "Paddle Battle",
+    "category": "CW",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Legends",
+    "team2": "Grand Slammers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.00-1.30",
+    "team1": "Smash Bros",
+    "team2": "Dink Responsibly",
+    "category": "CW",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "BREAK (15 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "AB",
+    "points": "2.0",
+    "court": "14.0",
+    "details": "SESSION 4"
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "AB",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "AB",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "AB",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "AB",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "AB",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "AB",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "CC",
+    "points": "2.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "CC",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "CC",
+    "points": "2.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "CC",
+    "points": "2.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "CC",
+    "points": "2.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "1.45-2.15",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "CC",
+    "points": "2.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "WW",
+    "points": "2.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "WW",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "WW",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "WW",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "WW",
+    "points": "2.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "WW",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "BB",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "BB",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "BB",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "BB",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "BB",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.15-2.45",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "BB",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "AA",
+    "points": "3.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "AA",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "AA",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "AA",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "AA",
+    "points": "3.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "AA",
+    "points": "3.0",
+    "court": "10.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "AA",
+    "points": "3.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Legends",
+    "team2": "Paddle Battle",
+    "category": "CW",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Modani Mavericks",
+    "team2": "Smash Bros",
+    "category": "CW",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Maru Royals",
+    "team2": "Giants",
+    "category": "CW",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Grand Slammers",
+    "team2": "Dink Responsibly",
+    "category": "CW",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Dink Dawgs",
+    "team2": "Su's Crew",
+    "category": "CW",
+    "points": "3.0",
+    "court": "9.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Pickle Ballers",
+    "team2": "Pickle Pals",
+    "category": "CW",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "2.45-3.15",
+    "team1": "Paramount Rangers",
+    "team2": "Sanghavi Smashers",
+    "category": "CW",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "HIGH TEA (45 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "1",
+    "team2": "8",
+    "category": "AB",
+    "points": "2.0",
+    "court": "5.0",
+    "details": "QUARTERS"
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "2",
+    "team2": "7",
+    "category": "AB",
+    "points": "2.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "3",
+    "team2": "6",
+    "category": "AB",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "4",
+    "team2": "5",
+    "category": "AB",
+    "points": "2.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "1",
+    "team2": "8",
+    "category": "CC",
+    "points": "2.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "2",
+    "team2": "7",
+    "category": "CC",
+    "points": "2.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "3",
+    "team2": "6",
+    "category": "CC",
+    "points": "2.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "4",
+    "team2": "5",
+    "category": "CC",
+    "points": "2.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "1",
+    "team2": "8",
+    "category": "WW",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "2",
+    "team2": "7",
+    "category": "WW",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "3",
+    "team2": "6",
+    "category": "WW",
+    "points": "2.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.00-4.30",
+    "team1": "4",
+    "team2": "5",
+    "category": "WW",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "1",
+    "team2": "8",
+    "category": "BB",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "2",
+    "team2": "7",
+    "category": "BB",
+    "points": "3.0",
+    "court": "14.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "3",
+    "team2": "6",
+    "category": "BB",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "4",
+    "team2": "5",
+    "category": "BB",
+    "points": "3.0",
+    "court": "12.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "1",
+    "team2": "8",
+    "category": "AA",
+    "points": "3.0",
+    "court": "6.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "2",
+    "team2": "7",
+    "category": "AA",
+    "points": "3.0",
+    "court": "15.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "3",
+    "team2": "6",
+    "category": "AA",
+    "points": "3.0",
+    "court": "8.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "4",
+    "team2": "5",
+    "category": "AA",
+    "points": "3.0",
+    "court": "13.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "1",
+    "team2": "8",
+    "category": "CW",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "2",
+    "team2": "7",
+    "category": "CW",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "3",
+    "team2": "6",
+    "category": "CW",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "4.30-5.00",
+    "team1": "4",
+    "team2": "5",
+    "category": "CW",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "BREAK (15 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "AB",
+    "points": "2.0",
+    "court": "11.0",
+    "details": "SEMIS"
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "AB",
+    "points": "2.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "CC",
+    "points": "2.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.15-5.45",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "WW",
+    "points": "2.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "BB",
+    "points": "3.0",
+    "court": "16.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "AA",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "AA",
+    "points": "3.0",
+    "court": "17.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF1",
+    "team2": "QF4",
+    "category": "CW",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "5.45-6.15",
+    "team1": "QF2",
+    "team2": "QF3",
+    "category": "CW",
+    "points": "3.0",
+    "court": "5.0",
+    "details": ""
+  },
+  {
+    "type": "break",
+    "time": "BREAK (15 Mins)"
+  },
+  {
+    "type": "match",
+    "time": "6.30-7.00",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "AB",
+    "points": "2.0",
+    "court": "11.0",
+    "details": "FINALS"
+  },
+  {
+    "type": "match",
+    "time": "6.30-7.00",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "CC",
+    "points": "2.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "7.00-7.30",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "WW",
+    "points": "2.0",
+    "court": "7.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "7.00-7.30",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "BB",
+    "points": "3.0",
+    "court": "11.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "7.30-8.00",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "AA",
+    "points": "3.0",
+    "court": "18.0",
+    "details": ""
+  },
+  {
+    "type": "match",
+    "time": "7.30-8.00",
+    "team1": "SF1",
+    "team2": "SF2",
+    "category": "CW",
+    "points": "3.0",
+    "court": "7.0",
+    "details": ""
+  }
+]
