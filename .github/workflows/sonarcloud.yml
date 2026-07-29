@@ -16,6 +16,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install backend dependencies
+        working-directory: apps/backend
+        run: pip install -r requirements.txt
+
+      - name: Run backend tests with coverage
+        working-directory: apps/backend
+        run: pytest --cov=app --cov-report=xml:coverage.xml
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v4
         env:

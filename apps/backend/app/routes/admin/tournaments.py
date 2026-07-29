@@ -14,7 +14,7 @@ from app.schemas.tournament import (
     validate_slug,
 )
 from app.utils.dependencies import get_admin_user
-from app.utils.timezone import now_ist
+from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
 
@@ -165,7 +165,14 @@ async def update_tournament(
     for field, value in updates.items():
         setattr(tournament, field, value)
 
-    if tournament.start_at and tournament.end_at and tournament.start_at >= tournament.end_at:
+    # Values just set from the request are IST-aware (schema validation);
+    # values still on the document from a prior fetch may be naive (Mongo
+    # round-trips datetimes as naive UTC). Normalize both before comparing.
+    if (
+        tournament.start_at
+        and tournament.end_at
+        and to_ist(tournament.start_at) >= to_ist(tournament.end_at)
+    ):
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
     tournament.updated_at = now_ist()
