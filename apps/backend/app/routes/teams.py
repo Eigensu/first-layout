@@ -12,6 +12,7 @@ from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResp
 from app.utils.dependencies import get_current_active_user
 from app.models.admin.slot import Slot
 from app.services.contest_status import compute_contest_status
+from app.services.team_composition import validate_team_composition
 from app.common.enums.contests import ContestStatus
 from app.common.enums.enrollments import EnrollmentStatus
 from app.utils.timezone import now_ist
@@ -128,6 +129,7 @@ async def create_team(
         )
 
     # If tied to a contest, enforce allowed teams for daily contests
+    contest = None
     if team_data.contest_id:
         try:
             contest = await Contest.get(PydanticObjectId(team_data.contest_id))
@@ -155,7 +157,15 @@ async def create_team(
                         "allowed_teams": contest.allowed_teams,
                     },
                 )
-    
+
+    # Enforce per-real-world-team composition limits from GlobalSettings
+    await validate_team_composition(
+        players=players,
+        contest=contest,
+        squad_size=len(team_data.player_ids),
+        max_players_allowed=max_players_allowed,
+    )
+
     user_id = current_user.id
     if user_id is None:
         raise HTTPException(
@@ -388,6 +398,7 @@ async def update_team(
                 update_data["total_value"] = sum(player.price for player in players)
 
                 # If team belongs to a daily contest with restrictions, enforce allowed teams
+                contest = None
                 if team.contest_id:
                     try:
                         contest = await Contest.get(PydanticObjectId(team.contest_id))
@@ -404,6 +415,14 @@ async def update_team(
                                     "allowed_teams": contest.allowed_teams,
                                 },
                             )
+
+                # Enforce per-real-world-team composition limits from GlobalSettings
+                await validate_team_composition(
+                    players=players,
+                    contest=contest,
+                    squad_size=len(player_ids),
+                    max_players_allowed=max_players_allowed,
+                )
 
                 # Per-slot constraints validation (same as create)
                 slot_counts: Dict[str, int] = {}
