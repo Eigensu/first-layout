@@ -4,6 +4,7 @@ from .sponsors import router as sponsors_router
 from .leaderboard import router as leaderboard_router
 from .contests import router as contests_router
 from .settings import router as settings_router
+from .tournaments import router as tournaments_router
 
 __all__ = [
     "auth_router",
@@ -12,4 +13,5 @@ __all__ = [
     "leaderboard_router",
     "contests_router",
     "settings_router",
+    "tournaments_router",
 ]

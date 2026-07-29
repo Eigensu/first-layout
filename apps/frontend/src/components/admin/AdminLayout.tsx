@@ -8,6 +8,7 @@ import { SponsorsSection } from "./sponsors/SponsorsSection";
 import { ContestsSection } from "./contests/ContestsSection";
 import { SlotsSection } from "./slots/SlotsSection";
 import { CarouselSection } from "./carousel/CarouselSection";
+import { TournamentsSection } from "./tournaments/TournamentsSection";
 import { GeneralSettingsSection } from "./settings/GeneralSettingsSection";
 import {
   Users,
@@ -16,10 +17,12 @@ import {
   Grid3x3,
   Home,
   Image as ImageIcon,
+  Globe,
   Settings,
 } from "lucide-react";
 
 type Section =
+  | "tournaments"
   | "players"
   | "sponsors"
   | "contests"
@@ -37,6 +40,7 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
   const router = useRouter();
 
   const sections = [
+    { id: "tournaments" as Section, label: "Tournaments", icon: Globe },
     { id: "players" as Section, label: "Players", icon: Users },
     { id: "sponsors" as Section, label: "Sponsors", icon: Award },
     { id: "contests" as Section, label: "Contests", icon: Trophy },
@@ -48,6 +52,8 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
 
   const renderSection = () => {
     switch (activeSection) {
+      case "tournaments":
+        return <TournamentsSection />;
       case "players":
         return <PlayersSection />;
       case "sponsors":
