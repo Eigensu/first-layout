@@ -5,3 +5,4 @@ export { SponsorsSection } from "./sponsors/SponsorsSection";
 export { ContestsSection } from "./contests/ContestsSection";
 export { SlotsSection } from "./slots/SlotsSection";
 export { TournamentsSection } from "./tournaments/TournamentsSection";
+export { GeneralSettingsSection } from "./settings/GeneralSettingsSection";
