@@ -153,8 +153,8 @@ export function GeneralSettingsSection() {
 
           <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
             <p className="text-xs text-gray-500 italic max-w-sm">
-              * Stored globally and read by team-composition checks. Not yet
-              enforced at team save time.
+              * Enforced when a squad is saved. The minimum applies only to
+              daily contests between two teams, once the squad is full.
             </p>
             <Button
               variant="primary"
