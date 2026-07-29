@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status as http_status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import Optional, List
 from beanie import PydanticObjectId
 from datetime import datetime
+from io import BytesIO
+import re
+from urllib.parse import quote
 from bson import ObjectId
 from app.utils.timezone import now_ist, to_ist
 from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs
 from pydantic import BaseModel
+from openpyxl import Workbook
 
 from app.models.contest import Contest
 from app.models.team import Team
@@ -511,3 +516,185 @@ async def upload_contest_logo(
             detail=f"Failed to upload logo: {str(e)}"
         )
 
+
+
+@router.get(
+    "/{contest_id}/leaderboard/export",
+    responses={
+        404: {"description": "Contest not found"},
+        500: {"description": "Server error"},
+    },
+)
+async def export_contest_leaderboard_excel(
+    contest_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Export a contest's leaderboard as an .xlsx file.
+    Requires authentication.
+    """
+    contest = await Contest.get(contest_id)
+    if not contest:
+        raise HTTPException(status_code=404, detail="Contest not found")
+
+    enrollments = await TeamContestEnrollment.find(
+        {
+            "contest_id": contest.id,
+            "status": EnrollmentStatus.ACTIVE,
+        }
+    ).to_list()
+
+    team_ids = [enr.team_id for enr in enrollments]
+    teams = await Team.find({"_id": {"$in": team_ids}}).to_list() if team_ids else []
+    teams_by_id = {str(t.id): t for t in teams}
+
+    user_ids = list({t.user_id for t in teams})
+    users = await User.find({"_id": {"$in": user_ids}}).to_list() if user_ids else []
+    users_by_id = {str(u.id): u for u in users}
+
+    all_player_ids: set = set()
+    team_player_oids_map: dict = {}
+    for enr in enrollments:
+        team = teams_by_id.get(str(enr.team_id))
+        if not team:
+            continue
+        oids = []
+        for pid in team.player_ids:
+            if ObjectId.is_valid(pid):
+                try:
+                    poid = PydanticObjectId(pid)
+                except (TypeError, ValueError):
+                    continue
+                oids.append(poid)
+                all_player_ids.add(poid)
+        team_player_oids_map[str(enr.team_id)] = oids
+
+    pcp_docs = []
+    if all_player_ids:
+        pcp_docs = await PlayerContestPoints.find(
+            {
+                "contest_id": contest.id,
+                "player_id": {"$in": list(all_player_ids)},
+            }
+        ).to_list()
+    pcp_points_map = {str(doc.player_id): float(doc.points or 0.0) for doc in pcp_docs}
+
+    players_by_id = {}
+    if all_player_ids:
+        player_docs = await Player.find(
+            {"_id": {"$in": list(all_player_ids)}}
+        ).to_list()
+        players_by_id = {str(p.id): p for p in player_docs}
+
+    computed_rows = []
+    for enr in enrollments:
+        team = teams_by_id.get(str(enr.team_id))
+        if not team:
+            continue
+        user = users_by_id.get(str(team.user_id))
+        if not user:
+            continue
+
+        oids = team_player_oids_map.get(str(enr.team_id), [])
+        captain_id = str(team.captain_id) if team.captain_id else None
+        vice_id = str(team.vice_captain_id) if team.vice_captain_id else None
+
+        total_points = 0.0
+        selected_player_names = []
+        for oid in oids:
+            pid = str(oid)
+            points = float(pcp_points_map.get(pid, 0.0))
+            if captain_id and pid == captain_id:
+                points *= 2.0
+            elif vice_id and pid == vice_id:
+                points *= 1.5
+            total_points += points
+
+            p = players_by_id.get(pid)
+            selected_player_names.append(p.name if p else pid)
+
+        captain_player = players_by_id.get(captain_id) if captain_id else None
+        vice_captain_player = players_by_id.get(vice_id) if vice_id else None
+        captain_name = captain_player.name if captain_player else ""
+        vice_captain_name = vice_captain_player.name if vice_captain_player else ""
+
+        computed_rows.append(
+            {
+                "team_name": team.team_name,
+                "points": float(total_points),
+                "username": user.username,
+                "full_name": user.full_name or "",
+                "email": str(user.email) if user.email else "",
+                "mobile": user.mobile or "",
+                "captain_name": captain_name,
+                "vice_captain_name": vice_captain_name,
+                "selected_players": ", ".join(selected_player_names),
+            }
+        )
+
+    computed_rows.sort(key=lambda row: row["points"], reverse=True)
+
+    wb = Workbook()
+    ws = wb.active
+    if ws is None:
+        raise HTTPException(status_code=500, detail="Failed to initialize workbook")
+    ws.title = "Leaderboard"
+
+    ws.append(
+        [
+            "Contest ID",
+            "Contest Code",
+            "Contest Name",
+            "Rank",
+            "Team Name",
+            "Points",
+            "Username",
+            "Name",
+            "Email",
+            "Number",
+            "Captain",
+            "Vice Captain",
+            "Selected Players",
+        ]
+    )
+
+    for idx, row in enumerate(computed_rows, start=1):
+        ws.append(
+            [
+                str(contest.id),
+                contest.code,
+                contest.name,
+                idx,
+                row["team_name"],
+                round(row["points"], 2),
+                row["username"],
+                row["full_name"],
+                row["email"],
+                row["mobile"],
+                row["captain_name"],
+                row["vice_captain_name"],
+                row["selected_players"],
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    raw_code = contest.code or "contest"
+    safe_code = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_code).strip("._") or "contest"
+    filename_ascii = (
+        f"leaderboard_{safe_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    )
+    filename_star = quote(filename_ascii)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{filename_ascii}\"; "
+                f"filename*=UTF-8''{filename_star}"
+            )
+        },
+    )

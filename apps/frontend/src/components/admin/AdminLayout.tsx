@@ -8,6 +8,7 @@ import { SponsorsSection } from "./sponsors/SponsorsSection";
 import { ContestsSection } from "./contests/ContestsSection";
 import { SlotsSection } from "./slots/SlotsSection";
 import { CarouselSection } from "./carousel/CarouselSection";
+import { GeneralSettingsSection } from "./settings/GeneralSettingsSection";
 import {
   Users,
   Award,
@@ -15,6 +16,7 @@ import {
   Grid3x3,
   Home,
   Image as ImageIcon,
+  Settings,
 } from "lucide-react";
 
 type Section =
@@ -23,7 +25,8 @@ type Section =
   | "contests"
   | "slots"
   | "teamsEdit"
-  | "carousel";
+  | "carousel"
+  | "settings";
 
 interface AdminLayoutProps {
   children?: React.ReactNode;
@@ -40,6 +43,7 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
     { id: "slots" as Section, label: "Slots", icon: Grid3x3 },
     { id: "teamsEdit" as Section, label: "Edit by Teams", icon: Users },
     { id: "carousel" as Section, label: "Carousel Settings", icon: ImageIcon },
+    { id: "settings" as Section, label: "General Settings", icon: Settings },
   ];
 
   const renderSection = () => {
@@ -56,6 +60,8 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
         return <TeamsEditSection />;
       case "carousel":
         return <CarouselSection />;
+      case "settings":
+        return <GeneralSettingsSection />;
       default:
         return <PlayersSection />;
     }

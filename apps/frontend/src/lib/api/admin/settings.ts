@@ -1,5 +1,16 @@
 import apiClient from '../client';
 
+export interface GlobalSettings {
+  min_players_per_team: number;
+  max_players_per_team: number;
+  default_contest_logo_file_id?: string | null;
+}
+
+export interface GlobalSettingsUpdate {
+  min_players_per_team?: number;
+  max_players_per_team?: number;
+}
+
 export const adminSettingsApi = {
   uploadDefaultLogo: async (file: File): Promise<{ url: string; message: string }> => {
     const formData = new FormData();
@@ -13,6 +24,14 @@ export const adminSettingsApi = {
     const response = await apiClient.get('/api/settings/logo', {
       responseType: 'blob',
     });
+    return response.data;
+  },
+  getSettings: async (): Promise<GlobalSettings> => {
+    const response = await apiClient.get('/api/admin/settings');
+    return response.data;
+  },
+  updateSettings: async (data: GlobalSettingsUpdate): Promise<GlobalSettings> => {
+    const response = await apiClient.put('/api/admin/settings', data);
     return response.data;
   },
 };
