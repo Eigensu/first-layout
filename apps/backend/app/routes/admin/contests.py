@@ -7,6 +7,7 @@ from io import BytesIO
 import re
 from urllib.parse import quote
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from app.utils.timezone import now_ist, to_ist
 from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs
 from pydantic import BaseModel
@@ -246,7 +247,12 @@ async def enroll_teams(
             status=EnrollmentStatus.ACTIVE,
             enrolled_at=now_ist(),
         )
-        await enr.insert()
+        try:
+            await enr.insert()
+        except DuplicateKeyError:
+            # Another active enrollment for this user landed first; skip this
+            # team rather than failing the whole batch.
+            continue
         # Persist contest_id on the team for convenience
         try:
             team.contest_id = str(contest.id)
