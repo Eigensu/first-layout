@@ -20,11 +20,13 @@ export function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
-  // The subdomain root shows the tournament landing page.
+  // The subdomain root sends visitors straight into the app instead of a
+  // separate tournament landing page. This is a real redirect (not a
+  // rewrite) so the browser's address bar shows /home.
   if (pathname === "/") {
     const url = req.nextUrl.clone();
-    url.pathname = `/t/${slug}`;
-    return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    url.pathname = "/home";
+    return NextResponse.redirect(url);
   }
 
   // Every other path is served by the shared app, tagged with the tenant.
