@@ -345,7 +345,7 @@ export default function ContestTeamBuilderPage() {
         <div className="space-y-4 sm:space-y-8">
           {showViewOnly ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 mb-4">
+              <p className="text-text-muted mb-4">
                 You have already created a team for this contest.
               </p>
               <Button

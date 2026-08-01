@@ -482,6 +482,7 @@ export function SlotsSection() {
                         variant="ghost"
                         size="sm"
                         onClick={() => openEdit(slot)}
+                        className="text-text-main hover:bg-bg-card-soft"
                       >
                         Edit
                       </Button>

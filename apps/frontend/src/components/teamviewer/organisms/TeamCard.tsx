@@ -124,7 +124,7 @@ export function TeamCard({
                   size="sm"
                   onClick={onCancelRename}
                   disabled={renaming}
-                  className="flex-1 sm:flex-none"
+                  className="flex-1 sm:flex-none text-text-main hover:bg-bg-card-soft"
                 >
                   Cancel
                 </Button>
@@ -182,7 +182,7 @@ export function TeamCard({
       </div>
 
       {/* Squad Heading */}
-      <h4 className="text-sm font-semibold text-gray-700 mb-3">
+      <h4 className="text-sm font-semibold text-text-main mb-3">
         Squad ({teamPlayers.length} players)
       </h4>
 
@@ -248,7 +248,7 @@ export function TeamCard({
           size="sm"
           onClick={onOpenDelete}
           disabled={deleting}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
+          className="text-danger hover:text-danger hover:bg-bg-card-soft w-full sm:w-auto"
         >
           {deleting ? "Deleting..." : "Delete Team"}
         </Button>

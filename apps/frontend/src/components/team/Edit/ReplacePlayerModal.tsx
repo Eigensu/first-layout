@@ -88,7 +88,7 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
         </div>
 
         <div className="px-5 py-3 border-t border-border-subtle flex justify-end">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} className="text-text-main hover:bg-bg-card-soft">
             Close
           </Button>
         </div>
