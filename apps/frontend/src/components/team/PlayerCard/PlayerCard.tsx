@@ -226,7 +226,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         {variant === "captain" ? (
           <div className="mb-2 sm:mb-3">
             <div className="text-center">
-              <div className="text-lg font-bold text-success-600">
+              <div className="text-lg font-bold text-emerald-600">
                 {player.points}
               </div>
               <div className="text-[10px] sm:text-xs text-gray-500">
@@ -237,7 +237,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
             <div className="text-center">
-              <div className="text-base sm:text-lg font-bold text-success-600">
+              <div className="text-base sm:text-lg font-bold text-emerald-600">
                 {player.points}
               </div>
               <div className="text-[10px] sm:text-xs text-gray-500">

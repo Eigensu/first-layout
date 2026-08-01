@@ -165,7 +165,7 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
             </div>
 
             {loading ? (
-              <div className="text-center text-gray-500 py-6">
+              <div className="text-center text-text-muted py-6">
                 Loading players...
               </div>
             ) : error ? (

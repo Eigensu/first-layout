@@ -44,7 +44,7 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-gray-500 italic">
+                <p className="text-[10px] text-text-muted italic">
                   No players selected yet
                 </p>
               )}

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { cn } from "@/lib/utils";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "outline" | "destructive";
@@ -45,7 +46,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled}
-        className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+        className={cn(
+          baseClasses,
+          variantClasses[variant],
+          sizeClasses[size],
+          className
+        )}
         {...props}
       >
         {children}

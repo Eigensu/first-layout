@@ -105,13 +105,13 @@ export const TeamSummaryStep: React.FC<TeamSummaryStepProps> = ({
                 </Card>
               </>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-text-muted">
                 No team selected
               </div>
             )}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <div className="text-center py-8 text-text-subtle text-sm">
             Finalize team in Step 2 to view summary
           </div>
         )}

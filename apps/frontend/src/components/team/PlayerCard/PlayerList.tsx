@@ -78,7 +78,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       <SearchInput searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
       {/* Player Count */}
-      <div className="text-[10px] sm:text-sm text-gray-600 font-medium ml-1">
+      <div className="text-[10px] sm:text-sm text-text-main font-medium ml-1">
         Showing {paginatedPlayers.length} of {totalPlayers} player
         {totalPlayers !== 1 ? "s" : ""}
       </div>
@@ -111,7 +111,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
           />
         </>
       ) : (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-text-muted">
           No players found matching your search.
         </div>
       )}

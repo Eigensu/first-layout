@@ -24,11 +24,11 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-bg-elevated rounded-xl shadow-xl w-full max-w-2xl border border-border-subtle">
-        <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h3 className="font-semibold text-gray-900">Replace Player</h3>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle">
+          <h3 className="font-semibold text-text-main">Replace Player</h3>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-text-muted hover:text-text-main"
           >
             ✕
           </button>
@@ -66,13 +66,13 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
                         </div>
                         <div className="text-xs text-text-muted">{p.team}</div>
                       </div>
-                      <div className="text-right text-sm text-success-600">
+                      <div className="text-right text-sm text-success">
                         {formatPoints(p.points || 0)} pts
                       </div>
                     </button>
                   ))}
                   {candidates.length === 0 && (
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-text-muted">
                       No available players in this slot.
                     </div>
                   )}
@@ -81,8 +81,8 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
             );
           })()}
         </div>
-        <div className="px-5 py-3 border-t flex justify-end">
-          <Button variant="ghost" onClick={onClose}>
+        <div className="px-5 py-3 border-t border-border-subtle flex justify-end">
+          <Button variant="ghost" onClick={onClose} className="text-text-main hover:bg-bg-card-soft">
             Close
           </Button>
         </div>

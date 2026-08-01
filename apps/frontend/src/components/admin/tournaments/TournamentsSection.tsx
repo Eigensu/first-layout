@@ -419,7 +419,7 @@ function TournamentForm({
             )}
 
             <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+              <Button type="button" variant="ghost" onClick={onClose} disabled={saving} className="text-text-main hover:bg-bg-card-soft">
                 Cancel
               </Button>
               <Button type="submit" disabled={saving || slugStatus.state === "error"}>

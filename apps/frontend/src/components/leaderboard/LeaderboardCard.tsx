@@ -24,7 +24,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
       2: "text-[#C0C0C0]", // Silver
       3: "text-[#CD7F32]", // Bronze
     };
-    const color = colors[rank as keyof typeof colors] || "text-gray-700";
+    const color = colors[rank as keyof typeof colors] || "text-text-main";
     return (
       <span className={`${color} font-extrabold text-2xl sm:text-3xl`}>
         {rank}
@@ -174,7 +174,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
               {entry.rank}
             </span>
           ) : (
-            <span className="font-bold text-sm sm:text-base text-gray-700">
+            <span className="font-bold text-sm sm:text-base text-text-main">
               #{entry.rank}
             </span>
           )}

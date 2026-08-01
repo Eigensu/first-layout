@@ -230,7 +230,7 @@ export function TeamViewer({
                 <Button variant="primary" size="sm" onClick={onSaveRename} disabled={renaming} className="flex-1 sm:flex-none">
                   {renaming ? "Saving..." : "Save"}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={onCancelRename} disabled={renaming} className="flex-1 sm:flex-none">
+                <Button variant="ghost" size="sm" onClick={onCancelRename} disabled={renaming} className="flex-1 sm:flex-none text-text-main hover:bg-bg-card-soft">
                   Cancel
                 </Button>
               </div>
