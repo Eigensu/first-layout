@@ -20,3 +20,12 @@ class PointsScope(str, Enum):
 class ContestType(str, Enum):
     DAILY = "daily"
     FULL = "full"
+
+
+class ContestFormat(str, Enum):
+    """How a squad is assembled. Independent of ContestType (daily vs full)."""
+
+    # Squad shape comes from Slot configuration; player price is cosmetic.
+    SLOT_BASED = "slot_based"
+    # Single open pool priced by auction sale value, capped by a purse.
+    AUCTION_PURSE = "auction_purse"

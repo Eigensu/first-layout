@@ -11,7 +11,9 @@ class Player(Document):
     team: str
     points: float = 0.0
     status: str = "Active"  # Active, Inactive, Injured
-    price: float = 8.0  # Player price for fantasy selection
+    # Auction sale value. 0 means the player has never been auctioned, which
+    # makes them ineligible for auction-purse contests (see services/auction.py).
+    price: float = 0.0
     slot: Optional[str] = None  # Slot assignment for the player (Slot ObjectId string)
     image_url: Optional[str] = None
     stats: Optional[dict] = None  # Batting avg, bowling avg, etc.

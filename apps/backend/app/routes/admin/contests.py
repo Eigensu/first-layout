@@ -19,7 +19,9 @@ from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.services.contest_status import sync_contest_status, contest_status_filter_clauses
-from app.common.enums.contests import ContestStatus, ContestVisibility
+from app.common.enums.contests import ContestStatus, ContestVisibility, ContestFormat
+from app.models.settings import GlobalSettings
+from app.services.auction import assert_auction_config_feasible
 from app.common.enums.enrollments import EnrollmentStatus
 from app.schemas.contest import (
     ContestCreate,
@@ -61,6 +63,10 @@ async def to_response(contest: Contest) -> ContestResponse:
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
         allowed_teams=contest.allowed_teams or [],
+        contest_format=contest.contest_format,
+        purse=contest.purse,
+        squad_size=contest.squad_size,
+        max_players_per_team=contest.max_players_per_team,
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
@@ -79,6 +85,15 @@ async def create_contest(
     if existing:
         raise HTTPException(status_code=400, detail="Contest code already exists")
 
+    # Reject an auction setup no participant could satisfy, before it is saved.
+    if data.contest_format == ContestFormat.AUCTION_PURSE:
+        settings = await GlobalSettings.get_instance()
+        await assert_auction_config_feasible(
+            squad_size=data.squad_size,
+            purse=data.purse,
+            max_per_team=data.max_players_per_team or settings.max_players_per_team,
+        )
+
     now = now_ist()
     contest = Contest(
         code=data.code,
@@ -91,6 +106,10 @@ async def create_contest(
         points_scope=data.points_scope,
         contest_type=data.contest_type,
         allowed_teams=data.allowed_teams,
+        contest_format=data.contest_format,
+        purse=data.purse,
+        squad_size=data.squad_size,
+        max_players_per_team=data.max_players_per_team,
         created_at=now,
         updated_at=now,
     )
@@ -157,6 +176,18 @@ async def update_contest(
     new_end = update_fields.get("end_at", contest.end_at)
     if new_start >= new_end:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
+
+    # Re-check feasibility against the merged result, so an edit cannot leave a
+    # contest in a state no participant could satisfy.
+    new_format = update_fields.get("contest_format", contest.contest_format)
+    if new_format == ContestFormat.AUCTION_PURSE:
+        settings = await GlobalSettings.get_instance()
+        new_max = update_fields.get("max_players_per_team", contest.max_players_per_team)
+        await assert_auction_config_feasible(
+            squad_size=update_fields.get("squad_size", contest.squad_size),
+            purse=update_fields.get("purse", contest.purse),
+            max_per_team=new_max or settings.max_players_per_team,
+        )
 
     for k, v in update_fields.items():
         setattr(contest, k, v)

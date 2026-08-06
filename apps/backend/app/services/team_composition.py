@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.settings import GlobalSettings
+from app.services.auction import resolve_max_players_per_team
 
 
 def _pluralize(count: int, noun: str) -> str:
@@ -34,22 +35,24 @@ async def validate_team_composition(
     Two rules apply:
 
     - Maximum (always checked): no real-world team may contribute more than
-      ``max_players_per_team`` players.
+      ``max_players_per_team`` players, taken from the contest override when
+      set and from GlobalSettings otherwise.
     - Minimum (only on a complete squad): for a daily contest between exactly
       two teams, each must contribute at least ``min_players_per_team``. This
       is deferred until the squad is full so partially-built teams are not
       rejected mid-selection.
     """
     settings = await GlobalSettings.get_instance()
+    max_per_team = resolve_max_players_per_team(contest, settings)
     team_counts = Counter(p.team for p in players if p.team)
 
     for team_name, count in team_counts.items():
-        if count > settings.max_players_per_team:
+        if count > max_per_team:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     f"Cannot select more than "
-                    f"{_pluralize(settings.max_players_per_team, 'player')} "
+                    f"{_pluralize(max_per_team, 'player')} "
                     f"from team {team_name}"
                 ),
             )
