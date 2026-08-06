@@ -106,7 +106,11 @@ class ContestResponse(BaseModel):
     contest_format: str
     purse: float
     squad_size: Optional[int] = None
+    # Raw per-contest override; None means "inherit the global setting".
     max_players_per_team: Optional[int] = None
+    # The limit actually enforced, with the global fallback already applied, so
+    # clients never have to combine the two sources themselves.
+    effective_max_players_per_team: int
     created_at: datetime
     updated_at: datetime
 

@@ -133,3 +133,20 @@ async def test_existing_contests_default_to_slot_based(client, db):
     assert body["contest_format"] == "slot_based"
     assert body["squad_size"] is None
     assert body["max_players_per_team"] is None
+
+
+async def test_response_exposes_the_effective_team_cap(client, db):
+    """Clients get the resolved limit, not just the raw override."""
+    await _seed_pool(["A", "B", "C"])
+
+    with_override = await client.post("/api/admin/contests", json=_payload())
+    assert with_override.json()["effective_max_players_per_team"] == 4
+
+    inherited = await client.post(
+        "/api/admin/contests",
+        json=_payload(code="auction-2", max_players_per_team=None),
+    )
+    body = inherited.json()
+    assert body["max_players_per_team"] is None
+    # Falls back to the GlobalSettings default.
+    assert body["effective_max_players_per_team"] == 7

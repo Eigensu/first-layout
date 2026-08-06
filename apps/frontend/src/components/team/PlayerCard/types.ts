@@ -1,3 +1,5 @@
+import type { ContestFormat } from "@/common/consts/contest";
+
 export interface Player {
   id: string;
   name: string;
@@ -32,6 +34,10 @@ export interface PlayerCardProps {
   disabled?: boolean;
   /** Visual/layout variant. Use 'captain' in Step 2 to hide price/matches and show larger avatar. */
   variant?: "default" | "captain";
+  /** Contest format, used to label and format a player's value */
+  contestFormat?: ContestFormat;
+  /** Shown as a tooltip when the card is disabled, explaining why */
+  disabledReason?: string;
 }
 
 export interface PlayerListProps {
@@ -55,4 +61,20 @@ export interface PlayerListProps {
   compactShowPrice?: boolean;
   /** Function to determine if a player should be disabled */
   isPlayerDisabled?: (player: Player) => boolean;
+  /** Explains why a disabled player cannot be picked; shown as a tooltip */
+  getDisabledReason?: (player: Player) => string | null;
+  /** Show the real-world team dropdown and value/points sort controls */
+  showPoolFilters?: boolean;
+  /** Contest format, used to label and format a player's value */
+  contestFormat?: ContestFormat;
 }
+
+/** Ordering options for the open pool in auction contests. */
+export const POOL_SORTS = {
+  VALUE_DESC: "value_desc",
+  VALUE_ASC: "value_asc",
+  POINTS_DESC: "points_desc",
+  NAME_ASC: "name_asc",
+} as const;
+
+export type PoolSort = (typeof POOL_SORTS)[keyof typeof POOL_SORTS];

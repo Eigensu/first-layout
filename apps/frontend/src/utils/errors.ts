@@ -25,6 +25,20 @@ export function extractErrorMessage(detail: any, defaultMessage: string = "An er
     return lines.join("\n");
   }
   
+  // Auction squad that costs more than the contest purse
+  if (typeof detail.message === "string" && typeof detail.over_by === "number") {
+    return `${detail.message} by ${Math.round(detail.over_by).toLocaleString()} points.`;
+  }
+
+  // Errors that name the offending players (unavailable, or a disallowed team)
+  if (typeof detail.message === "string") {
+    const names = detail.unavailable_players ?? detail.disallowed_players;
+    if (Array.isArray(names) && names.length > 0) {
+      return `${detail.message}: ${names.join(", ")}`;
+    }
+    return detail.message;
+  }
+
   // Handle FastAPI validation array format: [{"loc": ["body", "field"], "msg": "error message"}]
   if (Array.isArray(detail)) {
     const firstError = detail[0];

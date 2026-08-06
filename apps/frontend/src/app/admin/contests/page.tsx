@@ -10,15 +10,18 @@ import {
   Contest,
   ContestCreate,
   ContestType,
+  ContestFormat,
   ContestVisibility,
 } from "@/lib/api/admin/contests";
 import { adminSettingsApi } from "@/lib/api/admin/settings";
 import {
   API_BASE_URL,
   CONTEST_DEFAULTS,
+  CONTEST_FORMAT,
   CONTEST_TYPE_OPTIONS,
   CONTEST_VISIBILITY_OPTIONS,
 } from "@/common/consts";
+import { parseApiError } from "@/utils/errors";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AlertDialog } from "@/components/ui/AlertDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -39,6 +42,10 @@ export default function AdminContestsPage() {
     points_scope: CONTEST_DEFAULTS.points_scope,
     contest_type: CONTEST_DEFAULTS.contest_type,
     allowed_teams: [],
+    contest_format: CONTEST_DEFAULTS.contest_format,
+    purse: CONTEST_DEFAULTS.purse,
+    squad_size: null,
+    max_players_per_team: null,
   });
   const [creating, setCreating] = useState(false);
   const [availableTeams, setAvailableTeams] = useState<string[]>([]);
@@ -158,6 +165,11 @@ export default function AdminContestsPage() {
         showAlert("Start must be before End", "Validation");
         return;
       }
+      const isAuction = form.contest_format === CONTEST_FORMAT.AUCTION_PURSE;
+      if (isAuction && !form.squad_size) {
+        showAlert("Squad size is required for an auction contest", "Validation");
+        return;
+      }
       const payload: ContestCreate = {
         ...form,
         start_at: startIso,
@@ -165,6 +177,9 @@ export default function AdminContestsPage() {
         // Only send allowed_teams for daily contests; clear otherwise
         allowed_teams:
           form.contest_type === "daily" ? selectedAllowedTeams : [],
+        // Auction-only settings; slot-based contests keep the server defaults
+        squad_size: isAuction ? form.squad_size : null,
+        max_players_per_team: isAuction ? form.max_players_per_team : null,
       };
       const res = await adminContestsApi.create(payload);
 
@@ -182,7 +197,9 @@ export default function AdminContestsPage() {
       setSelectedAllowedTeams([]);
       await load();
     } catch (e: any) {
-      showAlert(e?.message || "Failed to create contest", "Create failed");
+      // Surfaces the server's feasibility reason (unsatisfiable purse, too few
+      // teams for the cap, and so on) rather than a bare status code.
+      showAlert(parseApiError(e, "Failed to create contest"), "Create failed");
     } finally {
       setCreating(false);
     }
@@ -462,6 +479,101 @@ export default function AdminContestsPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm text-text-muted">
+                  Squad Format
+                </label>
+                <select
+                  className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
+                  value={form.contest_format as ContestFormat}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      contest_format: e.target.value as ContestFormat,
+                    })
+                  }
+                >
+                  <option value={CONTEST_FORMAT.SLOT_BASED}>
+                    Slot based
+                  </option>
+                  <option value={CONTEST_FORMAT.AUCTION_PURSE}>
+                    Auction purse
+                  </option>
+                </select>
+                <p className="mt-1 text-xs text-text-muted">
+                  Slot based uses your slot configuration. Auction purse uses one
+                  open pool priced by auction value.
+                </p>
+              </div>
+              {form.contest_format === CONTEST_FORMAT.AUCTION_PURSE && (
+                <>
+                  <div>
+                    <label className="block text-sm text-text-muted">
+                      Purse
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
+                      value={form.purse ?? 0}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          purse: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                    <p className="mt-1 text-xs text-text-muted">
+                      Points each participant may spend.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-muted">
+                      Squad Size
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
+                      value={form.squad_size ?? ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          squad_size: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        })
+                      }
+                    />
+                    <p className="mt-1 text-xs text-text-muted">
+                      Exact number of players a squad must contain.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-muted">
+                      Max Players Per Team
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Inherit global setting"
+                      className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
+                      value={form.max_players_per_team ?? ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          max_players_per_team: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        })
+                      }
+                    />
+                    <p className="mt-1 text-xs text-text-muted">
+                      Leave blank to use the global limit.
+                    </p>
+                  </div>
+                </>
+              )}
               {form.contest_type === "daily" && (
                 <div className="sm:col-span-2 space-y-2">
                   <label className="block text-sm text-text-muted">
