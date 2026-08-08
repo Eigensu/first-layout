@@ -30,6 +30,13 @@ export function extractErrorMessage(detail: any, defaultMessage: string = "An er
     return `${detail.message} by ${Math.round(detail.over_by).toLocaleString()} points.`;
   }
 
+  // Existing teams a rule change would invalidate, one per line
+  if (typeof detail.message === "string" && Array.isArray(detail.broken_teams)) {
+    return [detail.message, ...detail.broken_teams.map((t: any) => `• ${t}`)].join(
+      "\n",
+    );
+  }
+
   // Errors that name the offending players (unavailable, or a disallowed team)
   if (typeof detail.message === "string") {
     const names = detail.unavailable_players ?? detail.disallowed_players;
