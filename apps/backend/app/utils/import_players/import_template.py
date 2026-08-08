@@ -177,11 +177,12 @@ def generate_csv_template() -> str:
     # Write header
     writer.writerow(TEMPLATE_COLUMNS)
     
-    # Write example row
+    # Write example row (must stay aligned with TEMPLATE_COLUMNS)
     writer.writerow([
         "Ankit Shah",
         "DV SPARTANS",
         1000,
+        200000,
         "SLOT 1 (Season)",
         "",
         "9876543210",
