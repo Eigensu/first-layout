@@ -23,6 +23,7 @@ from app.common.enums.contests import ContestStatus, ContestVisibility, ContestF
 from app.models.settings import GlobalSettings
 from app.services.auction import (
     assert_auction_config_feasible,
+    find_teams_breaking_auction_rules,
     resolve_max_players_per_team,
 )
 from app.common.enums.enrollments import EnrollmentStatus
@@ -95,6 +96,11 @@ async def create_contest(
             squad_size=data.squad_size,
             purse=data.purse,
             max_per_team=data.max_players_per_team or settings.max_players_per_team,
+            # A daily contest can only draw from its named teams, so the rest
+            # of the pool must not count towards feasibility.
+            allowed_teams=(
+                data.allowed_teams if data.contest_type == "daily" else None
+            ),
         )
 
     now = now_ist()
@@ -163,6 +169,7 @@ async def get_contest(contest_id: str, current_user: User = Depends(get_admin_us
 async def update_contest(
     contest_id: str,
     data: ContestUpdate,
+    force: bool = Query(False),
     current_user: User = Depends(get_admin_user),
 ):
     contest = await Contest.get(contest_id)
@@ -186,11 +193,45 @@ async def update_contest(
     if new_format == ContestFormat.AUCTION_PURSE:
         settings = await GlobalSettings.get_instance()
         new_max = update_fields.get("max_players_per_team", contest.max_players_per_team)
+        new_squad_size = update_fields.get("squad_size", contest.squad_size)
+        new_purse = update_fields.get("purse", contest.purse)
+        new_type = update_fields.get("contest_type", contest.contest_type)
+        new_allowed = update_fields.get("allowed_teams", contest.allowed_teams)
+        effective_allowed = new_allowed if new_type == "daily" else None
+        effective_max = new_max or settings.max_players_per_team
+
         await assert_auction_config_feasible(
-            squad_size=update_fields.get("squad_size", contest.squad_size),
-            purse=update_fields.get("purse", contest.purse),
-            max_per_team=new_max or settings.max_players_per_team,
+            squad_size=new_squad_size,
+            purse=new_purse,
+            max_per_team=effective_max,
+            allowed_teams=effective_allowed,
         )
+
+        # Tightening the rules must not silently strand squads that were legal
+        # when they were built; they would stay enrolled and keep scoring.
+        if not force:
+            broken = await find_teams_breaking_auction_rules(
+                contest_id=str(contest.id),
+                squad_size=new_squad_size,
+                purse=new_purse,
+                max_per_team=effective_max,
+                allowed_teams=effective_allowed,
+            )
+            if broken:
+                shown = broken[:5]
+                more = len(broken) - len(shown)
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": (
+                            f"{len(broken)} existing team(s) would break under these "
+                            f"rules. Fix or remove them, or repeat the request with "
+                            f"force=true to apply anyway."
+                        ),
+                        "broken_teams": shown
+                        + ([f"and {more} more"] if more > 0 else []),
+                    },
+                )
 
     for k, v in update_fields.items():
         setattr(contest, k, v)

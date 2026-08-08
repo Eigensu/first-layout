@@ -19,11 +19,13 @@ from dataclasses import dataclass
 from math import ceil
 from typing import Iterable, List, Optional, Sequence
 
+from beanie import PydanticObjectId
 from fastapi import HTTPException, status
 
 from app.models.admin.player import Player as AdminPlayer
 from app.models.contest import Contest
 from app.models.settings import GlobalSettings
+from app.models.team import Team
 from app.common.enums.contests import ContestFormat
 
 ACTIVE_STATUS = "Active"
@@ -97,16 +99,30 @@ def to_pool_entries(players: Iterable) -> List[PoolEntry]:
     return [PoolEntry(price=p.price or 0.0, team=p.team) for p in players]
 
 
-async def load_eligible_pool() -> List[AdminPlayer]:
-    """Every player currently auctionable, across the whole player collection."""
+async def load_eligible_pool(
+    allowed_teams: Optional[Sequence[str]] = None,
+) -> List[AdminPlayer]:
+    """
+    Every player a participant in this contest could actually pick.
+
+    ``allowed_teams`` mirrors the daily-contest restriction enforced in
+    routes/teams.py and the public player listing: when a daily contest names
+    its teams, the rest of the collection is off limits and must not count
+    towards feasibility.
+    """
     players = await AdminPlayer.find_all().to_list()
-    return [p for p in players if is_auction_eligible(p)]
+    eligible = [p for p in players if is_auction_eligible(p)]
+    if allowed_teams:
+        permitted = set(allowed_teams)
+        eligible = [p for p in eligible if p.team in permitted]
+    return eligible
 
 
 async def assert_auction_config_feasible(
     squad_size: Optional[int],
     purse: float,
     max_per_team: int,
+    allowed_teams: Optional[Sequence[str]] = None,
 ) -> None:
     """
     Reject an auction configuration no participant could actually satisfy.
@@ -121,14 +137,20 @@ async def assert_auction_config_feasible(
             detail="squad_size is required for an auction contest",
         )
 
-    pool = await load_eligible_pool()
+    pool = await load_eligible_pool(allowed_teams)
+    scope = (
+        f" from the allowed teams ({', '.join(allowed_teams)})"
+        if allowed_teams
+        else ""
+    )
 
     if len(pool) < squad_size:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Only {len(pool)} auctioned player(s) available but squad_size "
-                f"is {squad_size}. Import auction values before creating this contest."
+                f"Only {len(pool)} auctioned player(s) available{scope} but "
+                f"squad_size is {squad_size}. Import auction values before "
+                f"creating this contest."
             ),
         )
 
@@ -166,6 +188,100 @@ async def assert_auction_config_feasible(
         )
 
 
+@dataclass(frozen=True)
+class SquadViolation:
+    """A broken auction rule, in both a human and an API-friendly shape."""
+
+    # Short summary for admin-facing reports about existing teams.
+    summary: str
+    # Payload for the HTTPException raised at submission time. Kept separate
+    # because the team builder parses specific keys out of it.
+    detail: object
+
+
+def evaluate_squad(
+    players: Sequence,
+    squad_size: Optional[int],
+    purse: float,
+    max_per_team: int,
+    submitted_count: Optional[int] = None,
+    allowed_teams: Optional[Sequence[str]] = None,
+) -> Optional[SquadViolation]:
+    """
+    The single definition of what makes an auction squad valid.
+
+    Returns the first violation found, or None when the squad is legal. Both
+    the submission path and the admin's re-validation of existing teams go
+    through here so the two can never drift apart.
+    """
+    count = submitted_count if submitted_count is not None else len(players)
+
+    ineligible = [p.name for p in players if not is_auction_eligible(p)]
+    if ineligible:
+        return SquadViolation(
+            summary=(
+                "includes players no longer in the auction pool: "
+                + ", ".join(ineligible)
+            ),
+            detail={
+                "message": "Some selected players are not available in this auction contest",
+                "unavailable_players": ineligible,
+            },
+        )
+
+    if allowed_teams:
+        permitted = set(allowed_teams)
+        outside = [p.name for p in players if p.team and p.team not in permitted]
+        if outside:
+            return SquadViolation(
+                summary="includes players outside the allowed teams: "
+                + ", ".join(outside),
+                detail={
+                    "message": "Selected players include teams disallowed for this contest",
+                    "disallowed_players": outside,
+                    "allowed_teams": list(allowed_teams),
+                },
+            )
+
+    if squad_size is not None and count != squad_size:
+        return SquadViolation(
+            summary=f"has {count} player(s), needs exactly {squad_size}",
+            detail=(
+                f"This contest requires exactly {squad_size} players, got {count}"
+            ),
+        )
+
+    team_counts = Counter(p.team for p in players if p.team)
+    for team_name, team_count in team_counts.items():
+        if team_count > max_per_team:
+            return SquadViolation(
+                summary=(
+                    f"has {team_count} players from {team_name}, "
+                    f"over the limit of {max_per_team}"
+                ),
+                detail=(
+                    f"Cannot select more than {max_per_team} player(s) "
+                    f"from team {team_name}"
+                ),
+            )
+
+    total_value = sum(p.price or 0.0 for p in players)
+    if total_value > purse:
+        return SquadViolation(
+            summary=(
+                f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"
+            ),
+            detail={
+                "message": "Squad exceeds the contest purse",
+                "purse": purse,
+                "total_value": total_value,
+                "over_by": total_value - purse,
+            },
+        )
+
+    return None
+
+
 async def validate_auction_squad(
     players: Sequence,
     contest: Contest,
@@ -175,48 +291,71 @@ async def validate_auction_squad(
     """
     Validate a squad submitted to an auction contest and return its total cost.
 
-    Raises HTTPException(400) on the first violation found.
+    Raises HTTPException(400) on the first violation found. Allowed teams are
+    checked separately in routes/teams.py, which applies them to every contest
+    format, so they are not re-checked here.
     """
-    ineligible = [p.name for p in players if not is_auction_eligible(p)]
-    if ineligible:
+    violation = evaluate_squad(
+        players=players,
+        squad_size=contest.squad_size,
+        purse=contest.purse,
+        max_per_team=max_per_team,
+        submitted_count=submitted_count,
+    )
+    if violation is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": "Some selected players are not available in this auction contest",
-                "unavailable_players": ineligible,
-            },
+            detail=violation.detail,
         )
 
-    if contest.squad_size is not None and submitted_count != contest.squad_size:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"This contest requires exactly {contest.squad_size} players, "
-                f"got {submitted_count}"
-            ),
+    return sum(p.price or 0.0 for p in players)
+
+
+async def find_teams_breaking_auction_rules(
+    contest_id: str,
+    squad_size: Optional[int],
+    purse: float,
+    max_per_team: int,
+    allowed_teams: Optional[Sequence[str]] = None,
+) -> List[str]:
+    """
+    Existing squads in this contest that the given rules would invalidate.
+
+    Returns one "<team name> <reason>" line per broken team. Tightening a purse
+    or a cap after teams exist would otherwise leave those squads enrolled and
+    scoring under rules they no longer satisfy.
+    """
+    teams = await Team.find(Team.contest_id == str(contest_id)).to_list()
+    if not teams:
+        return []
+
+    # One lookup for every player referenced by any squad in the contest.
+    referenced: set = set()
+    for team in teams:
+        for pid in team.player_ids:
+            try:
+                referenced.add(PydanticObjectId(pid))
+            except Exception:
+                continue
+    players = (
+        await AdminPlayer.find({"_id": {"$in": list(referenced)}}).to_list()
+        if referenced
+        else []
+    )
+    by_id = {str(p.id): p for p in players}
+
+    broken: List[str] = []
+    for team in teams:
+        squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
+        violation = evaluate_squad(
+            players=squad,
+            squad_size=squad_size,
+            purse=purse,
+            max_per_team=max_per_team,
+            submitted_count=len(team.player_ids),
+            allowed_teams=allowed_teams,
         )
+        if violation is not None:
+            broken.append(f"{team.team_name} {violation.summary}")
 
-    team_counts = Counter(p.team for p in players if p.team)
-    for team_name, count in team_counts.items():
-        if count > max_per_team:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Cannot select more than {max_per_team} player(s) "
-                    f"from team {team_name}"
-                ),
-            )
-
-    total_value = sum(p.price or 0.0 for p in players)
-    if total_value > contest.purse:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": "Squad exceeds the contest purse",
-                "purse": contest.purse,
-                "total_value": total_value,
-                "over_by": total_value - contest.purse,
-            },
-        )
-
-    return total_value
+    return broken
