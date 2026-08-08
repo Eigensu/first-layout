@@ -14,6 +14,8 @@ export interface TeamHeaderProps {
   rank?: number;
   contestName?: string;
   contestLink?: string;
+  /** Contextual note for the current match state, e.g. pre-match. */
+  statusNote?: string;
   className?: string;
 }
 
@@ -25,6 +27,7 @@ export function TeamHeader({
   rank,
   contestName,
   contestLink,
+  statusNote,
   className,
 }: TeamHeaderProps) {
   return (
@@ -70,6 +73,7 @@ export function TeamHeader({
             day: "numeric",
             year: "numeric",
           })}
+          {statusNote && ` · ${statusNote}`}
         </span>
 
         {rank && (

@@ -5,6 +5,10 @@ import { Card, Button } from "@/components";
 import { ViewToggle } from "../atoms/ViewToggle";
 import { TeamHeader } from "../TeamHeader";
 import { PitchView } from "./PitchView";
+import { SquadValueBar } from "../molecules/SquadValueBar";
+import { formatPoints } from "@/lib/utils";
+import { formatPoints as formatAuctionValue } from "@/utils/playerValue";
+import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
 import { getInitials, getSlotGradient } from "../types";
 import {
   type TeamViewMode,
@@ -42,6 +46,10 @@ export interface TeamViewerProps {
   contestStatus?: string;           // "live" | "ongoing" | "completed" etc.
   onEditPlayers?: () => void;
 
+  // Contest format — drives the auction-only price / squad-value readouts
+  contestFormat?: ContestFormat;
+  purse?: number;
+
   // View mode
   initialView?: TeamViewMode;
   onViewChange?: (view: TeamViewMode) => void;
@@ -63,6 +71,7 @@ function PlayerChip({
   isViceCaptain,
   points,
   slotNum,
+  price,
   onClick,
 }: {
   player: PlayerBasic;
@@ -70,6 +79,8 @@ function PlayerChip({
   isViceCaptain: boolean;
   points: number;
   slotNum: number;
+  /** Auction sale value; undefined in slot-based contests, which hides the line. */
+  price?: number;
   onClick: () => void;
 }) {
   const initials = getInitials(player.name);
@@ -113,7 +124,16 @@ function PlayerChip({
       </span>
 
       {/* Points */}
-      <span className="text-[9px] text-text-muted">{points.toFixed(1)} pts</span>
+      <span className="text-[9px] text-text-muted tabular-nums">
+        {formatPoints(points)} pts
+      </span>
+
+      {/* Auction sale value */}
+      {price !== undefined && (
+        <span className="text-[9px] font-semibold text-accent-pink-500 tabular-nums">
+          {formatAuctionValue(price)}
+        </span>
+      )}
     </button>
   );
 }
@@ -138,6 +158,8 @@ export function TeamViewer({
   onOpenPlayerActions,
   contestStatus,
   onEditPlayers,
+  contestFormat,
+  purse,
   initialView = "list",
   onViewChange,
 }: TeamViewerProps) {
@@ -186,20 +208,46 @@ export function TeamViewer({
   // Role-grouped players (dynamic based on actual player roles)
   const grouped = useMemo(() => {
     const map = new Map<string, { players: PlayerBasic[]; slotNum: number }>();
-    
+
     for (const p of teamPlayers) {
       // Use the player's role, or fallback to "Player" if missing
       const roleStr = p.role || "Player";
-      
+
       if (!map.has(roleStr)) {
         map.set(roleStr, { players: [], slotNum: slotNumForRole(roleStr) });
       }
       map.get(roleStr)!.players.push(p);
     }
-    
-    // Sort array by slotNum to keep Batsmen first, Bowlers second, etc.
-    return Array.from(map.entries()).sort((a, b) => a[1].slotNum - b[1].slotNum);
+
+    // Cricket role names carry a natural order (Batsmen before Bowlers, ...),
+    // so slotNum leads. Admin-defined names like "Slot 1"/"Slot 4" all fall
+    // through slotNumForRole to the same bucket, so the label breaks the tie —
+    // numerically, so "Slot 10" sorts after "Slot 4" rather than before it.
+    return Array.from(map.entries()).sort(
+      (a, b) =>
+        a[1].slotNum - b[1].slotNum ||
+        a[0].localeCompare(b[0], undefined, { numeric: true })
+    );
   }, [teamPlayers]);
+
+  // ── Auction readouts ──
+  const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
+
+  const squadValue = useMemo(
+    () =>
+      isAuction
+        ? teamPlayers.reduce((sum, p) => sum + (p.price || 0), 0)
+        : 0,
+    [isAuction, teamPlayers]
+  );
+
+  // Pre-match note. Only "live" means the match has not started yet — once a
+  // contest is ongoing/completed the points on screen are real, so the note
+  // would be misleading.
+  const statusNote =
+    contestStatus === "live"
+      ? "Points update once the match starts"
+      : undefined;
 
   // Edit button visibility
   const showEditButton = !!enrollment; // only if enrolled in ANY contest
@@ -246,6 +294,7 @@ export function TeamViewer({
                 rank={team.rank || undefined}
                 contestName={enrollment?.contestName}
                 contestLink={enrollment ? `/contests/${enrollment.contestId}/leaderboard` : undefined}
+                statusNote={statusNote}
               />
               <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
             </>
@@ -274,35 +323,39 @@ export function TeamViewer({
           onPlayerClick={onOpenPlayerActions}
         />
       ) : (
-        <div className="space-y-4">
-          {grouped.map(([groupLabel, { players: groupPlayers, slotNum }]) => (
-            <div key={groupLabel}>
-              {/* Group label */}
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className={`w-2 h-2 rounded-full bg-gradient-to-br ${getSlotGradient(slotNum)}`}
-                />
-                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                  {groupLabel} ({groupPlayers.length})
-                </span>
+        <>
+          {/* What this squad cost — auction contests only */}
+          {isAuction && <SquadValueBar spent={squadValue} purse={purse} />}
+
+          <div className="space-y-4">
+            {grouped.map(([groupLabel, { players: groupPlayers, slotNum }]) => (
+              <div key={groupLabel}>
+                {/* Group label */}
+                <div className="mb-2">
+                  <span className="text-xs font-medium text-text-muted">
+                    {groupLabel} · {groupPlayers.length}{" "}
+                    {groupPlayers.length === 1 ? "player" : "players"}
+                  </span>
+                </div>
+                {/* Chips row */}
+                <div className="flex flex-wrap gap-3">
+                  {groupPlayers.map((p) => (
+                    <PlayerChip
+                      key={p.id}
+                      player={p}
+                      isCaptain={p.id === team.captain_id}
+                      isViceCaptain={p.id === team.vice_captain_id}
+                      points={getPlayerPoints(p)}
+                      slotNum={slotNum}
+                      price={isAuction ? p.price || 0 : undefined}
+                      onClick={() => onOpenPlayerActions(p.id)}
+                    />
+                  ))}
+                </div>
               </div>
-              {/* Chips row */}
-              <div className="flex flex-wrap gap-3">
-                {groupPlayers.map((p) => (
-                  <PlayerChip
-                    key={p.id}
-                    player={p}
-                    isCaptain={p.id === team.captain_id}
-                    isViceCaptain={p.id === team.vice_captain_id}
-                    points={getPlayerPoints(p)}
-                    slotNum={slotNum}
-                    onClick={() => onOpenPlayerActions(p.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* ── Footer ── */}
@@ -313,10 +366,10 @@ export function TeamViewer({
             onClick={canEdit ? onEditPlayers : undefined}
             disabled={!canEdit}
             title={editDisabledReason}
-            className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
+            className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-[9px] text-sm font-semibold transition-all duration-200 ${
               canEdit
-                ? "bg-white/10 text-white hover:bg-white/20 active:scale-95 cursor-pointer ring-1 ring-white/20"
-                : "bg-white/5 text-white/25 cursor-not-allowed"
+                ? "bg-[var(--surface-tonal)] text-text-main hover:bg-[var(--surface-tonal-hover)] active:scale-95 cursor-pointer"
+                : "bg-[var(--surface-tonal)] text-text-muted opacity-50 cursor-not-allowed"
             }`}
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -330,7 +383,7 @@ export function TeamViewer({
         <button
           onClick={onOpenDelete}
           disabled={deleting}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:text-red-300 hover:ring-red-500/30 transition-all duration-200 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ring-1 ring-red-500/20"
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-[9px] text-sm font-semibold text-danger bg-[var(--danger-tonal)] hover:bg-[var(--danger-tonal-hover)] transition-all duration-200 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Trash2 className="w-3.5 h-3.5" />
           {deleting ? "Deleting..." : "Delete"}

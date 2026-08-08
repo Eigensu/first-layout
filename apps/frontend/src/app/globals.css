@@ -39,6 +39,16 @@
   --warning: #facc15;
   --danger: #ff4b6e;
 
+  /* Tonal (soft-fill, borderless) button surfaces.
+     Kept as tokens so the alpha ramps live in one place instead of being
+     re-derived at each call site. --danger-rgb must track --danger above;
+     it exists separately because rgba() cannot take a hex var. */
+  --danger-rgb: 255, 75, 110;
+  --surface-tonal: rgba(255, 255, 255, 0.09);
+  --surface-tonal-hover: rgba(255, 255, 255, 0.14);
+  --danger-tonal: rgba(var(--danger-rgb), 0.15);
+  --danger-tonal-hover: rgba(var(--danger-rgb), 0.22);
+
   /* Gradients */
   --gradient-hero: linear-gradient(
     120deg,
