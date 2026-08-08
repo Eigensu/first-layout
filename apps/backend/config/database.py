@@ -35,7 +35,7 @@ async def connect_to_mongo():
 
         # Test connection
         await mongo_client.admin.command('ping')
-        print(f"[OK] Connected to MongoDB at {settings.mongodb_url}")
+        print(f"✓ Connected to MongoDB at {settings.mongodb_url}")
 
         # Initialize Beanie with document models
         await init_beanie(
@@ -60,10 +60,10 @@ async def connect_to_mongo():
                 Tournament,
             ]
         )
-        print(f"[OK] Initialized Beanie ODM with database: {settings.mongodb_db_name}")
+        print(f"✓ Initialized Beanie ODM with database: {settings.mongodb_db_name}")
 
     except Exception as e:
-        print(f"[FAIL] Failed to connect to MongoDB: {e}")
+        print(f"✗ Failed to connect to MongoDB: {e}")
         raise
 
 
@@ -73,7 +73,7 @@ async def close_mongo_connection():
     if client:
         client.close()
         client = None
-        print("[OK] Closed MongoDB connection")
+        print("✓ Closed MongoDB connection")
 
 
 def get_database():
