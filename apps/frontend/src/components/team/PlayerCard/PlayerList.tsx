@@ -6,6 +6,20 @@ import type { PlayerListProps } from "./types";
 
 const PLAYERS_PER_PAGE = 10;
 
+interface PriceRange {
+  label: string;
+  min: number;
+  max: number;
+}
+
+const PRICE_RANGES: PriceRange[] = [
+  { label: "40L – 16L",     min: 1_600_000, max: 4_000_000 },
+  { label: "15.99L – 61K",  min:    61_000, max: 1_599_000 },
+  { label: "60.99K – 21K",  min:    21_000, max:    60_990 },
+  { label: "20.99K – 10K",  min:    10_000, max:    20_990 },
+  { label: "9.99K – 5K",   min:     5_000, max:     9_990 },
+];
+
 export const PlayerList: React.FC<PlayerListProps> = ({
   players,
   selectedPlayers,
@@ -25,6 +39,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [priceRangeIndex, setPriceRangeIndex] = React.useState<number | null>(null);
 
   const canSelectMoreTotal = selectedPlayers.length < maxSelections;
 
@@ -34,6 +49,12 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     // Apply slot filter
     if (typeof filterSlot === "number") {
       list = list.filter((p: any) => p.slot === filterSlot);
+    }
+
+    // Apply price range filter
+    if (priceRangeIndex !== null) {
+      const { min, max } = PRICE_RANGES[priceRangeIndex];
+      list = list.filter((p) => p.price >= min && p.price <= max);
     }
 
     // Apply search filter
@@ -46,12 +67,12 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       );
     }
     return list;
-  }, [players, filterSlot, searchQuery]);
+  }, [players, filterSlot, searchQuery, priceRangeIndex]);
 
   // Reset to page 1 when search or filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterSlot]);
+  }, [searchQuery, filterSlot, priceRangeIndex]);
 
   // Calculate pagination
   const totalPlayers = playersPrepared.length;
@@ -72,10 +93,38 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     onPlayerSelect(playerId);
   };
 
+  const handlePriceChip = (idx: number) => {
+    setPriceRangeIndex((prev) => (prev === idx ? null : idx));
+  };
+
   return (
     <div className={`space-y-1.5 sm:space-y-3 ${className}`}>
       {/* Search Input */}
       <SearchInput searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+
+      {/* Price Range Filter Chips */}
+      <div className="flex overflow-x-auto gap-1.5 pb-0.5 -mx-1 px-1 scrollbar-hide">
+        {PRICE_RANGES.map((range, idx) => {
+          const isActive = priceRangeIndex === idx;
+          return (
+            <button
+              key={range.label}
+              onClick={() => handlePriceChip(idx)}
+              className={`
+                flex-shrink-0 rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-medium
+                border transition-all duration-150 whitespace-nowrap
+                ${
+                  isActive
+                    ? "bg-primary-600 border-primary-600 text-white shadow-sm"
+                    : "bg-white border-gray-300 text-gray-600 hover:border-primary-400 hover:text-primary-600"
+                }
+              `}
+            >
+              ₹{range.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Player Count */}
       <div className="text-[10px] sm:text-sm text-text-main font-medium ml-1">
