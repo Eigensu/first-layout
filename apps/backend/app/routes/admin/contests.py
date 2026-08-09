@@ -25,6 +25,7 @@ from app.services.auction import (
     assert_auction_config_feasible,
     find_teams_breaking_auction_rules,
 )
+from app.routes.teams import find_teams_breaking_slot_rules
 from app.common.enums.enrollments import EnrollmentStatus
 from app.schemas.contest import (
     ContestCreate,
@@ -231,6 +232,28 @@ async def update_contest(
                         + ([f"and {more} more"] if more > 0 else []),
                     },
                 )
+    elif new_format == ContestFormat.SLOT_BASED and not force:
+        # Symmetric to the auction_purse branch above: a squad shape now
+        # comes from slot config instead of the purse, so a switch away from
+        # auction_purse (or an edit while already slot_based) must not leave
+        # existing squads enrolled and scoring against slot rules they were
+        # never checked against.
+        broken = await find_teams_breaking_slot_rules(contest_id=str(contest.id))
+        if broken:
+            shown = broken[:5]
+            more = len(broken) - len(shown)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": (
+                        f"{len(broken)} existing team(s) would break under slot "
+                        f"rules. Fix or remove them, or repeat the request with "
+                        f"force=true to apply anyway."
+                    ),
+                    "broken_teams": shown
+                    + ([f"and {more} more"] if more > 0 else []),
+                },
+            )
 
     for k, v in update_fields.items():
         setattr(contest, k, v)
