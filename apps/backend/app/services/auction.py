@@ -352,7 +352,10 @@ async def find_teams_breaking_auction_rules(
             squad_size=squad_size,
             purse=purse,
             max_per_team=max_per_team,
-            submitted_count=len(team.player_ids),
+            # Count what actually resolved, not the stored ID count — a player
+            # that no longer resolves must fail the exact-size check rather
+            # than silently drop out of the price and per-team totals below.
+            submitted_count=len(squad),
             allowed_teams=allowed_teams,
         )
         if violation is not None:
