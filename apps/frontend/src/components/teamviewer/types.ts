@@ -19,6 +19,8 @@ export interface PlayerBasic {
   slot?: number | string; // Can be a number (1-4) or a MongoDB ObjectID string
   image?: string;
   points?: number;
+  /** Auction sale value. Only meaningful in auction_purse contests. */
+  price?: number;
 }
 
 // View mode for team display

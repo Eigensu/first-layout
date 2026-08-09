@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PillNavbar, Card, Button, Footer } from "@/components";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -304,12 +304,27 @@ export default function TeamsPage() {
     setContestStatusByTeam(map);
   }, [enrollmentByTeam, contests]);
 
-  // Fetch public contests (open ones)
+  // The contest a team is enrolled in, for format-dependent display (auction
+  // price / squad value). A team with no enrollment has no format, so those
+  // readouts stay hidden rather than guessing one.
+  const contestByTeam = useMemo(() => {
+    const map: Record<string, PublicContest> = {};
+    for (const [teamId, { contestId }] of Object.entries(enrollmentByTeam)) {
+      const contest = contests.find((c) => c.id === contestId);
+      if (contest) map[teamId] = contest;
+    }
+    return map;
+  }, [enrollmentByTeam, contests]);
+
+  // Fetch public contests (open ones). Re-polled while the page stays open so
+  // a contest going live doesn't leave the pre-match note stuck until reload.
   useEffect(() => {
+    let mounted = true;
     const loadContests = async () => {
       try {
         setLoadingContests(true);
         const res = await publicContestsApi.list({ page_size: 100 });
+        if (!mounted) return;
         const open = res.contests.filter(
           (c) => c.status !== "completed" && c.status !== "archived",
         );
@@ -317,10 +332,15 @@ export default function TeamsPage() {
       } catch (e) {
         // ignore silently
       } finally {
-        setLoadingContests(false);
+        if (mounted) setLoadingContests(false);
       }
     };
     loadContests();
+    const intervalId = setInterval(loadContests, 60_000);
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Detect a joined contest for the current user
@@ -641,14 +661,14 @@ export default function TeamsPage() {
       <PillNavbar
         mobileMenuContent={isAuthenticated ? <MobileUserMenu /> : undefined}
       />
-      <div className="h-20 sm:h-24"></div>
+      <div className="h-16 sm:h-20"></div>
 
       <HeroHeader
         title="My Fantasy Teams"
         subtitle="Manage and track your fantasy cricket teams"
       />
 
-      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-none">
+      <main className="container mx-auto px-4 sm:px-6 py-2 sm:py-4 max-w-none">
         {error ? (
           <Card className="p-6 text-center">
             <div className="text-danger mb-4">{error}</div>
@@ -677,7 +697,7 @@ export default function TeamsPage() {
         ) : (
           <>
             {/* Create New Team Button - Hidden on mobile */}
-            <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
               <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-text-main">
                 Your Teams ({visibleTeams.length})
               </h2>
@@ -717,6 +737,8 @@ export default function TeamsPage() {
                   }
                   contestStatus={contestStatusByTeam[team.id]}
                   onEditPlayers={() => setEditPlayersTeamId(team.id)}
+                  contestFormat={contestByTeam[team.id]?.contest_format}
+                  purse={contestByTeam[team.id]?.purse}
                   initialView="list"
                 />
               ))}
