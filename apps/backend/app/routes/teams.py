@@ -44,13 +44,13 @@ async def _resolve_contest(contest_id: Optional[str]) -> Optional[Contest]:
         return None
 
 
-async def _validate_slot_constraints(players: List[Player]) -> None:
+async def _compute_slot_violations(players: List[Player]) -> List[dict]:
     """
-    Enforce per-slot min/max selection rules on a squad.
+    The single definition of what makes a slot-based squad valid.
 
-    Only applies to slot-based contests; auction contests draw from a single
-    open pool and have no slot structure. Shared by the create and update
-    paths so the two stay in sync.
+    Returns one violation dict per broken slot, or an empty list when the
+    squad is legal. Shared by submission-time validation and admin
+    reconciliation of existing teams so the two cannot drift apart.
     """
     # Count players per slot (ignore players without a slot)
     slot_counts: Dict[str, int] = {}
@@ -85,6 +85,18 @@ async def _validate_slot_constraints(players: List[Player]) -> None:
                     "actual": count,
                 }
             )
+    return violations
+
+
+async def _validate_slot_constraints(players: List[Player]) -> None:
+    """
+    Enforce per-slot min/max selection rules on a squad.
+
+    Only applies to slot-based contests; auction contests draw from a single
+    open pool and have no slot structure. Shared by the create and update
+    paths so the two stay in sync.
+    """
+    violations = await _compute_slot_violations(players)
     if violations:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -93,6 +105,53 @@ async def _validate_slot_constraints(players: List[Player]) -> None:
                 "violations": violations,
             },
         )
+
+
+async def find_teams_breaking_slot_rules(contest_id: str) -> List[str]:
+    """
+    Existing squads in this contest that current slot rules would invalidate.
+
+    Returns one "<team name> <reason>" line per broken team. Switching a
+    contest from auction_purse to slot_based (or editing slot config) would
+    otherwise leave squads built under the old rules enrolled and scoring
+    without ever being checked against slot composition.
+    """
+    teams = await Team.find(Team.contest_id == str(contest_id)).to_list()
+    if not teams:
+        return []
+
+    referenced: set = set()
+    for team in teams:
+        for pid in team.player_ids:
+            try:
+                referenced.add(PydanticObjectId(pid))
+            except Exception:
+                continue
+    players = (
+        await Player.find({"_id": {"$in": list(referenced)}}).to_list()
+        if referenced
+        else []
+    )
+    by_id = {str(p.id): p for p in players}
+
+    broken: List[str] = []
+    for team in teams:
+        squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
+        violations = await _compute_slot_violations(squad)
+        if len(squad) != len(team.player_ids) or violations:
+            reasons = [
+                f"{v['slot']['name']}: has {v['actual']}, needs "
+                f"{v['expected']['min_select']}-{v['expected']['max_select']}"
+                for v in violations
+            ]
+            if len(squad) != len(team.player_ids):
+                reasons.append(
+                    f"references {len(team.player_ids) - len(squad)} player(s) "
+                    f"that no longer resolve"
+                )
+            broken.append(f"{team.team_name} " + "; ".join(reasons))
+
+    return broken
 
 
 def _assert_allowed_teams(players: List[Player], contest: Optional[Contest]) -> None:
