@@ -87,19 +87,21 @@ async def update_current_user(
 async def delete_current_user(
     request: DeleteAccountRequest, current_user: User = Depends(get_current_active_user)
 ):
-    """Soft delete current user account with password verification"""
+    """Soft delete current user account, verifying a password if the account has one"""
 
-    # Verify password
-    try:
-        is_valid = verify_password(request.password, current_user.hashed_password)
-    except Exception:
-        # If verification fails (e.g. invalid hash format), treat as auth failure
-        is_valid = False
+    # Google-only accounts have no password to check (auth_provider == "google",
+    # hashed_password is None) — there's nothing to verify.
+    if current_user.hashed_password:
+        try:
+            is_valid = verify_password(request.password or "", current_user.hashed_password)
+        except Exception:
+            # If verification fails (e.g. invalid hash format), treat as auth failure
+            is_valid = False
 
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password"
-        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password"
+            )
 
     # Soft delete by deactivating and recording timestamp
     current_user.is_active = False
