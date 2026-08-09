@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { POOL_SORTS, type PoolSort } from "@/components/team/PlayerCard/types";
 
 export const ALL_TEAMS = "__all__";
@@ -117,12 +117,13 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   );
 
   // A bucket index can outlive the pool it was derived from (the modal reopens
-  // against a different contest), so drop it rather than filter on a stale band.
-  useEffect(() => {
-    if (priceBucketIndex !== null && priceBucketIndex >= priceBuckets.length) {
-      setPriceBucketIndex(null);
-    }
-  }, [priceBuckets, priceBucketIndex]);
+  // against a different contest). Ignoring an out-of-range index as it is read
+  // keeps the stale band from filtering anything, without a corrective effect
+  // that would render once with the wrong list before fixing itself.
+  const activeBucketIndex =
+    priceBucketIndex !== null && priceBucketIndex < priceBuckets.length
+      ? priceBucketIndex
+      : null;
 
   /** Everything except the status filter — the basis for the status counts. */
   const preStatus = useMemo(() => {
@@ -132,8 +133,8 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
       list = list.filter((p) => p.team === teamFilter);
     }
 
-    if (priceBucketIndex !== null && priceBuckets[priceBucketIndex]) {
-      const { min, max } = priceBuckets[priceBucketIndex];
+    if (activeBucketIndex !== null && priceBuckets[activeBucketIndex]) {
+      const { min, max } = priceBuckets[activeBucketIndex];
       list = list.filter((p) => {
         const price = p.price || 0;
         return price >= min && price <= max;
@@ -158,7 +159,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     list.sort(bySort[sort]);
 
     return list;
-  }, [players, teamFilter, priceBucketIndex, priceBuckets, query, sort]);
+  }, [players, teamFilter, activeBucketIndex, priceBuckets, query, sort]);
 
   const inSquad = useMemo(
     () => preStatus.filter((p) => selectedSet.has(p.id)),
@@ -178,7 +179,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   const hasActiveFilters =
     query.trim() !== "" ||
     teamFilter !== ALL_TEAMS ||
-    priceBucketIndex !== null ||
+    activeBucketIndex !== null ||
     status !== POOL_STATUS.ALL;
 
   const reset = () => {
@@ -195,7 +196,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     setTeamFilter,
     sort,
     setSort,
-    priceBucketIndex,
+    priceBucketIndex: activeBucketIndex,
     setPriceBucketIndex,
     status,
     setStatus,
