@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { POOL_SORTS, type PoolSort } from "@/components/team/PlayerCard/types";
+import {
+  PRICE_RANGES,
+  type PriceRange,
+} from "@/components/team/PlayerCard/priceRanges";
 
 export const ALL_TEAMS = "__all__";
 
@@ -22,44 +26,7 @@ export interface PoolFilterablePlayer {
   price?: number;
 }
 
-export interface PriceBucket {
-  label: string;
-  min: number;
-  max: number;
-}
-
-/**
- * Split the pool's own price span into buckets.
- *
- * The builder's PlayerList hardcodes rupee bands, which are meaningless for an
- * auction contest where `price` is a points figure scaled to the purse. Deriving
- * the bands from the players actually on offer keeps one filter honest for both
- * formats, and collapses to nothing when the pool has no prices at all.
- */
-function derivePriceBuckets(prices: number[]): PriceBucket[] {
-  const priced = prices.filter((p) => p > 0).sort((a, b) => a - b);
-  if (priced.length < 4) return [];
-
-  const min = priced[0];
-  const max = priced[priced.length - 1];
-  if (max <= min) return [];
-
-  const fmt = (n: number) => Math.round(n).toLocaleString();
-  const step = (max - min) / 4;
-  const edges = [min, min + step, min + step * 2, min + step * 3, max];
-
-  return [0, 1, 2, 3].map((i) => {
-    // Top bucket owns the max so the highest-priced player is always matched.
-    const lo = edges[i];
-    const hi = i === 3 ? max : edges[i + 1];
-    return {
-      label: `${fmt(lo)} – ${fmt(hi)}`,
-      min: lo,
-      // Non-top buckets stop just below the next edge to avoid double-counting.
-      max: i === 3 ? max : hi - 0.000001,
-    };
-  });
-}
+export type PriceBucket = PriceRange;
 
 export interface PoolFilterResult<T> {
   query: string;
@@ -111,19 +78,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [players]);
 
-  const priceBuckets = useMemo(
-    () => derivePriceBuckets(players.map((p) => p.price || 0)),
-    [players],
-  );
-
-  // A bucket index can outlive the pool it was derived from (the modal reopens
-  // against a different contest). Ignoring an out-of-range index as it is read
-  // keeps the stale band from filtering anything, without a corrective effect
-  // that would render once with the wrong list before fixing itself.
-  const activeBucketIndex =
-    priceBucketIndex !== null && priceBucketIndex < priceBuckets.length
-      ? priceBucketIndex
-      : null;
+  const priceBuckets = PRICE_RANGES;
 
   /** Everything except the status filter — the basis for the status counts. */
   const preStatus = useMemo(() => {
@@ -133,8 +88,8 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
       list = list.filter((p) => p.team === teamFilter);
     }
 
-    if (activeBucketIndex !== null && priceBuckets[activeBucketIndex]) {
-      const { min, max } = priceBuckets[activeBucketIndex];
+    if (priceBucketIndex !== null && priceBuckets[priceBucketIndex]) {
+      const { min, max } = priceBuckets[priceBucketIndex];
       list = list.filter((p) => {
         const price = p.price || 0;
         return price >= min && price <= max;
@@ -159,7 +114,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     list.sort(bySort[sort]);
 
     return list;
-  }, [players, teamFilter, activeBucketIndex, priceBuckets, query, sort]);
+  }, [players, teamFilter, priceBucketIndex, priceBuckets, query, sort]);
 
   const inSquad = useMemo(
     () => preStatus.filter((p) => selectedSet.has(p.id)),
@@ -179,7 +134,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   const hasActiveFilters =
     query.trim() !== "" ||
     teamFilter !== ALL_TEAMS ||
-    activeBucketIndex !== null ||
+    priceBucketIndex !== null ||
     status !== POOL_STATUS.ALL;
 
   const reset = () => {
@@ -196,7 +151,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     setTeamFilter,
     sort,
     setSort,
-    priceBucketIndex: activeBucketIndex,
+    priceBucketIndex,
     setPriceBucketIndex,
     status,
     setStatus,
