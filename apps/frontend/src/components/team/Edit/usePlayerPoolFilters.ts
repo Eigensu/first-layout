@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { POOL_SORTS, type PoolSort } from "@/components/team/PlayerCard/types";
+import {
+  PRICE_RANGES,
+  type PriceRange,
+} from "@/components/team/PlayerCard/priceRanges";
 
 export const ALL_TEAMS = "__all__";
 
@@ -22,19 +26,15 @@ export interface PoolFilterablePlayer {
   price?: number;
 }
 
-export interface PriceBucket {
-  label: string;
-  min: number;
-  max: number;
-}
+export type PriceBucket = PriceRange;
 
 /**
  * Split the pool's own price span into buckets.
  *
- * The builder's PlayerList hardcodes rupee bands, which are meaningless for an
- * auction contest where `price` is a points figure scaled to the purse. Deriving
- * the bands from the players actually on offer keeps one filter honest for both
- * formats, and collapses to nothing when the pool has no prices at all.
+ * Auction contests price players in points scaled to the contest's purse,
+ * not rupees, so the fixed rupee bands (PRICE_RANGES) would bucket them
+ * nonsensically. Deriving quartile bands from the pool actually on offer
+ * keeps the filter honest regardless of what scale the pool's prices are on.
  */
 function derivePriceBuckets(prices: number[]): PriceBucket[] {
   const priced = prices.filter((p) => p > 0).sort((a, b) => a - b);
@@ -94,6 +94,7 @@ export interface PoolFilterResult<T> {
 export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   players: T[],
   selectedIds: string[],
+  isAuction = false,
 ): PoolFilterResult<T> {
   const [query, setQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>(ALL_TEAMS);
@@ -111,19 +112,14 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [players]);
 
-  const priceBuckets = useMemo(
+  // Rupee bands only make sense for slot-based pools; an auction pool's
+  // price is points on the purse's own scale, so its bands come from the
+  // pool itself instead.
+  const auctionBuckets = useMemo(
     () => derivePriceBuckets(players.map((p) => p.price || 0)),
     [players],
   );
-
-  // A bucket index can outlive the pool it was derived from (the modal reopens
-  // against a different contest). Ignoring an out-of-range index as it is read
-  // keeps the stale band from filtering anything, without a corrective effect
-  // that would render once with the wrong list before fixing itself.
-  const activeBucketIndex =
-    priceBucketIndex !== null && priceBucketIndex < priceBuckets.length
-      ? priceBucketIndex
-      : null;
+  const priceBuckets = isAuction ? auctionBuckets : PRICE_RANGES;
 
   /** Everything except the status filter — the basis for the status counts. */
   const preStatus = useMemo(() => {
@@ -133,8 +129,8 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
       list = list.filter((p) => p.team === teamFilter);
     }
 
-    if (activeBucketIndex !== null && priceBuckets[activeBucketIndex]) {
-      const { min, max } = priceBuckets[activeBucketIndex];
+    if (priceBucketIndex !== null && priceBuckets[priceBucketIndex]) {
+      const { min, max } = priceBuckets[priceBucketIndex];
       list = list.filter((p) => {
         const price = p.price || 0;
         return price >= min && price <= max;
@@ -159,7 +155,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     list.sort(bySort[sort]);
 
     return list;
-  }, [players, teamFilter, activeBucketIndex, priceBuckets, query, sort]);
+  }, [players, teamFilter, priceBucketIndex, priceBuckets, query, sort]);
 
   const inSquad = useMemo(
     () => preStatus.filter((p) => selectedSet.has(p.id)),
@@ -179,7 +175,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   const hasActiveFilters =
     query.trim() !== "" ||
     teamFilter !== ALL_TEAMS ||
-    activeBucketIndex !== null ||
+    priceBucketIndex !== null ||
     status !== POOL_STATUS.ALL;
 
   const reset = () => {
@@ -196,7 +192,7 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     setTeamFilter,
     sort,
     setSort,
-    priceBucketIndex: activeBucketIndex,
+    priceBucketIndex,
     setPriceBucketIndex,
     status,
     setStatus,

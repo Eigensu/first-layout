@@ -251,7 +251,7 @@ export function EditPlayersModal({
 
   const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
 
-  const filters = usePlayerPoolFilters(allPlayers, selectedIds);
+  const filters = usePlayerPoolFilters(allPlayers, selectedIds, isAuction);
   const { reset: resetFilters } = filters;
 
   // Reset when opening
