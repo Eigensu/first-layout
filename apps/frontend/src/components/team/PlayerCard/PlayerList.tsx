@@ -177,7 +177,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
                 }
               `}
             >
-              ₹{range.label}
+              {range.label}
             </button>
           );
         })}

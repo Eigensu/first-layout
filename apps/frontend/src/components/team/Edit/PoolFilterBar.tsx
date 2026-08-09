@@ -191,7 +191,7 @@ export function PoolFilterBar({
                   }`}
                   aria-pressed={priceBucketIndex === idx}
                 >
-                  ₹{bucket.label}
+                  {bucket.label}
                 </button>
               ))}
             </div>
