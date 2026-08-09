@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 import { PlayerListItem, type EditPlayer } from "./PlayerListItem";
 import { PoolFilterBar } from "./PoolFilterBar";
@@ -88,6 +88,18 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
   }, [players, excludeIds, currentPlayerIds, filter]);
 
   const filters = usePlayerPoolFilters(candidates, []);
+  const { reset: resetFilters } = filters;
+
+  // The modal stays mounted while isOpen toggles, so usePlayerPoolFilters'
+  // state would otherwise carry over into the next replacement session —
+  // a different squad or contest could open to an empty or unexpectedly
+  // restricted list.
+  useEffect(() => {
+    if (isOpen) resetFilters();
+    // Only isOpen's false->true edge should start a new session; a
+    // changing resetFilters identity must not re-trigger it mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const blockReasonFor = (p: EditPlayer): string | null => {
     if (!isAuction) return null;
