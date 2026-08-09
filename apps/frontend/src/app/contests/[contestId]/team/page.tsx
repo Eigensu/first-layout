@@ -56,6 +56,8 @@ export default function ContestTeamBuilderPage() {
     players,
     loading,
     error,
+    contest,
+    isAuction,
 
     // selection state
     selectedPlayers,
@@ -72,6 +74,15 @@ export default function ContestTeamBuilderPage() {
     canNextForActiveSlot,
     isFirstSlot,
     // isLastSlot,
+
+    // auction purse
+    purse,
+    spent,
+    remainingPurse,
+    maxPerTeam,
+    selectedCountByTeam,
+    getSelectionBlock,
+    canSubmitAuctionSquad,
 
     // handlers
     setSelectedPlayers,
@@ -297,7 +308,9 @@ export default function ContestTeamBuilderPage() {
       }
     } catch (err: any) {
       console.error("Failed to submit team:", err);
-      showAlert(err.message || "Failed to submit team", "Submission failed");
+      // Surfaces the server's reason (over purse, per-team cap, squad size)
+      // instead of a bare status code.
+      showAlert(parseApiError(err, "Failed to submit team"), "Submission failed");
     } finally {
       setSubmitting(false);
     }
@@ -338,6 +351,8 @@ export default function ContestTeamBuilderPage() {
           totalMax={TOTAL_MAX || 0}
           selectedPlayerObjs={selectedPlayerObjs}
           onPlayerRemove={handlePlayerSelect}
+          isAuction={isAuction}
+          remainingPurse={remainingPurse}
         />
       )}
 
@@ -378,7 +393,16 @@ export default function ContestTeamBuilderPage() {
                 error={error}
                 selectedCountBySlot={selectedCountBySlot}
                 slotLimits={SLOT_LIMITS}
-                totalMax={TOTAL_MAX || 12}
+                totalMax={isAuction ? TOTAL_MAX : TOTAL_MAX || 12}
+                isAuction={isAuction}
+                contestFormat={contest?.contest_format}
+                purse={purse}
+                spent={spent}
+                remainingPurse={remainingPurse}
+                maxPerTeam={maxPerTeam}
+                selectedCountByTeam={selectedCountByTeam}
+                getSelectionBlock={getSelectionBlock}
+                canSubmitAuctionSquad={canSubmitAuctionSquad}
                 onClearAll={handleClearAll}
                 onSetActiveSlot={setActiveSlotId}
                 onPlayerSelect={handlePlayerSelect}

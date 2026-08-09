@@ -24,6 +24,7 @@ from app.models.settings import GlobalSettings
 from app.services.auction import (
     assert_auction_config_feasible,
     find_teams_breaking_auction_rules,
+    resolve_max_players_per_team,
 )
 from app.routes.teams import find_teams_breaking_slot_rules
 from app.common.enums.enrollments import EnrollmentStatus
@@ -45,11 +46,10 @@ router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
 async def to_response(contest: Contest) -> ContestResponse:
     status = await sync_contest_status(contest, persist=False)
+    settings = await GlobalSettings.get_instance()
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo
-        from app.models.settings import GlobalSettings
-        settings = await GlobalSettings.get_instance()
         if settings.default_contest_logo_file_id:
             logo_url = "/api/settings/logo"
 
@@ -71,6 +71,7 @@ async def to_response(contest: Contest) -> ContestResponse:
         purse=contest.purse,
         squad_size=contest.squad_size,
         max_players_per_team=contest.max_players_per_team,
+        effective_max_players_per_team=resolve_max_players_per_team(contest, settings),
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )

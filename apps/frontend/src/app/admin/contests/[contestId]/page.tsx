@@ -5,6 +5,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useParams, useRouter } from "next/navigation";
 import { formatISTRange } from "@/lib/utils";
+import { parseApiError } from "@/utils/errors";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import {
   adminContestsApi,
@@ -162,7 +163,9 @@ export default function AdminManageContestPage() {
       setRedirectAfterSave(true);
       showAlert("Contest settings saved", "Success");
     } catch (e: any) {
-      showAlert(e?.message || "Failed to save settings", "Update failed");
+      // Surfaces the server's reason (infeasible config, or existing teams the
+      // change would invalidate) rather than a bare status code.
+      showAlert(parseApiError(e, "Failed to save settings"), "Update failed");
     } finally {
       if (editLogoFile && contest) {
         try {

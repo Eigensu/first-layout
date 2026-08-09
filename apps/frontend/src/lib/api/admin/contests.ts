@@ -4,6 +4,7 @@ import type {
   ContestVisibility,
   PointsScope,
   ContestType,
+  ContestFormat,
 } from '@/common/consts/contest';
 
 export type {
@@ -11,6 +12,7 @@ export type {
   ContestVisibility,
   PointsScope,
   ContestType,
+  ContestFormat,
 };
 
 export interface Contest {
@@ -26,6 +28,13 @@ export interface Contest {
   points_scope: PointsScope;
   contest_type: ContestType;
   allowed_teams: string[];
+  contest_format: ContestFormat;
+  purse: number;
+  squad_size: number | null;
+  /** Raw per-contest override; null means the global setting applies. */
+  max_players_per_team: number | null;
+  /** The limit actually enforced, global fallback already applied. */
+  effective_max_players_per_team: number;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +58,10 @@ export interface ContestCreate {
   points_scope?: PointsScope;
   contest_type?: ContestType;
   allowed_teams?: string[];
+  contest_format?: ContestFormat;
+  purse?: number;
+  squad_size?: number | null;
+  max_players_per_team?: number | null;
 }
 
 export interface ContestUpdate {
@@ -62,6 +75,10 @@ export interface ContestUpdate {
   points_scope?: PointsScope;
   contest_type?: ContestType;
   allowed_teams?: string[];
+  contest_format?: ContestFormat;
+  purse?: number;
+  squad_size?: number | null;
+  max_players_per_team?: number | null;
 }
 
 export interface EnrollmentBulkRequest { team_ids: string[] }

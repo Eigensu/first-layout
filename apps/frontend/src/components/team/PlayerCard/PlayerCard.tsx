@@ -4,6 +4,7 @@ import { Badge } from "../../ui/Badge";
 import { Card } from "../../ui/Card";
 import { Flame } from "lucide-react";
 import type { Player, PlayerCardProps } from "./types.js";
+import { formatPlayerValue, playerValueLabel } from "@/utils/playerValue";
 
 const PlayerCard: React.FC<PlayerCardProps> = ({
   player,
@@ -20,6 +21,8 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
   compactShowPrice = false,
   disabled = false,
   variant = "default",
+  contestFormat,
+  disabledReason,
 }) => {
   // Visual accent based on team initial; simple deterministic color
   const getAvatarGradient = () => undefined;
@@ -38,6 +41,12 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
           }
           ${className}
         `}
+        title={disabled && !isSelected ? disabledReason : undefined}
+        aria-label={
+          disabled && !isSelected && disabledReason
+            ? `${player.name}: ${disabledReason}`
+            : undefined
+        }
         onClick={() => !disabled && onSelect(player.id)}
       >
         {/* Player Avatar - Responsive size */}
@@ -88,10 +97,33 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
               </Badge>
             )}
           </div>
+          {disabled && !isSelected && disabledReason && (
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">
+              {disabledReason}
+            </p>
+          )}
         </div>
 
         {/* Right Side: Score and Checkbox */}
         <div className="flex flex-col items-end gap-0.5 sm:gap-1">
+          {compactShowPrice && (
+            <div className="text-right leading-tight">
+              <div
+                className={`text-xs sm:text-sm font-bold tabular-nums ${
+                  isSelected ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {formatPlayerValue(player.price, contestFormat)}
+              </div>
+              <div
+                className={`text-[9px] sm:text-[10px] ${
+                  isSelected ? "text-white/70" : "text-gray-500"
+                }`}
+              >
+                {playerValueLabel(contestFormat)}
+              </div>
+            </div>
+          )}
           <div
             className={`
               w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex items-center justify-center transition-all
@@ -248,12 +280,12 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
               <div
                 className={`text-base sm:text-lg font-bold ${isSelected ? "text-white" : "text-gray-900"}`}
               >
-                ₹{Math.floor(player.price)}
+                {formatPlayerValue(player.price, contestFormat)}
               </div>
               <div
                 className={`text-[10px] sm:text-xs ${isSelected ? "text-white/70" : "text-gray-500"}`}
               >
-                Price
+                {playerValueLabel(contestFormat)}
               </div>
             </div>
           </div>

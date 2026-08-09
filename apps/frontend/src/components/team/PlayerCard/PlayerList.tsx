@@ -2,9 +2,12 @@ import * as React from "react";
 import { PlayerCard } from "./PlayerCard";
 import { SearchInput } from "./SearchInput";
 import { Pagination } from "./Pagination";
-import type { PlayerListProps } from "./types";
+import { POOL_SORTS, type PlayerListProps, type PoolSort } from "./types";
+import { playerValueLabel } from "@/utils/playerValue";
 
 const PLAYERS_PER_PAGE = 10;
+
+const ALL_TEAMS = "__all__";
 
 export const PlayerList: React.FC<PlayerListProps> = ({
   players,
@@ -22,11 +25,24 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   className = "",
   compactShowPrice = false,
   isPlayerDisabled,
+  getDisabledReason,
+  showPoolFilters = false,
+  contestFormat,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [teamFilter, setTeamFilter] = React.useState<string>(ALL_TEAMS);
+  const [sort, setSort] = React.useState<PoolSort>(POOL_SORTS.VALUE_DESC);
 
   const canSelectMoreTotal = selectedPlayers.length < maxSelections;
+
+  const teamOptions = React.useMemo(() => {
+    const names = new Set<string>();
+    players.forEach((p) => {
+      if (p.team) names.add(p.team);
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [players]);
 
   const playersPrepared = React.useMemo(() => {
     let list = players.slice();
@@ -34,6 +50,11 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     // Apply slot filter
     if (typeof filterSlot === "number") {
       list = list.filter((p: any) => p.slot === filterSlot);
+    }
+
+    // Apply real-world team filter
+    if (showPoolFilters && teamFilter !== ALL_TEAMS) {
+      list = list.filter((p) => p.team === teamFilter);
     }
 
     // Apply search filter
@@ -45,13 +66,24 @@ export const PlayerList: React.FC<PlayerListProps> = ({
           p.team.toLowerCase().includes(query)
       );
     }
+
+    if (showPoolFilters) {
+      const bySort: Record<PoolSort, (a: typeof list[0], b: typeof list[0]) => number> = {
+        [POOL_SORTS.VALUE_DESC]: (a, b) => b.price - a.price,
+        [POOL_SORTS.VALUE_ASC]: (a, b) => a.price - b.price,
+        [POOL_SORTS.POINTS_DESC]: (a, b) => b.points - a.points,
+        [POOL_SORTS.NAME_ASC]: (a, b) => a.name.localeCompare(b.name),
+      };
+      list.sort(bySort[sort]);
+    }
+
     return list;
-  }, [players, filterSlot, searchQuery]);
+  }, [players, filterSlot, searchQuery, showPoolFilters, teamFilter, sort]);
 
   // Reset to page 1 when search or filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterSlot]);
+  }, [searchQuery, filterSlot, teamFilter, sort]);
 
   // Calculate pagination
   const totalPlayers = playersPrepared.length;
@@ -77,6 +109,44 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       {/* Search Input */}
       <SearchInput searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
+      {/* Open-pool filters: by real-world team, and by value or points */}
+      {showPoolFilters && (
+        <div className="flex gap-1.5 sm:gap-2">
+          <label className="flex-1 min-w-0">
+            <span className="sr-only">Filter by team</span>
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              className="w-full rounded-lg border border-border-subtle bg-bg-card text-text-main px-2 py-1.5 text-[11px] sm:text-sm"
+            >
+              <option value={ALL_TEAMS}>All teams</option>
+              {teamOptions.map((team) => (
+                <option key={team} value={team}>
+                  {team}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex-1 min-w-0">
+            <span className="sr-only">Sort players</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as PoolSort)}
+              className="w-full rounded-lg border border-border-subtle bg-bg-card text-text-main px-2 py-1.5 text-[11px] sm:text-sm"
+            >
+              <option value={POOL_SORTS.VALUE_DESC}>
+                {playerValueLabel(contestFormat)}: high to low
+              </option>
+              <option value={POOL_SORTS.VALUE_ASC}>
+                {playerValueLabel(contestFormat)}: low to high
+              </option>
+              <option value={POOL_SORTS.POINTS_DESC}>Fantasy points</option>
+              <option value={POOL_SORTS.NAME_ASC}>Name (A–Z)</option>
+            </select>
+          </label>
+        </div>
+      )}
+
       {/* Player Count */}
       <div className="text-[10px] sm:text-sm text-text-main font-medium ml-1">
         Showing {paginatedPlayers.length} of {totalPlayers} player
@@ -99,7 +169,9 @@ export const PlayerList: React.FC<PlayerListProps> = ({
               showActions={showActions}
               compact={compact}
               compactShowPrice={compactShowPrice}
+              contestFormat={contestFormat}
               disabled={isPlayerDisabled ? isPlayerDisabled(player) : false}
+              disabledReason={getDisabledReason?.(player) ?? undefined}
             />
           ))}
 

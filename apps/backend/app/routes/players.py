@@ -4,6 +4,8 @@ from beanie import PydanticObjectId
 from app.models.player import Player
 from app.models.contest import Contest
 from app.schemas.player import PlayerOut
+from app.common.enums.contests import ContestFormat
+from app.services.auction import ACTIVE_STATUS
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -48,6 +50,15 @@ async def list_players(
                 query = {"$and": [query, team_filter]}
             else:
                 query = team_filter
+
+        # An auction contest's pool is only the players who were actually
+        # auctioned; anyone left at the unset price is not selectable.
+        if contest and contest.contest_format == ContestFormat.AUCTION_PURSE:
+            eligibility_filter = {
+                "price": {"$gt": 0},
+                "$or": [{"status": ACTIVE_STATUS}, {"status": None}],
+            }
+            query = {"$and": [query, eligibility_filter]} if query else eligibility_filter
 
     players = await Player.find(query).sort("+name").skip(skip).limit(limit).to_list()
     return [serialize_player(player) for player in players]

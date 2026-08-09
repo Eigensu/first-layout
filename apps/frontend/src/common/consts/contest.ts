@@ -20,6 +20,14 @@ export const CONTEST_TYPE = {
 	FULL: "full",
 } as const;
 
+/** How a squad is assembled. Independent of CONTEST_TYPE. */
+export const CONTEST_FORMAT = {
+	/** Squad shape comes from slot configuration; price is cosmetic. */
+	SLOT_BASED: "slot_based",
+	/** Single open pool priced by auction sale value, capped by a purse. */
+	AUCTION_PURSE: "auction_purse",
+} as const;
+
 export type ContestStatus =
 	(typeof CONTEST_STATUS)[keyof typeof CONTEST_STATUS];
 export type ContestVisibility =
@@ -27,6 +35,8 @@ export type ContestVisibility =
 export type PointsScope =
 	(typeof CONTEST_POINTS_SCOPE)[keyof typeof CONTEST_POINTS_SCOPE];
 export type ContestType = (typeof CONTEST_TYPE)[keyof typeof CONTEST_TYPE];
+export type ContestFormat =
+	(typeof CONTEST_FORMAT)[keyof typeof CONTEST_FORMAT];
 
 export const CONTEST_STATUS_OPTIONS = Object.values(
 	CONTEST_STATUS,
@@ -40,11 +50,16 @@ export const CONTEST_POINTS_SCOPE_OPTIONS = Object.values(
 export const CONTEST_TYPE_OPTIONS = Object.values(
 	CONTEST_TYPE,
 ) as ContestType[];
+export const CONTEST_FORMAT_OPTIONS = Object.values(
+	CONTEST_FORMAT,
+) as ContestFormat[];
 
 export const CONTEST_DEFAULTS = {
 	status: CONTEST_STATUS.LIVE,
 	visibility: CONTEST_VISIBILITY.PUBLIC,
 	points_scope: CONTEST_POINTS_SCOPE.TIME_WINDOW,
 	contest_type: CONTEST_TYPE.FULL,
+	contest_format: CONTEST_FORMAT.SLOT_BASED,
+	purse: 1_000_000,
 } as const;
 

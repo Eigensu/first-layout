@@ -55,10 +55,12 @@ class ContestTeamResponse(BaseModel):
 async def to_contest_response(contest: Contest, skip_save: bool = True) -> ContestResponse:
     # Keep stored status in sync with real-time lifecycle.
     computed = await sync_contest_status(contest, persist=not skip_save)
+    from app.models.settings import GlobalSettings
+    from app.services.auction import resolve_max_players_per_team
+
+    settings = await GlobalSettings.get_instance()
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
-        from app.models.settings import GlobalSettings
-        settings = await GlobalSettings.get_instance()
         if settings.default_contest_logo_file_id:
             logo_url = "/api/settings/logo"
 
@@ -80,6 +82,7 @@ async def to_contest_response(contest: Contest, skip_save: bool = True) -> Conte
         purse=contest.purse,
         squad_size=contest.squad_size,
         max_players_per_team=contest.max_players_per_team,
+        effective_max_players_per_team=resolve_max_players_per_team(contest, settings),
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
