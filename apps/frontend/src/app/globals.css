@@ -39,15 +39,35 @@
   --warning: #facc15;
   --danger: #ff4b6e;
 
-  /* Tonal (soft-fill, borderless) button surfaces.
+  /* Tonal (soft-fill) surfaces and their matching edges.
      Kept as tokens so the alpha ramps live in one place instead of being
-     re-derived at each call site. --danger-rgb must track --danger above;
-     it exists separately because rgba() cannot take a hex var. */
+     re-derived at each call site. Each --*-rgb must track its hex above;
+     they exist separately because rgba() cannot take a hex var.
+
+     These are also the only way to get a translucent theme colour in Tailwind
+     v3: an opacity modifier on a colour defined as a bare `var(--x)` — say
+     `bg-danger/20` — parses as a colour Tailwind cannot decompose, so it emits
+     no rule at all and the fill silently disappears. Reach for `bg-danger-tonal`
+     rather than `bg-danger/20`. */
   --danger-rgb: 255, 75, 110;
+  --success-rgb: 35, 209, 139;
+  --warning-rgb: 250, 204, 21;
+  --accent-pink-rgb: 200, 186, 223;
+
   --surface-tonal: rgba(255, 255, 255, 0.09);
   --surface-tonal-hover: rgba(255, 255, 255, 0.14);
   --danger-tonal: rgba(var(--danger-rgb), 0.15);
   --danger-tonal-hover: rgba(var(--danger-rgb), 0.22);
+  --danger-edge: rgba(var(--danger-rgb), 0.4);
+  --success-tonal: rgba(var(--success-rgb), 0.15);
+  --success-tonal-hover: rgba(var(--success-rgb), 0.25);
+  --success-edge: rgba(var(--success-rgb), 0.4);
+  --warning-tonal: rgba(var(--warning-rgb), 0.12);
+  --warning-tonal-hover: rgba(var(--warning-rgb), 0.25);
+  --warning-edge: rgba(var(--warning-rgb), 0.28);
+  --accent-tonal: rgba(var(--accent-pink-rgb), 0.14);
+  --accent-tonal-hover: rgba(var(--accent-pink-rgb), 0.24);
+  --accent-edge: rgba(var(--accent-pink-rgb), 0.32);
 
   /* Gradients */
   --gradient-hero: linear-gradient(

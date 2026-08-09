@@ -8,10 +8,6 @@ export interface EditPurseBarProps {
   spent: number;
   selectedCount: number;
   squadSize: number;
-  /** Players taken from each real-world team so far. */
-  countByTeam?: Record<string, number>;
-  /** Per-team cap; 0 hides the counters. */
-  maxPerTeam?: number;
 }
 
 /**
@@ -20,45 +16,50 @@ export interface EditPurseBarProps {
  * Leads with what is left rather than what a squad cost (the team card's
  * SquadValueBar does that), because every decision in this sheet is "can I
  * still afford the swap I am about to make?".
+ *
+ * Deliberately one line plus a meter. It sits above the player list in a bottom
+ * sheet, so every row it occupies is a row of players the user cannot see. The
+ * per-team counters that used to sit here are gone: the cap is still enforced,
+ * and a player who would break it says so on their own row, where the user is
+ * actually looking when it matters.
  */
 export function EditPurseBar({
   purse,
   spent,
   selectedCount,
   squadSize,
-  countByTeam = {},
-  maxPerTeam = 0,
 }: EditPurseBarProps) {
   const remaining = purse - spent;
   const pctSpent = purse > 0 ? Math.min(100, (spent / purse) * 100) : 0;
   const overspent = remaining < 0;
   const placesLeft = Math.max(0, squadSize - selectedCount);
 
-  const teamCounts = Object.entries(countByTeam)
-    .filter(([, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 space-y-1.5">
+    <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-text-muted">
-          Purse remaining
+        <span className="text-[11px] text-text-muted">
+          Purse left{" "}
+          <span
+            className={`text-sm font-bold tabular-nums ${
+              overspent ? "text-danger" : "text-success"
+            }`}
+          >
+            {formatPoints(remaining)}
+          </span>
+          <span className="tabular-nums"> of {formatPoints(purse)}</span>
         </span>
-        <span
-          className={`text-base font-bold tabular-nums ${
-            overspent ? "text-danger" : "text-success"
-          }`}
-        >
-          {formatPoints(remaining)}
+        <span className="text-[11px] text-text-muted tabular-nums">
+          {placesLeft} place{placesLeft === 1 ? "" : "s"} left
         </span>
       </div>
 
       <div
-        className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden"
+        className="h-1 w-full rounded-full bg-white/[0.08] overflow-hidden"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={purse}
         aria-valuenow={Math.max(0, spent)}
+        aria-valuetext={`Spent ${formatPoints(spent)} of ${formatPoints(purse)}`}
         aria-label="Purse spent"
       >
         <div
@@ -68,35 +69,6 @@ export function EditPurseBar({
           style={{ width: `${pctSpent}%` }}
         />
       </div>
-
-      <div className="flex items-center justify-between text-[10px] text-text-muted tabular-nums">
-        <span>
-          Spent {formatPoints(spent)} of {formatPoints(purse)}
-        </span>
-        <span>
-          {placesLeft} place{placesLeft === 1 ? "" : "s"} left
-        </span>
-      </div>
-
-      {maxPerTeam > 0 && teamCounts.length > 0 && (
-        <div className="flex flex-wrap gap-1 pt-0.5">
-          {teamCounts.map(([team, count]) => {
-            const full = count >= maxPerTeam;
-            return (
-              <span
-                key={team}
-                className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium tabular-nums ${
-                  full
-                    ? "bg-warning/15 text-warning"
-                    : "bg-white/[0.06] text-text-muted"
-                }`}
-              >
-                {team} {count}/{maxPerTeam}
-              </span>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

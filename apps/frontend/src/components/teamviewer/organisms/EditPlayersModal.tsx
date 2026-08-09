@@ -97,49 +97,40 @@ function PlayerRow({
 
   return (
     <div
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 ${
+      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all duration-150 ${
         selected
-          ? "bg-primary-600/15 border border-primary-500/30"
+          ? "bg-accent-pink-tonal border-accent-pink-edge"
           : blocked
-            ? "bg-white/[0.02] border border-white/[0.04] opacity-60"
-            : "bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]"
+            ? "bg-white/[0.02] border-white/[0.04] opacity-60"
+            : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]"
       }`}
     >
-      {/* Avatar */}
-      <div className="relative shrink-0">
-        <div
-          className={`w-9 h-9 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xs font-bold overflow-hidden`}
-        >
-          {player.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={player.image}
-              alt={player.name}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            getInitials(player.name)
-          )}
-        </div>
-        {(isCaptain || isViceCaptain) && (
-          <span
-            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full text-[7px] font-extrabold flex items-center justify-center ring-1 ring-bg-card ${
-              isCaptain
-                ? "bg-amber-400 text-amber-900"
-                : "bg-purple-400 text-purple-900"
-            }`}
-          >
-            {isCaptain ? "C" : "VC"}
-          </span>
+      {/*
+        No C/VC pip on the avatar: it can only ever appear on a selected row,
+        which already shows the lit C and VC buttons a few millimetres to the
+        right. Two markers for one piece of state is what made the list noisy.
+      */}
+      <div
+        className={`w-9 h-9 shrink-0 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xs font-bold overflow-hidden`}
+      >
+        {player.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={player.image}
+            alt={player.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          getInitials(player.name)
         )}
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text-main truncate">
+        <p className="text-[13px] sm:text-sm font-medium text-text-main truncate leading-tight">
           {player.name}
         </p>
-        <p className="text-[11px] text-text-muted truncate">
+        <p className="text-[10px] sm:text-[11px] text-text-muted truncate">
           {player.team}
           {showValue && (
             <>
@@ -163,10 +154,10 @@ function PlayerRow({
             onClick={onMakeCaptain}
             title="Make Captain"
             aria-label={`Make ${player.name} captain`}
-            className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
               isCaptain
-                ? "bg-amber-400 text-amber-900"
-                : "bg-white/10 text-white/50 hover:bg-amber-400/20 hover:text-amber-300"
+                ? "bg-warning text-bg-body"
+                : "bg-white/10 text-text-muted hover:bg-warning-tonal-hover hover:text-warning"
             }`}
           >
             C
@@ -175,10 +166,10 @@ function PlayerRow({
             onClick={onMakeViceCaptain}
             title="Make Vice-Captain"
             aria-label={`Make ${player.name} vice-captain`}
-            className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
               isViceCaptain
-                ? "bg-purple-400 text-purple-900"
-                : "bg-white/10 text-white/50 hover:bg-purple-400/20 hover:text-purple-300"
+                ? "bg-accent-pink-500 text-bg-body"
+                : "bg-white/10 text-text-muted hover:bg-accent-pink-tonal-hover hover:text-accent-pink-500"
             }`}
           >
             VC
@@ -187,15 +178,22 @@ function PlayerRow({
       )}
 
       {/* Add / Remove toggle */}
+      {/*
+        Why the tick was invisible: it was `bg-primary-600/20 text-primary-300`,
+        and both halves failed. Tailwind emits no rule for an opacity modifier on
+        a var() colour, so there was no fill; and `primary-300` maps to --bg-chip,
+        a dark purple, leaving the glyph at ~2.9:1 on this sheet. Tonal tokens give
+        a real fill, and add/remove now differ in hue as well as glyph.
+      */}
       <button
         onClick={onToggle}
         disabled={blocked}
-        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+        className={`shrink-0 w-9 h-9 rounded-full border flex items-center justify-center transition-all active:scale-90 ${
           selected
-            ? "bg-danger/20 text-danger hover:bg-danger/30"
+            ? "bg-danger-tonal border-danger-edge text-danger hover:bg-danger-tonal-hover"
             : blocked
-              ? "bg-white/5 text-white/20 cursor-not-allowed"
-              : "bg-primary-600/20 text-primary-300 hover:bg-primary-600/30"
+              ? "bg-white/[0.03] border-white/10 text-text-subtle cursor-not-allowed"
+              : "bg-success-tonal border-success-edge text-success hover:bg-success-tonal-hover"
         }`}
         title={selected ? "Remove from squad" : (blockReason ?? "Add to squad")}
         aria-label={
@@ -205,11 +203,11 @@ function PlayerRow({
         }
       >
         {selected ? (
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4" strokeWidth={2.5} />
         ) : blocked ? (
           <Lock className="w-3.5 h-3.5" />
         ) : (
-          <Check className="w-4 h-4" />
+          <Check className="w-[18px] h-[18px]" strokeWidth={3} />
         )}
       </button>
     </div>
@@ -396,6 +394,26 @@ export function EditPlayersModal({
 
   const showSections = filters.status === POOL_STATUS.ALL;
 
+  /**
+   * One notice at a time, worst first. Three independent banners could stack
+   * (over the purse *and* a duplicate captain), pushing the list off a phone
+   * screen to say things the user can only fix one at a time anyway.
+   */
+  const notice: { tone: "danger" | "warning"; text: string } | null = overspent
+    ? {
+        tone: "danger",
+        text: `Over the purse by ${formatPoints(Math.abs(remainingPurse))} — remove a player to save.`,
+      }
+    : captainId && captainId === viceCaptainId
+      ? { tone: "danger", text: "Captain and Vice-Captain must differ." }
+      : count === requiredCount && !captainId && !viceCaptainId
+        ? { tone: "warning", text: "Tap C and VC on players to assign them." }
+        : count === requiredCount && !captainId
+          ? { tone: "warning", text: "Assign a Captain." }
+          : count === requiredCount && !viceCaptainId
+            ? { tone: "warning", text: "Assign a Vice-Captain." }
+            : null;
+
   const renderRow = (p: EditablePlayer) => (
     <PlayerRow
       key={p.id}
@@ -429,22 +447,20 @@ export function EditPlayersModal({
         className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-[#130D2A] border-t border-white/10 shadow-2xl max-h-[92dvh]"
       >
         {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        <div className="flex justify-center pt-2 pb-1">
           <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
 
-        {/* Header */}
-        <div className="px-4 pb-3 border-b border-white/[0.08] flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2
-              id="edit-squad-title"
-              className="text-base font-bold text-white leading-tight"
-            >
-              Edit Squad
-            </h2>
-            <p className="text-xs text-text-muted truncate">{teamName}</p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
+        {/* Header — squad name rides on the title line so it costs no extra row */}
+        <div className="px-3 sm:px-4 pb-2 border-b border-white/[0.08] flex items-center justify-between gap-2">
+          <h2
+            id="edit-squad-title"
+            className="min-w-0 text-sm sm:text-base font-bold text-text-main leading-tight truncate"
+          >
+            Edit Squad
+            <span className="font-normal text-text-muted"> · {teamName}</span>
+          </h2>
+          <div className="flex items-center gap-2 shrink-0">
             <span className={`text-sm font-bold tabular-nums ${counterColor}`}>
               {count}
               <span className="text-white/30 font-normal">
@@ -453,7 +469,7 @@ export function EditPlayersModal({
             </span>
             <button
               onClick={onClose}
-              className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+              className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
               aria-label="Close"
             >
               <X className="w-4 h-4 text-white/60" />
@@ -462,15 +478,13 @@ export function EditPlayersModal({
         </div>
 
         {/* Sticky controls */}
-        <div className="px-4 pt-3 pb-2 space-y-2 border-b border-white/[0.06]">
+        <div className="px-3 sm:px-4 pt-2 pb-2 space-y-2 border-b border-white/[0.06]">
           {isAuction && (
             <EditPurseBar
               purse={purse}
               spent={spent}
               selectedCount={count}
               squadSize={requiredCount}
-              countByTeam={selectedCountByTeam}
-              maxPerTeam={maxPerTeam}
             />
           )}
 
@@ -494,32 +508,24 @@ export function EditPlayersModal({
           />
         </div>
 
-        {/* Validation nudges */}
-        {overspent && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger text-xs">
-            Squad is over the purse by {formatPoints(Math.abs(remainingPurse))}.
-            Remove a player to save.
-          </div>
-        )}
-        {!overspent && (!captainId || !viceCaptainId) && count === requiredCount && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-warning text-xs">
-            {!captainId && !viceCaptainId
-              ? "Tap a player to assign Captain and Vice-Captain."
-              : !captainId
-                ? "Please assign a Captain."
-                : "Please assign a Vice-Captain."}
-          </div>
-        )}
-        {captainId && viceCaptainId && captainId === viceCaptainId && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger text-xs">
-            Captain and Vice-Captain must be different players.
+        {/* Validation nudge — at most one */}
+        {notice && (
+          <div
+            role="status"
+            className={`mx-3 sm:mx-4 mt-2 px-2.5 py-1.5 rounded-lg border text-[11px] ${
+              notice.tone === "danger"
+                ? "bg-danger-tonal border-danger-edge text-danger"
+                : "bg-warning-tonal border-warning-edge text-warning"
+            }`}
+          >
+            {notice.text}
           </div>
         )}
 
         {/* Player list */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-2 space-y-1.5 min-h-0">
           {filters.filtered.length === 0 && (
-            <p className="text-center text-text-muted text-sm py-6">
+            <p className="text-center text-text-muted text-xs py-6">
               No players match your search.
             </p>
           )}
@@ -551,7 +557,7 @@ export function EditPlayersModal({
         </div>
 
         {/* Save bar */}
-        <div className="px-4 py-4 border-t border-white/[0.08] safe-area-bottom">
+        <div className="px-3 sm:px-4 py-3 border-t border-white/[0.08] safe-area-bottom">
           <button
             onClick={() => {
               if (!isValid) return;
@@ -562,7 +568,7 @@ export function EditPlayersModal({
               });
             }}
             disabled={!isValid || saving}
-            className="w-full py-3.5 rounded-xl bg-gradient-brand text-white text-sm font-bold shadow-lg shadow-primary-900/40 hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
+            className="w-full py-3 rounded-xl bg-gradient-brand text-white text-sm font-bold shadow-lg shadow-primary-900/40 hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>

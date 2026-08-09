@@ -39,7 +39,7 @@ export interface PoolFilterBarProps {
 }
 
 const chipBase =
-  "flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-all duration-150 whitespace-nowrap active:scale-95";
+  "flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all duration-150 whitespace-nowrap active:scale-95";
 const chipOn = "bg-primary-600 border-primary-600 text-white shadow-sm";
 const chipOff =
   "bg-white/[0.04] border-white/[0.10] text-text-muted hover:text-text-main hover:border-white/20";
@@ -75,7 +75,7 @@ export function PoolFilterBar({
   const valueLabel = playerValueLabel(contestFormat);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {/* Search + filter toggle */}
       <div className="flex gap-2">
         <div className="relative flex-1 min-w-0">
@@ -86,7 +86,7 @@ export function PoolFilterBar({
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search player or team..."
             // 16px minimum, otherwise iOS Safari zooms the page on focus.
-            className="w-full pl-9 pr-9 py-2.5 text-base sm:text-sm bg-white/[0.04] border border-white/[0.10] rounded-xl text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full pl-9 pr-9 py-2 text-base sm:text-sm bg-white/[0.04] border border-white/[0.10] rounded-xl text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary-500"
             aria-label="Search players"
           />
           {query && (
@@ -105,7 +105,7 @@ export function PoolFilterBar({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className={`shrink-0 w-11 rounded-xl flex items-center justify-center border transition-colors ${
+          className={`shrink-0 w-10 rounded-xl flex items-center justify-center border transition-colors ${
             expanded || priceBucketIndex !== null || teamFilter !== ALL_TEAMS
               ? "bg-primary-600 border-primary-600 text-white"
               : "bg-white/[0.04] border-white/[0.10] text-text-muted"
