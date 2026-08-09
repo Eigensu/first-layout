@@ -1,8 +1,16 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Search, X, Check } from "lucide-react";
+import React, { useState, useMemo, useCallback } from "react";
+import { X, Check, Lock } from "lucide-react";
 import { getInitials, getSlotGradient } from "../types";
+import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
+import { formatPlayerValue, formatPoints } from "@/utils/playerValue";
+import { PoolFilterBar } from "@/components/team/Edit/PoolFilterBar";
+import { EditPurseBar } from "@/components/team/Edit/EditPurseBar";
+import {
+  POOL_STATUS,
+  usePlayerPoolFilters,
+} from "@/components/team/Edit/usePlayerPoolFilters";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface EditablePlayer {
@@ -13,6 +21,8 @@ export interface EditablePlayer {
   image?: string;
   points?: number;
   slot?: string;
+  /** Auction sale value. Ignored in slot-based contests. */
+  price?: number;
 }
 
 export interface EditPlayersModalProps {
@@ -29,9 +39,14 @@ export interface EditPlayersModalProps {
   /** All available players to pick from */
   allPlayers: EditablePlayer[];
 
-  /** Required squad size (default 16) */
+  /** Required squad size (slot-based: sum of slot maxima; auction: squad_size) */
   requiredCount?: number;
   slotLimits?: Record<string | number, number>;
+
+  /** Auction context. Absent/slot_based keeps the slot rules. */
+  contestFormat?: ContestFormat;
+  purse?: number;
+  maxPerTeam?: number;
 
   saving: boolean;
   onSave: (payload: {
@@ -60,8 +75,9 @@ function PlayerRow({
   onToggle,
   onMakeCaptain,
   onMakeViceCaptain,
-  disableAdd,
-  disableReason,
+  blockReason,
+  showValue,
+  contestFormat,
 }: {
   player: EditablePlayer;
   selected: boolean;
@@ -70,18 +86,23 @@ function PlayerRow({
   onToggle: () => void;
   onMakeCaptain: () => void;
   onMakeViceCaptain: () => void;
-  disableAdd: boolean;
-  disableReason: string;
+  /** Why this player cannot be added, or null when they can. */
+  blockReason: string | null;
+  showValue: boolean;
+  contestFormat?: ContestFormat;
 }) {
   const slotNum = slotNumForRole(player.role);
   const gradient = getSlotGradient(slotNum);
+  const blocked = !selected && blockReason !== null;
 
   return (
     <div
       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 ${
         selected
           ? "bg-primary-600/15 border border-primary-500/30"
-          : "bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]"
+          : blocked
+            ? "bg-white/[0.02] border border-white/[0.04] opacity-60"
+            : "bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]"
       }`}
     >
       {/* Avatar */}
@@ -118,7 +139,21 @@ function PlayerRow({
         <p className="text-sm font-medium text-text-main truncate">
           {player.name}
         </p>
-        <p className="text-[11px] text-text-muted truncate">{player.team}</p>
+        <p className="text-[11px] text-text-muted truncate">
+          {player.team}
+          {showValue && (
+            <>
+              {player.team ? " · " : ""}
+              <span className="font-semibold text-accent-pink-500 tabular-nums">
+                {formatPlayerValue(player.price || 0, contestFormat)}
+              </span>
+            </>
+          )}
+        </p>
+        {/* Blocked rows say why outright: a tooltip never reaches touch users. */}
+        {blocked && (
+          <p className="text-[10px] text-warning truncate">{blockReason}</p>
+        )}
       </div>
 
       {/* C / VC buttons (only when selected) */}
@@ -127,7 +162,8 @@ function PlayerRow({
           <button
             onClick={onMakeCaptain}
             title="Make Captain"
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all ${
+            aria-label={`Make ${player.name} captain`}
+            className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
               isCaptain
                 ? "bg-amber-400 text-amber-900"
                 : "bg-white/10 text-white/50 hover:bg-amber-400/20 hover:text-amber-300"
@@ -138,7 +174,8 @@ function PlayerRow({
           <button
             onClick={onMakeViceCaptain}
             title="Make Vice-Captain"
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all ${
+            aria-label={`Make ${player.name} vice-captain`}
+            className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all active:scale-90 ${
               isViceCaptain
                 ? "bg-purple-400 text-purple-900"
                 : "bg-white/10 text-white/50 hover:bg-purple-400/20 hover:text-purple-300"
@@ -152,19 +189,38 @@ function PlayerRow({
       {/* Add / Remove toggle */}
       <button
         onClick={onToggle}
-        disabled={!selected && disableAdd}
-        className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+        disabled={blocked}
+        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${
           selected
-            ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            : disableAdd
+            ? "bg-danger/20 text-danger hover:bg-danger/30"
+            : blocked
               ? "bg-white/5 text-white/20 cursor-not-allowed"
               : "bg-primary-600/20 text-primary-300 hover:bg-primary-600/30"
         }`}
-        title={selected ? "Remove from squad" : disableReason}
+        title={selected ? "Remove from squad" : (blockReason ?? "Add to squad")}
+        aria-label={
+          selected
+            ? `Remove ${player.name} from squad`
+            : `Add ${player.name} to squad`
+        }
       >
-        {selected ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+        {selected ? (
+          <X className="w-4 h-4" />
+        ) : blocked ? (
+          <Lock className="w-3.5 h-3.5" />
+        ) : (
+          <Check className="w-4 h-4" />
+        )}
       </button>
     </div>
+  );
+}
+
+function SectionHeading({ label, count }: { label: string; count: number }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted px-1 pt-1">
+      {label} ({count})
+    </p>
   );
 }
 
@@ -179,6 +235,9 @@ export function EditPlayersModal({
   allPlayers,
   requiredCount = 16,
   slotLimits = {},
+  contestFormat,
+  purse = 0,
+  maxPerTeam = 0,
   saving,
   onSave,
 }: EditPlayersModalProps) {
@@ -189,8 +248,11 @@ export function EditPlayersModal({
   const [viceCaptainId, setViceCaptainId] = useState<string>(
     initialViceCaptainId || "",
   );
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"squad" | "available">("squad");
+
+  const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
+
+  const filters = usePlayerPoolFilters(allPlayers, selectedIds);
+  const { reset: resetFilters } = filters;
 
   // Reset when opening
   React.useEffect(() => {
@@ -198,9 +260,11 @@ export function EditPlayersModal({
       setSelectedIds([...currentPlayerIds]);
       setCaptainId(initialCaptainId || "");
       setViceCaptainId(initialViceCaptainId || "");
-      setQuery("");
-      setTab("squad");
+      resetFilters();
     }
+    // resetFilters is intentionally excluded: it is recreated every render, and
+    // including it would clear the user's filters on each keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentPlayerIds, initialCaptainId, initialViceCaptainId]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -211,42 +275,96 @@ export function EditPlayersModal({
     });
     return map;
   }, [allPlayers]);
+
   const count = selectedIds.length;
-  const isValid =
-    count === requiredCount &&
-    captainId &&
-    viceCaptainId &&
-    captainId !== viceCaptainId;
+
+  const spent = useMemo(
+    () =>
+      selectedIds.reduce((sum, id) => sum + (playerById[id]?.price || 0), 0),
+    [selectedIds, playerById],
+  );
+  const remainingPurse = purse - spent;
+
+  const selectedCountByTeam = useMemo(() => {
+    const counts: Record<string, number> = {};
+    selectedIds.forEach((id) => {
+      const team = playerById[id]?.team;
+      if (team) counts[team] = (counts[team] || 0) + 1;
+    });
+    return counts;
+  }, [selectedIds, playerById]);
 
   const selectedCountBySlot = useMemo(() => {
     const counts: Record<string, number> = {};
     selectedIds.forEach((id) => {
-      const p = playerById[id];
-      const sid = String(p?.slot || "");
+      const sid = String(playerById[id]?.slot || "");
       if (sid) counts[sid] = (counts[sid] || 0) + 1;
     });
     return counts;
   }, [selectedIds, playerById]);
 
-  const toggle = (id: string) => {
-    setSelectedIds((prev) => {
-      if (prev.includes(id)) {
-        const next = prev.filter((x) => x !== id);
-        if (captainId === id) setCaptainId("");
-        if (viceCaptainId === id) setViceCaptainId("");
-        return next;
+  /**
+   * Why an unselected player cannot be added, or null when they can.
+   *
+   * Mirrors what the server enforces on update (validate_auction_squad /
+   * _validate_slot_constraints) so the sheet can refuse a pick and say why,
+   * instead of letting Save fail with a 400 after the work is done.
+   */
+  const blockReasonFor = useCallback(
+    (player: EditablePlayer): string | null => {
+      if (selectedSet.has(player.id)) return null;
+
+      if (count >= requiredCount) {
+        return `Squad is full (${requiredCount} players).`;
       }
-      const player = playerById[id];
-      const sid = String(player?.slot || "");
-      const currentSlotCount = prev.reduce((count, selectedId) => {
-        const selectedPlayer = playerById[selectedId];
-        return String(selectedPlayer?.slot || "") === sid ? count + 1 : count;
-      }, 0);
+
+      if (isAuction) {
+        if (maxPerTeam > 0 && player.team) {
+          const fromSameTeam = selectedCountByTeam[player.team] || 0;
+          if (fromSameTeam >= maxPerTeam) {
+            return `Already ${maxPerTeam} from ${player.team}.`;
+          }
+        }
+        const price = player.price || 0;
+        if (price > remainingPurse) {
+          return `Costs ${formatPoints(price)}, only ${formatPoints(
+            remainingPurse,
+          )} left.`;
+        }
+        return null;
+      }
+
+      const sid = String(player.slot || "");
       const limit = slotLimits[sid] || 4;
-      if (prev.length >= requiredCount || currentSlotCount >= limit)
-        return prev;
-      return [...prev, id];
-    });
+      if ((selectedCountBySlot[sid] || 0) >= limit) {
+        return `Slot is full (max ${limit}).`;
+      }
+      return null;
+    },
+    [
+      selectedSet,
+      count,
+      requiredCount,
+      isAuction,
+      maxPerTeam,
+      selectedCountByTeam,
+      remainingPurse,
+      slotLimits,
+      selectedCountBySlot,
+    ],
+  );
+
+  const toggle = (id: string) => {
+    const player = playerById[id];
+    if (!player) return;
+    if (selectedSet.has(id)) {
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
+      if (captainId === id) setCaptainId("");
+      if (viceCaptainId === id) setViceCaptainId("");
+      return;
+    }
+    if (blockReasonFor(player) !== null) return;
+    setSelectedIds((prev) => [...prev, id]);
   };
 
   const makeCaptain = (id: string) => {
@@ -259,35 +377,40 @@ export function EditPlayersModal({
     setViceCaptainId(id);
   };
 
-  // Filtered players
-  const q = query.toLowerCase();
-  const squadPlayers = allPlayers.filter(
-    (p) =>
-      selectedSet.has(p.id) &&
-      (q
-        ? p.name.toLowerCase().includes(q) ||
-          (p.team || "").toLowerCase().includes(q)
-        : true),
-  );
-  const availablePlayers = allPlayers.filter(
-    (p) =>
-      !selectedSet.has(p.id) &&
-      (q
-        ? p.name.toLowerCase().includes(q) ||
-          (p.team || "").toLowerCase().includes(q)
-        : true),
-  );
-
-  const displayed = tab === "squad" ? squadPlayers : availablePlayers;
+  const overspent = isAuction && remainingPurse < 0;
+  const isValid =
+    count === requiredCount &&
+    !!captainId &&
+    !!viceCaptainId &&
+    captainId !== viceCaptainId &&
+    !overspent;
 
   if (!isOpen) return null;
 
   const counterColor =
     count === requiredCount
-      ? "text-emerald-400"
+      ? "text-success"
       : count > requiredCount
-        ? "text-red-400"
-        : "text-amber-400";
+        ? "text-danger"
+        : "text-warning";
+
+  const showSections = filters.status === POOL_STATUS.ALL;
+
+  const renderRow = (p: EditablePlayer) => (
+    <PlayerRow
+      key={p.id}
+      player={p}
+      selected={selectedSet.has(p.id)}
+      isCaptain={captainId === p.id}
+      isViceCaptain={viceCaptainId === p.id}
+      onToggle={() => toggle(p.id)}
+      onMakeCaptain={() => makeCaptain(p.id)}
+      onMakeViceCaptain={() => makeViceCaptain(p.id)}
+      blockReason={blockReasonFor(p)}
+      showValue={isAuction}
+      contestFormat={contestFormat}
+    />
+  );
 
   return (
     <>
@@ -312,17 +435,16 @@ export function EditPlayersModal({
 
         {/* Header */}
         <div className="px-4 pb-3 border-b border-white/[0.08] flex items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2
               id="edit-squad-title"
               className="text-base font-bold text-white leading-tight"
             >
               Edit Squad
             </h2>
-            <p className="text-xs text-white/40">{teamName}</p>
+            <p className="text-xs text-text-muted truncate">{teamName}</p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Counter */}
+          <div className="flex items-center gap-3 shrink-0">
             <span className={`text-sm font-bold tabular-nums ${counterColor}`}>
               {count}
               <span className="text-white/30 font-normal">
@@ -331,16 +453,56 @@ export function EditPlayersModal({
             </span>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+              className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+              aria-label="Close"
             >
               <X className="w-4 h-4 text-white/60" />
             </button>
           </div>
         </div>
 
+        {/* Sticky controls */}
+        <div className="px-4 pt-3 pb-2 space-y-2 border-b border-white/[0.06]">
+          {isAuction && (
+            <EditPurseBar
+              purse={purse}
+              spent={spent}
+              selectedCount={count}
+              squadSize={requiredCount}
+              countByTeam={selectedCountByTeam}
+              maxPerTeam={maxPerTeam}
+            />
+          )}
+
+          <PoolFilterBar
+            query={filters.query}
+            onQueryChange={filters.setQuery}
+            status={filters.status}
+            onStatusChange={filters.setStatus}
+            counts={filters.counts}
+            teamFilter={filters.teamFilter}
+            onTeamFilterChange={filters.setTeamFilter}
+            teamOptions={filters.teamOptions}
+            sort={filters.sort}
+            onSortChange={filters.setSort}
+            priceBuckets={filters.priceBuckets}
+            priceBucketIndex={filters.priceBucketIndex}
+            onPriceBucketChange={filters.setPriceBucketIndex}
+            contestFormat={contestFormat}
+            hasActiveFilters={filters.hasActiveFilters}
+            onReset={filters.reset}
+          />
+        </div>
+
         {/* Validation nudges */}
-        {(!captainId || !viceCaptainId) && count === requiredCount && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+        {overspent && (
+          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger text-xs">
+            Squad is over the purse by {formatPoints(Math.abs(remainingPurse))}.
+            Remove a player to save.
+          </div>
+        )}
+        {!overspent && (!captainId || !viceCaptainId) && count === requiredCount && (
+          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-warning text-xs">
             {!captainId && !viceCaptainId
               ? "Tap a player to assign Captain and Vice-Captain."
               : !captainId
@@ -349,78 +511,43 @@ export function EditPlayersModal({
           </div>
         )}
         {captainId && viceCaptainId && captainId === viceCaptainId && (
-          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger text-xs">
             Captain and Vice-Captain must be different players.
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex mx-4 mt-3 rounded-xl bg-white/[0.04] p-1 gap-1 border border-white/[0.06]">
-          {(["squad", "available"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                tab === t
-                  ? "bg-primary-600 text-white shadow"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-            >
-              {t === "squad"
-                ? `My Squad (${count})`
-                : `Available (${availablePlayers.length})`}
-            </button>
-          ))}
-        </div>
-
-        {/* Search */}
-        <div className="mx-4 mt-2 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search player or team..."
-            className="w-full pl-8 pr-3 py-2 text-sm bg-white/[0.04] border border-white/[0.08] rounded-xl text-text-main placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-primary-500"
-          />
-        </div>
-
         {/* Player list */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
-          {displayed.length === 0 && (
-            <p className="text-center text-white/30 text-sm py-6">
-              No players found.
+          {filters.filtered.length === 0 && (
+            <p className="text-center text-text-muted text-sm py-6">
+              No players match your search.
             </p>
           )}
-          {displayed.map((p) => {
-            const sid = String(p.slot || "");
-            const slotCount = selectedCountBySlot[sid] || 0;
-            const limit = slotLimits[sid] || 4;
-            const isSlotFull = slotCount >= limit;
-            const isTotalFull = count >= requiredCount;
-            const disableReason = isTotalFull
-              ? `Squad is full (${requiredCount} players)`
-              : isSlotFull
-                ? `Slot is full (max ${limit})`
-                : "Add to squad";
 
-            return (
-              <PlayerRow
-                key={p.id}
-                player={p}
-                selected={selectedSet.has(p.id)}
-                isCaptain={captainId === p.id}
-                isViceCaptain={viceCaptainId === p.id}
-                onToggle={() => toggle(p.id)}
-                onMakeCaptain={() => makeCaptain(p.id)}
-                onMakeViceCaptain={() => makeViceCaptain(p.id)}
-                disableAdd={
-                  !selectedSet.has(p.id) && (isTotalFull || isSlotFull)
-                }
-                disableReason={disableReason}
-              />
-            );
-          })}
+          {showSections ? (
+            <>
+              {filters.inSquad.length > 0 && (
+                <>
+                  <SectionHeading
+                    label="In squad"
+                    count={filters.inSquad.length}
+                  />
+                  {filters.inSquad.map(renderRow)}
+                </>
+              )}
+              {filters.available.length > 0 && (
+                <>
+                  <SectionHeading
+                    label="Available"
+                    count={filters.available.length}
+                  />
+                  {filters.available.map(renderRow)}
+                </>
+              )}
+            </>
+          ) : (
+            filters.filtered.map(renderRow)
+          )}
         </div>
 
         {/* Save bar */}
@@ -435,7 +562,7 @@ export function EditPlayersModal({
               });
             }}
             disabled={!isValid || saving}
-            className="w-full py-3 rounded-xl bg-gradient-brand text-white text-sm font-bold shadow-lg shadow-primary-900/40 hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
+            className="w-full py-3.5 rounded-xl bg-gradient-brand text-white text-sm font-bold shadow-lg shadow-primary-900/40 hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>

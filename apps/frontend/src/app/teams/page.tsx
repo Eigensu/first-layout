@@ -15,6 +15,7 @@ import {
   type TeamResponse,
 } from "@/lib/api/teams";
 import { API_BASE_URL, LS_KEYS, ROUTES } from "@/common/consts";
+import { CONTEST_FORMAT } from "@/common/consts/contest";
 import {
   publicContestsApi,
   type Contest as PublicContest,
@@ -759,6 +760,7 @@ export default function TeamsPage() {
       {editPlayersTeamId && (() => {
         const et = teams.find((t) => t.id === editPlayersTeamId);
         if (!et) return null;
+        const editContest = contestByTeam[et.id];
         return (
           <EditPlayersModal
             isOpen={!!editPlayersTeamId}
@@ -774,10 +776,20 @@ export default function TeamsPage() {
               role: p.role,
               image: p.image,
               points: p.points,
+              price: p.price,
               slot: p.slot || undefined,
             }))}
-            requiredCount={totalMaxSelected}
+            // An auction squad is sized by the contest, not by the slot maxima.
+            // Using the slot total here left Save permanently disabled.
+            requiredCount={
+              editContest?.contest_format === CONTEST_FORMAT.AUCTION_PURSE
+                ? (editContest.squad_size ?? totalMaxSelected)
+                : totalMaxSelected
+            }
             slotLimits={slotLimits}
+            contestFormat={editContest?.contest_format}
+            purse={editContest?.purse}
+            maxPerTeam={editContest?.effective_max_players_per_team}
             saving={savingPlayers}
             onSave={handleSavePlayers}
           />
@@ -795,8 +807,20 @@ export default function TeamsPage() {
           team: p.team,
           role: roleToSlotLabel(p.role || ""),
           points: p.points,
+          price: p.price,
         }))}
-        excludeIds={[]}
+        currentPlayerIds={
+          teams.find((t) => t.id === actionTeamId)?.player_ids ?? []
+        }
+        contestFormat={
+          actionTeamId ? contestByTeam[actionTeamId]?.contest_format : undefined
+        }
+        purse={actionTeamId ? contestByTeam[actionTeamId]?.purse : undefined}
+        maxPerTeam={
+          actionTeamId
+            ? contestByTeam[actionTeamId]?.effective_max_players_per_team
+            : undefined
+        }
         onSelect={confirmReplace}
       />
       <Footer />
