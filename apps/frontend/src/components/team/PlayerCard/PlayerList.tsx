@@ -6,7 +6,7 @@ import { POOL_SORTS, type PlayerListProps, type PoolSort } from "./types";
 import { playerValueLabel } from "@/utils/playerValue";
 import { PRICE_RANGES } from "./priceRanges";
 
-const PLAYERS_PER_PAGE = 10;
+const PLAYERS_PER_PAGE = 20;
 
 const ALL_TEAMS = "__all__";
 
@@ -71,7 +71,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       list = list.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
-          p.team.toLowerCase().includes(query)
+          p.team.toLowerCase().includes(query),
       );
     }
 
@@ -105,7 +105,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     if (already) return onPlayerSelect(playerId);
     if (!canSelectMoreTotal) {
       onBlockedSelect?.(
-        `You can select at most ${maxSelections} players in total.`
+        `You can select at most ${maxSelections} players in total.`,
       );
       return;
     }
