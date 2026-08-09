@@ -6,6 +6,7 @@ from app.schemas.user import UserResponse, DeleteAccountRequest
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import open_avatar_stream
 from app.utils.security import verify_password
+from app.services.auth.google import verify_google_id_token, GoogleTokenError
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -87,10 +88,10 @@ async def update_current_user(
 async def delete_current_user(
     request: DeleteAccountRequest, current_user: User = Depends(get_current_active_user)
 ):
-    """Soft delete current user account, verifying a password if the account has one"""
+    """Soft delete current user account, reauthenticating by whatever
+    credential the account actually has (password, or a fresh Google
+    sign-in for passwordless accounts)."""
 
-    # Google-only accounts have no password to check (auth_provider == "google",
-    # hashed_password is None) — there's nothing to verify.
     if current_user.hashed_password:
         try:
             is_valid = verify_password(request.password or "", current_user.hashed_password)
@@ -101,6 +102,26 @@ async def delete_current_user(
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password"
+            )
+    else:
+        # Google-only account: a bearer token alone must not be enough to
+        # delete it, or a stolen/unattended session could lock the user out
+        # with no password to fall back on. Require a fresh Google ID token
+        # for the same Google account instead.
+        if not request.google_id_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Re-authenticate with Google to delete this account",
+            )
+        try:
+            token_payload = verify_google_id_token(request.google_id_token)
+        except GoogleTokenError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+        if token_payload.get("sub") != current_user.google_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google account does not match this user",
             )
 
     # Soft delete by deactivating and recording timestamp
