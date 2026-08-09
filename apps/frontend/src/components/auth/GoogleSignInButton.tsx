@@ -23,7 +23,9 @@ declare global {
               type?: "standard" | "icon";
               theme?: "outline" | "filled_blue" | "filled_black";
               size?: "large" | "medium" | "small";
-              width?: string | number;
+              shape?: "rectangular" | "pill";
+              /** GIS only accepts a pixel number here (max 400) — a percentage is silently ignored. */
+              width?: number;
               text?: "signin_with" | "signup_with" | "continue_with";
             }
           ) => void;
@@ -39,11 +41,17 @@ interface GoogleSignInButtonProps {
   disabled?: boolean;
 }
 
+/** GIS caps the rendered button at 400px regardless of what's requested. */
+const GIS_MAX_WIDTH = 400;
+/** Matches the wrapper's `p-0.5` (2px each side) so the button fits inside the purple frame exactly. */
+const WRAPPER_PADDING_PX = 2;
+
 export function GoogleSignInButton({
   onCredential,
   text = "continue_with",
   disabled = false,
 }: GoogleSignInButtonProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
   const onCredentialRef = useRef(onCredential);
 
@@ -57,7 +65,9 @@ export function GoogleSignInButton({
     let cancelled = false;
 
     const render = () => {
-      if (cancelled || !window.google || !buttonRef.current) return;
+      if (cancelled || !window.google || !buttonRef.current || !wrapperRef.current) {
+        return;
+      }
       window.google.accounts.id.initialize({
         client_id: NEXT_PUBLIC_GOOGLE_CLIENT_ID,
         callback: (response) => onCredentialRef.current(response.credential),
@@ -66,10 +76,16 @@ export function GoogleSignInButton({
       window.google.accounts.id.renderButton(buttonRef.current, {
         theme: "outline",
         size: "large",
-        width: "100%",
+        shape: "pill",
+        width: Math.min(
+          GIS_MAX_WIDTH,
+          Math.round(wrapperRef.current.clientWidth) - WRAPPER_PADDING_PX * 2,
+        ),
         text,
       });
     };
+
+    let resizeObserver: ResizeObserver | undefined;
 
     if (window.google) {
       render();
@@ -86,8 +102,17 @@ export function GoogleSignInButton({
       };
     }
 
+    // Re-render on layout changes (viewport resize, card reflow) so the
+    // button keeps matching the form width instead of the size it was
+    // mounted at.
+    if (wrapperRef.current) {
+      resizeObserver = new ResizeObserver(() => render());
+      resizeObserver.observe(wrapperRef.current);
+    }
+
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
     };
   }, [text, disabled]);
 
@@ -100,7 +125,12 @@ export function GoogleSignInButton({
         src="https://accounts.google.com/gsi/client"
         strategy="afterInteractive"
       />
-      <div ref={buttonRef} className={disabled ? "pointer-events-none opacity-50" : ""} />
+      <div
+        ref={wrapperRef}
+        className={`w-full flex justify-center overflow-hidden rounded-full border border-primary-400 bg-primary-50 p-0.5 ${disabled ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <div ref={buttonRef} className="rounded-full overflow-hidden" />
+      </div>
     </>
   );
 }
