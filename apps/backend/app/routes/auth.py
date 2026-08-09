@@ -1,36 +1,43 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from datetime import datetime, timedelta
-
-from app.models.user import User, RefreshToken
 import logging
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import EmailStr, ValidationError
+
+from app.models.user import RefreshToken, User
 from app.schemas.auth import (
-    UserRegister,
-    UserLogin,
-    Token,
-    ResetPasswordByMobile,
     ChangePassword,
     ForgotPasswordRequest,
-    ForgotPasswordVerify,
     ForgotPasswordReset,
+    ForgotPasswordVerify,
+    GoogleAuth,
+    ResetPasswordByMobile,
+    Token,
+    UserLogin,
+    UserRegister,
 )
 from app.schemas.user import UserResponse
+from app.services.auth.google import (
+    GoogleTokenError,
+    find_or_create_google_user,
+    verify_google_id_token,
+)
+from app.services.auth.password_reset import reset_password as pr_reset_password
+from app.services.auth.password_reset import start_session as pr_start_session
+from app.services.auth.password_reset import (
+    verify_otp_and_issue_token as pr_verify_and_issue,
+)
+from app.utils.dependencies import get_current_active_user
+from app.utils.gridfs import upload_avatar_to_gridfs
 from app.utils.security import (
-    get_password_hash,
-    verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
+    get_password_hash,
+    verify_password,
 )
-from app.utils.dependencies import get_current_active_user
 from config.settings import get_settings
-from pydantic import EmailStr, ValidationError
-from typing import Optional
-from app.utils.gridfs import upload_avatar_to_gridfs
-from app.services.auth.password_reset import (
-    start_session as pr_start_session,
-    verify_otp_and_issue_token as pr_verify_and_issue,
-    reset_password as pr_reset_password,
-)
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 settings = get_settings()
@@ -148,7 +155,11 @@ async def login(user_data: UserLogin):
                     user = u
                     break
 
-    if not user or not verify_password(user_data.password, user.hashed_password):
+    if (
+        not user
+        or not user.hashed_password
+        or not verify_password(user_data.password, user.hashed_password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -170,6 +181,41 @@ async def login(user_data: UserLogin):
     refresh_token = create_refresh_token(data={"sub": user.username})
 
     # Store refresh token
+    refresh_token_doc = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+    )
+    await refresh_token_doc.insert()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/google", response_model=Token)
+async def google_auth(payload: GoogleAuth):
+    """Sign up or log in using a Google Identity Services ID token."""
+    try:
+        token_payload = verify_google_id_token(payload.id_token)
+    except GoogleTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+    user = await find_or_create_google_user(token_payload)
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
+        )
+
+    user.last_login = datetime.utcnow()
+    await user.save()
+
+    access_token = create_access_token(data={"sub": user.username})
+    refresh_token = create_refresh_token(data={"sub": user.username})
+
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
@@ -352,6 +398,12 @@ async def change_password(
     payload: ChangePassword, current_user: User = Depends(get_current_active_user)
 ):
     """Change password for authenticated user with current password verification"""
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account signed up with Google and has no password yet. Use 'forgot password' to set one.",
+        )
+
     # Verify current password
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(

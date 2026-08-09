@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { NEXT_PUBLIC_API_URL } from "@/config/env";
+import { extractErrorMessage } from "@/utils/errors";
 import Image from "next/image";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
@@ -40,7 +41,7 @@ export default function ForgotPasswordResetPage() {
       );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.detail || "Reset failed");
+        throw new Error(extractErrorMessage(data?.detail, "Reset failed"));
       }
       setMessage("Password updated. You can now log in.");
       setTimeout(() => router.push("/auth/login"), 1000);
