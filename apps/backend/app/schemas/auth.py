@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field, validator
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field, validator
 
 
 class UserRegister(BaseModel):
@@ -88,6 +89,12 @@ class UserLogin(BaseModel):
 
     username: str
     password: str
+
+
+class GoogleAuth(BaseModel):
+    """Schema for Google Identity Services sign-in/sign-up"""
+
+    id_token: str
 
 
 class Token(BaseModel):

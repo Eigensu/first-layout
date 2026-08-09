@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { NEXT_PUBLIC_API_URL } from "@/config/env";
+import { extractErrorMessage } from "@/utils/errors";
 import Image from "next/image";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
@@ -34,7 +35,7 @@ export default function ForgotPasswordVerifyPage() {
       );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.detail || "Invalid OTP");
+        throw new Error(extractErrorMessage(data?.detail, "Invalid OTP"));
       }
       const resetToken = data.reset_token as string;
       const url = new URLSearchParams({ token: resetToken });

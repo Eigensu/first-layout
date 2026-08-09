@@ -9,6 +9,7 @@ import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 import { ChevronRight } from "lucide-react";
 
 // Validation schema matching backend requirements
@@ -55,9 +56,23 @@ const registerSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export function RegisterForm() {
-  const { register: registerUser } = useAuth();
+  const { register: registerUser, loginWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGoogleCredential = async (idToken: string) => {
+    try {
+      setError(null);
+      setIsLoading(true);
+      await loginWithGoogle(idToken);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Google sign-up failed. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const {
     register,
@@ -110,13 +125,29 @@ export function RegisterForm() {
 
       {/* Register Form */}
       <div className="bg-bg-card rounded-3xl p-6 sm:p-8 shadow-pink-soft">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="space-y-4 mb-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
               {error}
             </div>
           )}
-
+          <GoogleSignInButton
+            onCredential={handleGoogleCredential}
+            text="signup_with"
+            disabled={isLoading}
+          />
+          <div className="relative py-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border-subtle" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-bg-card px-3 text-text-muted">
+                or sign up with email
+              </span>
+            </div>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
             {...register("username")}
             type="text"
