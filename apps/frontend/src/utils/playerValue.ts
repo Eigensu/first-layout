@@ -23,7 +23,7 @@ export function formatPlayerValue(
   if (format === CONTEST_FORMAT.AUCTION_PURSE) {
     return formatPoints(value);
   }
-  return `${Math.floor(value)}`;
+  return `₹${Math.floor(value)}`;
 }
 
 /** Column label that goes with `formatPlayerValue`. */
