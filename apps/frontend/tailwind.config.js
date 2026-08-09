@@ -26,6 +26,9 @@ module.exports = {
             500: "var(--accent-pink)",
             soft: "var(--accent-pink-soft)",
             deep: "var(--accent-pink-deep)",
+            tonal: "var(--accent-tonal)",
+            "tonal-hover": "var(--accent-tonal-hover)",
+            edge: "var(--accent-edge)",
           },
           orange: {
             50: "var(--accent-orange-faint)",
@@ -46,9 +49,27 @@ module.exports = {
           subtle: "var(--border-subtle)",
           strong: "var(--border-strong)",
         },
-        success: "var(--success)",
-        warning: "var(--warning)",
-        danger: "var(--danger)",
+        /* `tonal`/`edge` variants exist because Tailwind v3 cannot apply an
+           opacity modifier to a colour defined as a bare var() — `bg-danger/20`
+           emits no rule at all. Use `bg-danger-tonal` / `border-danger-edge`. */
+        success: {
+          DEFAULT: "var(--success)",
+          tonal: "var(--success-tonal)",
+          "tonal-hover": "var(--success-tonal-hover)",
+          edge: "var(--success-edge)",
+        },
+        warning: {
+          DEFAULT: "var(--warning)",
+          tonal: "var(--warning-tonal)",
+          "tonal-hover": "var(--warning-tonal-hover)",
+          edge: "var(--warning-edge)",
+        },
+        danger: {
+          DEFAULT: "var(--danger)",
+          tonal: "var(--danger-tonal)",
+          "tonal-hover": "var(--danger-tonal-hover)",
+          edge: "var(--danger-edge)",
+        },
         primary: {
           50: "var(--accent-pink-faint)",
           100: "var(--bg-card)",
