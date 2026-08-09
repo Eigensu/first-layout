@@ -63,6 +63,20 @@ export function useTeamBuilder(
       try {
         setLoading(true);
         setError(null);
+        // Clear the previous contest's squad before loading the new one: if
+        // this load fails, the catch below must not leave a stale contest,
+        // pool, or selection in place — those player IDs belong to the old
+        // contest and must not be submittable against this one.
+        if (!cancelled) {
+          setContest(null);
+          setPlayers([]);
+          setSelectedPlayers([]);
+          setCaptainId("");
+          setViceCaptainId("");
+          setCurrentStep(1);
+          setSlots([]);
+          setActiveSlotId("");
+        }
 
         // The contest decides how the pool is shaped, so it has to load first.
         // A failure here must not fall through to the slot-based path: an
