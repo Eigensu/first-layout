@@ -28,6 +28,39 @@ export interface PoolFilterablePlayer {
 
 export type PriceBucket = PriceRange;
 
+/**
+ * Split the pool's own price span into buckets.
+ *
+ * Auction contests price players in points scaled to the contest's purse,
+ * not rupees, so the fixed rupee bands (PRICE_RANGES) would bucket them
+ * nonsensically. Deriving quartile bands from the pool actually on offer
+ * keeps the filter honest regardless of what scale the pool's prices are on.
+ */
+function derivePriceBuckets(prices: number[]): PriceBucket[] {
+  const priced = prices.filter((p) => p > 0).sort((a, b) => a - b);
+  if (priced.length < 4) return [];
+
+  const min = priced[0];
+  const max = priced[priced.length - 1];
+  if (max <= min) return [];
+
+  const fmt = (n: number) => Math.round(n).toLocaleString();
+  const step = (max - min) / 4;
+  const edges = [min, min + step, min + step * 2, min + step * 3, max];
+
+  return [0, 1, 2, 3].map((i) => {
+    // Top bucket owns the max so the highest-priced player is always matched.
+    const lo = edges[i];
+    const hi = i === 3 ? max : edges[i + 1];
+    return {
+      label: `${fmt(lo)} – ${fmt(hi)}`,
+      min: lo,
+      // Non-top buckets stop just below the next edge to avoid double-counting.
+      max: i === 3 ? max : hi - 0.000001,
+    };
+  });
+}
+
 export interface PoolFilterResult<T> {
   query: string;
   setQuery: (v: string) => void;
@@ -61,6 +94,7 @@ export interface PoolFilterResult<T> {
 export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
   players: T[],
   selectedIds: string[],
+  isAuction = false,
 ): PoolFilterResult<T> {
   const [query, setQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>(ALL_TEAMS);
@@ -78,7 +112,14 @@ export function usePlayerPoolFilters<T extends PoolFilterablePlayer>(
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [players]);
 
-  const priceBuckets = PRICE_RANGES;
+  // Rupee bands only make sense for slot-based pools; an auction pool's
+  // price is points on the purse's own scale, so its bands come from the
+  // pool itself instead.
+  const auctionBuckets = useMemo(
+    () => derivePriceBuckets(players.map((p) => p.price || 0)),
+    [players],
+  );
+  const priceBuckets = isAuction ? auctionBuckets : PRICE_RANGES;
 
   /** Everything except the status filter — the basis for the status counts. */
   const preStatus = useMemo(() => {

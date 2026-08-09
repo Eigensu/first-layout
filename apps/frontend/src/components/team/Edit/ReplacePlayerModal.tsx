@@ -87,7 +87,7 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
     return arr;
   }, [players, excludeIds, currentPlayerIds, filter]);
 
-  const filters = usePlayerPoolFilters(candidates, []);
+  const filters = usePlayerPoolFilters(candidates, [], isAuction);
   const { reset: resetFilters } = filters;
 
   // The modal stays mounted while isOpen toggles, so usePlayerPoolFilters'
