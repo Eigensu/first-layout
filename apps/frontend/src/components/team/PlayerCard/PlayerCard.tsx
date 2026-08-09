@@ -42,6 +42,11 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
           ${className}
         `}
         title={disabled && !isSelected ? disabledReason : undefined}
+        aria-label={
+          disabled && !isSelected && disabledReason
+            ? `${player.name}: ${disabledReason}`
+            : undefined
+        }
         onClick={() => !disabled && onSelect(player.id)}
       >
         {/* Player Avatar - Responsive size */}
@@ -92,6 +97,11 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
               </Badge>
             )}
           </div>
+          {disabled && !isSelected && disabledReason && (
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">
+              {disabledReason}
+            </p>
+          )}
         </div>
 
         {/* Right Side: Score and Checkbox */}
