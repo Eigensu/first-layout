@@ -6,3 +6,16 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["app"]
+
+# black and isort disagree on import formatting unless isort is told to defer
+# (trailing commas, parenthesised wrapping). Without this the two halves of
+# `pnpm run lint` fight each other and no file can satisfy both.
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+extend-exclude = "venv"
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip = ["venv"]

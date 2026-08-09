@@ -6,8 +6,8 @@
     "dev": "uvicorn main:app --reload --host 0.0.0.0 --port 8000",
     "start": "uvicorn main:app --host 0.0.0.0 --port 8000",
     "build": "echo 'Python backend built successfully'",
-    "lint": "black . --check && isort . --check-only",
-    "lint:fix": "black . && isort .",
+    "lint": "sh scripts/lint.sh",
+    "lint:fix": "sh scripts/lint.sh --fix",
     "test": "pytest",
     "clean": "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
   },
