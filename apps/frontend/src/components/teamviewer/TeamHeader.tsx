@@ -73,7 +73,12 @@ export function TeamHeader({
             day: "numeric",
             year: "numeric",
           })}
-          {statusNote && ` · ${statusNote}`}
+          {statusNote && (
+            <span className="hidden sm:inline">{` · ${statusNote}`}</span>
+          )}
+          {contestName && (
+            <span className="sm:hidden">{` · ${contestName}`}</span>
+          )}
         </span>
 
         {rank && (
@@ -89,7 +94,7 @@ export function TeamHeader({
           (contestLink ? (
             <a
               href={contestLink}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full
                          bg-white/10 text-[#E6E6FA] text-sm font-medium
                          hover:bg-white/20 transition-colors whitespace-nowrap border border-[#E6E6FA]/20"
             >
@@ -97,7 +102,7 @@ export function TeamHeader({
             </a>
           ) : (
             <span
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full
                             bg-white/10 text-[#E6E6FA] text-sm font-medium whitespace-nowrap border border-[#E6E6FA]/20"
             >
               <span>{contestName}</span>
