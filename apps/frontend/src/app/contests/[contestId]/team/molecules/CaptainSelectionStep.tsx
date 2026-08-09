@@ -102,13 +102,13 @@ export const CaptainSelectionStep: React.FC<CaptainSelectionStepProps> = ({
               </div>
             </>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-text-muted">
               Please select players first
             </div>
           )}
         </div>
       ) : (
-        <div className="text-center py-8 text-gray-400 text-sm">
+        <div className="text-center py-8 text-text-subtle text-sm">
           Continue from Step 1 to configure Captain & Vice-Captain
         </div>
       )}

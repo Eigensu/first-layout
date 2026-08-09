@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Trophy, Star } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
-import LogoLoop from "@/components/ui/LogoLoop";
+import SponsorLogoLoop from "@/components/ui/SponsorLogoLoop";
 import {
   publicContestsApi,
   Contest,
@@ -123,22 +123,16 @@ export default function ContestsPage() {
         </div>
       </div>
 
-      {/* LogoLoop at the bottom */}
+      {/* Sponsor Logo Loop at the bottom — auto-synced from backend */}
       <div className="mt-12 pb-10">
-        <LogoLoop
-          logos={[
-            { src: "/logos/company1.png", alt: "Company 1" },
-            { src: "/logos/c2.png", alt: "Company 2" },
-            { src: "/logos/c3.png", alt: "Company 3" },
-          ]}
+        <SponsorLogoLoop
           speed={120}
           direction="left"
           logoHeight={48}
           gap={40}
           hoverSpeed={0}
           scaleOnHover
-          ariaLabel="Our Partners"
-          className="[&_img]:brightness-0 [&_img]:invert [&_img]:opacity-90"
+          ariaLabel="Our Sponsors"
         />
       </div>
     </div>

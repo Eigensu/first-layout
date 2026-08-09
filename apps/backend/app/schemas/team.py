@@ -6,7 +6,7 @@ from datetime import datetime
 class TeamCreate(BaseModel):
     """Schema for creating a new team"""
     team_name: str = Field(..., min_length=1, max_length=100)
-    player_ids: List[str] = Field(..., description="List of player IDs (1-16 players)")
+    player_ids: List[str] = Field(..., description="List of player IDs")
     captain_id: str
     vice_captain_id: str
     contest_id: Optional[str] = None
@@ -16,8 +16,6 @@ class TeamCreate(BaseModel):
     def validate_player_ids(cls, v):
         if not v or len(v) < 1:
             raise ValueError('At least 1 player is required')
-        if len(v) > 16:
-            raise ValueError('Maximum 16 players allowed')
         return v
 
     class Config:

@@ -6,7 +6,8 @@
     "build": "next build",
     "build:turbo": "next build --turbopack",
     "dev": "next dev -p 3000",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "start": "next start",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf .next .turbo node_modules"

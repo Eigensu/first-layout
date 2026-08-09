@@ -10,6 +10,21 @@ export type ApiPlayer = {
   image_url?: string | null;
 };
 
+/**
+ * Fetch the whole player pool in one call, with no slot dimension.
+ *
+ * Used by auction contests, where the backend narrows the pool to players who
+ * were actually auctioned once contestId names an auction contest.
+ */
+export async function fetchAllPlayers(contestId?: string): Promise<ApiPlayer[]> {
+  const q = new URLSearchParams();
+  q.set("limit", "5000");
+  if (contestId) q.set("contest_id", String(contestId));
+  const res = await fetch(`${NEXT_PUBLIC_API_URL}/api/players?${q.toString()}`);
+  if (!res.ok) throw new Error(`Failed to load players (${res.status})`);
+  return (await res.json()) as ApiPlayer[];
+}
+
 export async function fetchPlayersBySlot(slotId: string, contestId?: string): Promise<ApiPlayer[]> {
   const q = new URLSearchParams();
   q.set("slot", String(slotId));

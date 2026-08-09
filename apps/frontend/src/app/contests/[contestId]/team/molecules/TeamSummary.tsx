@@ -23,12 +23,13 @@ export function TeamSummary({
   return (
     <>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-lg sm:text-xl font-semibold text-gray-900">
+        <h3 className="text-lg sm:text-xl font-semibold text-text-main">
           Your Team
         </h3>
         <Button
           variant="ghost"
           onClick={() => router.push(`/contests/${contestId}`)}
+          className="text-text-main hover:bg-bg-card-soft"
         >
           <span className="inline-flex items-center gap-2">
             <svg
@@ -49,17 +50,17 @@ export function TeamSummary({
         </Button>
       </div>
       {loadingTeam ? (
-        <div className="text-gray-500">Loading your team...</div>
+        <div className="text-text-muted">Loading your team...</div>
       ) : team ? (
         <Card className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="min-w-0">
-            <div className="text-xs sm:text-sm text-gray-500">Team Name</div>
-            <div className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+            <div className="text-xs sm:text-sm text-text-muted">Team Name</div>
+            <div className="text-base sm:text-lg font-semibold text-text-main truncate">
               {team.team_name}
             </div>
-            <div className="text-xs sm:text-sm text-gray-600 mt-1">
+            <div className="text-xs sm:text-sm text-text-muted mt-1">
               Total Points:{" "}
-              <span className="font-semibold text-success-700">
+              <span className="font-semibold text-success">
                 {formatPoints(team.total_points)}
               </span>
             </div>
@@ -79,7 +80,7 @@ export function TeamSummary({
           </div>
         </Card>
       ) : (
-        <div className="text-gray-500">No team found.</div>
+        <div className="text-text-muted">No team found.</div>
       )}
     </>
   );

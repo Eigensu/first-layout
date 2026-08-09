@@ -4,6 +4,7 @@ import type {
   ContestVisibility,
   PointsScope,
   ContestType,
+  ContestFormat,
 } from '@/common/consts/contest';
 
 export type {
@@ -11,6 +12,7 @@ export type {
   ContestVisibility,
   PointsScope,
   ContestType,
+  ContestFormat,
 };
 
 export interface Contest {
@@ -26,6 +28,13 @@ export interface Contest {
   points_scope: PointsScope;
   contest_type: ContestType;
   allowed_teams: string[];
+  contest_format: ContestFormat;
+  purse: number;
+  squad_size: number | null;
+  /** Raw per-contest override; null means the global setting applies. */
+  max_players_per_team: number | null;
+  /** The limit actually enforced, global fallback already applied. */
+  effective_max_players_per_team: number;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +58,10 @@ export interface ContestCreate {
   points_scope?: PointsScope;
   contest_type?: ContestType;
   allowed_teams?: string[];
+  contest_format?: ContestFormat;
+  purse?: number;
+  squad_size?: number | null;
+  max_players_per_team?: number | null;
 }
 
 export interface ContestUpdate {
@@ -62,6 +75,10 @@ export interface ContestUpdate {
   points_scope?: PointsScope;
   contest_type?: ContestType;
   allowed_teams?: string[];
+  contest_format?: ContestFormat;
+  purse?: number;
+  squad_size?: number | null;
+  max_players_per_team?: number | null;
 }
 
 export interface EnrollmentBulkRequest { team_ids: string[] }
@@ -87,6 +104,11 @@ export interface PlayerPointsResponseItem {
 
 export interface PlayerPointsBulkUpsertRequest {
   updates: { player_id: string; points: number }[];
+}
+
+export interface LeaderboardExportResponse {
+  blob: Blob;
+  filename: string;
 }
 
 export const adminContestsApi = {
@@ -136,5 +158,26 @@ export const adminContestsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
+  },
+
+  /**
+   * Download a contest's leaderboard as an .xlsx file
+   */
+  exportLeaderboard: async (contestId: string): Promise<LeaderboardExportResponse> => {
+    const response = await apiClient.get(`/api/admin/contests/${contestId}/leaderboard/export`, {
+      responseType: 'blob',
+    });
+
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    let filename = `leaderboard_${contestId}.xlsx`;
+    const match = contentDisposition?.match(/filename=([^;]+)/i);
+    if (match?.[1]) {
+      filename = match[1].trim().replace(/^"|"$/g, '');
+    }
+
+    return {
+      blob: response.data as Blob,
+      filename,
+    };
   },
 };

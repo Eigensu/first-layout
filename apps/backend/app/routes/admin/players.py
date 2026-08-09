@@ -6,6 +6,7 @@ from datetime import datetime
 from app.models.admin.player import Player
 from app.models.team import Team
 from app.models.player import Player as PublicPlayer
+from app.models.player_contest_points import PlayerContestPoints
 from beanie import PydanticObjectId
 from app.schemas.admin.player import (
     PlayerCreate,
@@ -16,7 +17,55 @@ from app.schemas.admin.player import (
 from app.utils.dependencies import get_admin_user
 from app.models.user import User
 
-router = APIRouter(prefix="/api/admin/players", tags=["Admin - Players"]) 
+router = APIRouter(prefix="/api/admin/players", tags=["Admin - Players"])
+
+
+@router.delete("/bulk/all")
+async def delete_all_players(
+    confirm: str = Query(
+        ..., description="Safety confirmation phrase. Must be DELETE_ALL_PLAYERS"
+    ),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Delete all players with strict safety confirmation and team cleanup.
+    Requires authentication.
+    """
+    if confirm != "DELETE_ALL_PLAYERS":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid confirmation phrase. Use DELETE_ALL_PLAYERS",
+        )
+
+    existing_players = await Player.find_all().count()
+
+    # Clear team references to removed players to keep data consistent.
+    team_update = await Team.find_all().update_many(
+        {
+            "$set": {
+                "player_ids": [],
+                "captain_id": None,
+                "vice_captain_id": None,
+                "total_points": 0.0,
+                "total_value": 0.0,
+                "updated_at": datetime.utcnow(),
+            }
+        }
+    )
+
+    # Remove contest points as they are tied to players that are being deleted.
+    contest_points_deleted = await PlayerContestPoints.find_all().delete()
+    players_deleted = await Player.find_all().delete()
+
+    return {
+        "message": "All players deleted successfully",
+        "players_before": existing_players,
+        "players_deleted": int(getattr(players_deleted, "deleted_count", 0) or 0),
+        "contest_points_deleted": int(
+            getattr(contest_points_deleted, "deleted_count", 0) or 0
+        ),
+        "teams_cleared": int(getattr(team_update, "modified_count", 0) or 0),
+    }
 
 
 @router.get("", response_model=PlayerListResponse)

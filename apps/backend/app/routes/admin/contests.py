@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status as http_status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import Optional, List
 from beanie import PydanticObjectId
 from datetime import datetime
+from io import BytesIO
+import re
+from urllib.parse import quote
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from app.utils.timezone import now_ist, to_ist
 from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs
 from pydantic import BaseModel
+from openpyxl import Workbook
 
 from app.models.contest import Contest
 from app.models.team import Team
@@ -13,7 +19,14 @@ from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.services.contest_status import sync_contest_status, contest_status_filter_clauses
-from app.common.enums.contests import ContestStatus, ContestVisibility
+from app.common.enums.contests import ContestStatus, ContestVisibility, ContestFormat
+from app.models.settings import GlobalSettings
+from app.services.auction import (
+    assert_auction_config_feasible,
+    find_teams_breaking_auction_rules,
+    resolve_max_players_per_team,
+)
+from app.routes.teams import find_teams_breaking_slot_rules
 from app.common.enums.enrollments import EnrollmentStatus
 from app.schemas.contest import (
     ContestCreate,
@@ -33,11 +46,10 @@ router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
 async def to_response(contest: Contest) -> ContestResponse:
     status = await sync_contest_status(contest, persist=False)
+    settings = await GlobalSettings.get_instance()
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo
-        from app.models.settings import GlobalSettings
-        settings = await GlobalSettings.get_instance()
         if settings.default_contest_logo_file_id:
             logo_url = "/api/settings/logo"
 
@@ -55,6 +67,11 @@ async def to_response(contest: Contest) -> ContestResponse:
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
         allowed_teams=contest.allowed_teams or [],
+        contest_format=contest.contest_format,
+        purse=contest.purse,
+        squad_size=contest.squad_size,
+        max_players_per_team=contest.max_players_per_team,
+        effective_max_players_per_team=resolve_max_players_per_team(contest, settings),
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
@@ -73,6 +90,20 @@ async def create_contest(
     if existing:
         raise HTTPException(status_code=400, detail="Contest code already exists")
 
+    # Reject an auction setup no participant could satisfy, before it is saved.
+    if data.contest_format == ContestFormat.AUCTION_PURSE:
+        settings = await GlobalSettings.get_instance()
+        await assert_auction_config_feasible(
+            squad_size=data.squad_size,
+            purse=data.purse,
+            max_per_team=data.max_players_per_team or settings.max_players_per_team,
+            # A daily contest can only draw from its named teams, so the rest
+            # of the pool must not count towards feasibility.
+            allowed_teams=(
+                data.allowed_teams if data.contest_type == "daily" else None
+            ),
+        )
+
     now = now_ist()
     contest = Contest(
         code=data.code,
@@ -85,6 +116,10 @@ async def create_contest(
         points_scope=data.points_scope,
         contest_type=data.contest_type,
         allowed_teams=data.allowed_teams,
+        contest_format=data.contest_format,
+        purse=data.purse,
+        squad_size=data.squad_size,
+        max_players_per_team=data.max_players_per_team,
         created_at=now,
         updated_at=now,
     )
@@ -135,6 +170,7 @@ async def get_contest(contest_id: str, current_user: User = Depends(get_admin_us
 async def update_contest(
     contest_id: str,
     data: ContestUpdate,
+    force: bool = Query(False),
     current_user: User = Depends(get_admin_user),
 ):
     contest = await Contest.get(contest_id)
@@ -151,6 +187,74 @@ async def update_contest(
     new_end = update_fields.get("end_at", contest.end_at)
     if new_start >= new_end:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
+
+    # Re-check feasibility against the merged result, so an edit cannot leave a
+    # contest in a state no participant could satisfy.
+    new_format = update_fields.get("contest_format", contest.contest_format)
+    if new_format == ContestFormat.AUCTION_PURSE:
+        settings = await GlobalSettings.get_instance()
+        new_max = update_fields.get("max_players_per_team", contest.max_players_per_team)
+        new_squad_size = update_fields.get("squad_size", contest.squad_size)
+        new_purse = update_fields.get("purse", contest.purse)
+        new_type = update_fields.get("contest_type", contest.contest_type)
+        new_allowed = update_fields.get("allowed_teams", contest.allowed_teams)
+        effective_allowed = new_allowed if new_type == "daily" else None
+        effective_max = new_max or settings.max_players_per_team
+
+        await assert_auction_config_feasible(
+            squad_size=new_squad_size,
+            purse=new_purse,
+            max_per_team=effective_max,
+            allowed_teams=effective_allowed,
+        )
+
+        # Tightening the rules must not silently strand squads that were legal
+        # when they were built; they would stay enrolled and keep scoring.
+        if not force:
+            broken = await find_teams_breaking_auction_rules(
+                contest_id=str(contest.id),
+                squad_size=new_squad_size,
+                purse=new_purse,
+                max_per_team=effective_max,
+                allowed_teams=effective_allowed,
+            )
+            if broken:
+                shown = broken[:5]
+                more = len(broken) - len(shown)
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": (
+                            f"{len(broken)} existing team(s) would break under these "
+                            f"rules. Fix or remove them, or repeat the request with "
+                            f"force=true to apply anyway."
+                        ),
+                        "broken_teams": shown
+                        + ([f"and {more} more"] if more > 0 else []),
+                    },
+                )
+    elif new_format == ContestFormat.SLOT_BASED and not force:
+        # Symmetric to the auction_purse branch above: a squad shape now
+        # comes from slot config instead of the purse, so a switch away from
+        # auction_purse (or an edit while already slot_based) must not leave
+        # existing squads enrolled and scoring against slot rules they were
+        # never checked against.
+        broken = await find_teams_breaking_slot_rules(contest_id=str(contest.id))
+        if broken:
+            shown = broken[:5]
+            more = len(broken) - len(shown)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": (
+                        f"{len(broken)} existing team(s) would break under slot "
+                        f"rules. Fix or remove them, or repeat the request with "
+                        f"force=true to apply anyway."
+                    ),
+                    "broken_teams": shown
+                    + ([f"and {more} more"] if more > 0 else []),
+                },
+            )
 
     for k, v in update_fields.items():
         setattr(contest, k, v)
@@ -225,6 +329,15 @@ async def enroll_teams(
             # skip duplicates silently
             continue
 
+        existing_for_user = await TeamContestEnrollment.find_one(
+            (TeamContestEnrollment.user_id == team.user_id)
+            & (TeamContestEnrollment.contest_id == contest.id)
+            & (TeamContestEnrollment.status == EnrollmentStatus.ACTIVE)
+        )
+        if existing_for_user:
+            # one active team per user per contest
+            continue
+
         enr = TeamContestEnrollment(
             team_id=team.id,
             user_id=team.user_id,
@@ -232,7 +345,12 @@ async def enroll_teams(
             status=EnrollmentStatus.ACTIVE,
             enrolled_at=now_ist(),
         )
-        await enr.insert()
+        try:
+            await enr.insert()
+        except DuplicateKeyError:
+            # Another active enrollment for this user landed first; skip this
+            # team rather than failing the whole batch.
+            continue
         # Persist contest_id on the team for convenience
         try:
             team.contest_id = str(contest.id)
@@ -502,3 +620,185 @@ async def upload_contest_logo(
             detail=f"Failed to upload logo: {str(e)}"
         )
 
+
+
+@router.get(
+    "/{contest_id}/leaderboard/export",
+    responses={
+        404: {"description": "Contest not found"},
+        500: {"description": "Server error"},
+    },
+)
+async def export_contest_leaderboard_excel(
+    contest_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Export a contest's leaderboard as an .xlsx file.
+    Requires authentication.
+    """
+    contest = await Contest.get(contest_id)
+    if not contest:
+        raise HTTPException(status_code=404, detail="Contest not found")
+
+    enrollments = await TeamContestEnrollment.find(
+        {
+            "contest_id": contest.id,
+            "status": EnrollmentStatus.ACTIVE,
+        }
+    ).to_list()
+
+    team_ids = [enr.team_id for enr in enrollments]
+    teams = await Team.find({"_id": {"$in": team_ids}}).to_list() if team_ids else []
+    teams_by_id = {str(t.id): t for t in teams}
+
+    user_ids = list({t.user_id for t in teams})
+    users = await User.find({"_id": {"$in": user_ids}}).to_list() if user_ids else []
+    users_by_id = {str(u.id): u for u in users}
+
+    all_player_ids: set = set()
+    team_player_oids_map: dict = {}
+    for enr in enrollments:
+        team = teams_by_id.get(str(enr.team_id))
+        if not team:
+            continue
+        oids = []
+        for pid in team.player_ids:
+            if ObjectId.is_valid(pid):
+                try:
+                    poid = PydanticObjectId(pid)
+                except (TypeError, ValueError):
+                    continue
+                oids.append(poid)
+                all_player_ids.add(poid)
+        team_player_oids_map[str(enr.team_id)] = oids
+
+    pcp_docs = []
+    if all_player_ids:
+        pcp_docs = await PlayerContestPoints.find(
+            {
+                "contest_id": contest.id,
+                "player_id": {"$in": list(all_player_ids)},
+            }
+        ).to_list()
+    pcp_points_map = {str(doc.player_id): float(doc.points or 0.0) for doc in pcp_docs}
+
+    players_by_id = {}
+    if all_player_ids:
+        player_docs = await Player.find(
+            {"_id": {"$in": list(all_player_ids)}}
+        ).to_list()
+        players_by_id = {str(p.id): p for p in player_docs}
+
+    computed_rows = []
+    for enr in enrollments:
+        team = teams_by_id.get(str(enr.team_id))
+        if not team:
+            continue
+        user = users_by_id.get(str(team.user_id))
+        if not user:
+            continue
+
+        oids = team_player_oids_map.get(str(enr.team_id), [])
+        captain_id = str(team.captain_id) if team.captain_id else None
+        vice_id = str(team.vice_captain_id) if team.vice_captain_id else None
+
+        total_points = 0.0
+        selected_player_names = []
+        for oid in oids:
+            pid = str(oid)
+            points = float(pcp_points_map.get(pid, 0.0))
+            if captain_id and pid == captain_id:
+                points *= 2.0
+            elif vice_id and pid == vice_id:
+                points *= 1.5
+            total_points += points
+
+            p = players_by_id.get(pid)
+            selected_player_names.append(p.name if p else pid)
+
+        captain_player = players_by_id.get(captain_id) if captain_id else None
+        vice_captain_player = players_by_id.get(vice_id) if vice_id else None
+        captain_name = captain_player.name if captain_player else ""
+        vice_captain_name = vice_captain_player.name if vice_captain_player else ""
+
+        computed_rows.append(
+            {
+                "team_name": team.team_name,
+                "points": float(total_points),
+                "username": user.username,
+                "full_name": user.full_name or "",
+                "email": str(user.email) if user.email else "",
+                "mobile": user.mobile or "",
+                "captain_name": captain_name,
+                "vice_captain_name": vice_captain_name,
+                "selected_players": ", ".join(selected_player_names),
+            }
+        )
+
+    computed_rows.sort(key=lambda row: row["points"], reverse=True)
+
+    wb = Workbook()
+    ws = wb.active
+    if ws is None:
+        raise HTTPException(status_code=500, detail="Failed to initialize workbook")
+    ws.title = "Leaderboard"
+
+    ws.append(
+        [
+            "Contest ID",
+            "Contest Code",
+            "Contest Name",
+            "Rank",
+            "Team Name",
+            "Points",
+            "Username",
+            "Name",
+            "Email",
+            "Number",
+            "Captain",
+            "Vice Captain",
+            "Selected Players",
+        ]
+    )
+
+    for idx, row in enumerate(computed_rows, start=1):
+        ws.append(
+            [
+                str(contest.id),
+                contest.code,
+                contest.name,
+                idx,
+                row["team_name"],
+                round(row["points"], 2),
+                row["username"],
+                row["full_name"],
+                row["email"],
+                row["mobile"],
+                row["captain_name"],
+                row["vice_captain_name"],
+                row["selected_players"],
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    raw_code = contest.code or "contest"
+    safe_code = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_code).strip("._") or "contest"
+    filename_ascii = (
+        f"leaderboard_{safe_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    )
+    filename_star = quote(filename_ascii)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{filename_ascii}\"; "
+                f"filename*=UTF-8''{filename_star}"
+            )
+        },
+    )

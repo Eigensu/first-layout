@@ -1,5 +1,8 @@
 import React from "react";
 import { StepCard, Badge, Button, PlayerList, Player } from "@/components";
+import type { ContestFormat } from "@/common/consts/contest";
+import { PurseBar } from "./PurseBar";
+import { formatPoints } from "@/utils/playerValue";
 
 interface PlayerSelectionStepProps {
   currentStep: number;
@@ -19,6 +22,17 @@ interface PlayerSelectionStepProps {
   selectedCountBySlot: Record<string, number>;
   slotLimits: Record<string, number>;
   totalMax: number;
+
+  // Auction format
+  isAuction?: boolean;
+  contestFormat?: ContestFormat;
+  purse?: number;
+  spent?: number;
+  remainingPurse?: number;
+  maxPerTeam?: number;
+  selectedCountByTeam?: Record<string, number>;
+  getSelectionBlock?: (player: Player) => string | null;
+  canSubmitAuctionSquad?: boolean;
 
   // Handlers
   onClearAll: () => void;
@@ -52,6 +66,16 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
   slotLimits,
   totalMax,
 
+  isAuction = false,
+  contestFormat,
+  purse = 0,
+  spent = 0,
+  remainingPurse = 0,
+  maxPerTeam = 0,
+  selectedCountByTeam = {},
+  getSelectionBlock,
+  canSubmitAuctionSquad = false,
+
   onClearAll,
   onSetActiveSlot,
   onPlayerSelect,
@@ -79,20 +103,26 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
         >
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-              {slots.map((s) => {
-                const count = selectedCountBySlot[s.id] || 0;
-                const limit = slotLimits[s.id] || 4;
-                return (
-                  <Badge
-                    key={s.id}
-                    variant={count >= limit ? "success" : "secondary"}
-                    size="sm"
-                    className="justify-center"
-                  >
-                    {s.name}: {count}/{limit}
-                  </Badge>
-                );
-              })}
+              {isAuction ? (
+                <Badge variant="success" size="sm" className="justify-center">
+                  Purse left: {formatPoints(remainingPurse)}
+                </Badge>
+              ) : (
+                slots.map((s) => {
+                  const count = selectedCountBySlot[s.id] || 0;
+                  const limit = slotLimits[s.id] || 4;
+                  return (
+                    <Badge
+                      key={s.id}
+                      variant={count >= limit ? "success" : "secondary"}
+                      size="sm"
+                      className="justify-center"
+                    >
+                      {s.name}: {count}/{limit}
+                    </Badge>
+                  );
+                })
+              )}
             </div>
 
             <div className="flex items-center justify-between">
@@ -127,18 +157,42 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
               Clear All
             </Button>
           </div>
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
-            {(() => {
-              const mins = Array.from(new Set(slots.map((s) => s.min_select)));
-              if (mins.length === 1) {
-                return `Select ${mins[0]} players in each Slot and press Next to proceed.`;
-              }
-              return `Meet the minimum required players in each Slot and press Next to proceed.`;
-            })()}
-          </div>
+          {isAuction ? (
+            <>
+              <PurseBar
+                purse={purse}
+                spent={spent}
+                remaining={remainingPurse}
+                selectedCount={selectedPlayers.length}
+                squadSize={totalMax}
+                countByTeam={selectedCountByTeam}
+                maxPerTeam={maxPerTeam}
+              />
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
+                Pick {totalMax} players without going over your purse
+                {maxPerTeam > 0
+                  ? `, and at most ${maxPerTeam} from any one team.`
+                  : "."}
+              </div>
+            </>
+          ) : (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
+              {(() => {
+                const mins = Array.from(new Set(slots.map((s) => s.min_select)));
+                if (mins.length === 1) {
+                  return `Select ${mins[0]} players in each Slot and press Next to proceed.`;
+                }
+                return `Meet the minimum required players in each Slot and press Next to proceed.`;
+              })()}
+            </div>
+          )}
           {/* Player list - now full width */}{" "}
           <div>
-            <div className="flex overflow-x-auto gap-1.5 mb-2 sm:mb-4 pb-1 -mx-2 px-2 scrollbar-hide">
+            <div
+              className={`flex overflow-x-auto gap-1.5 mb-2 sm:mb-4 pb-1 -mx-2 px-2 scrollbar-hide ${
+                isAuction ? "hidden" : ""
+              }`}
+            >
               {slots.map((s) => {
                 const limit = slotLimits[s.id];
                 const count = selectedCountBySlot[s.id] || 0;
@@ -165,28 +219,42 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
             </div>
 
             {loading ? (
-              <div className="text-center text-gray-500 py-6">
+              <div className="text-center text-text-muted py-6">
                 Loading players...
               </div>
             ) : error ? (
               <div className="text-center text-red-600 py-6">{error}</div>
             ) : (
               <PlayerList
-                key={`slot-${activeSlotId}`}
+                key={isAuction ? "auction-pool" : `slot-${activeSlotId}`}
                 players={
-                  players.filter(
-                    (p) => (p as any).slotId === activeSlotId
-                  ) as unknown as Player[]
+                  isAuction
+                    ? players
+                    : (players.filter(
+                        (p) => (p as any).slotId === activeSlotId
+                      ) as unknown as Player[])
                 }
                 selectedPlayers={selectedPlayers}
                 onPlayerSelect={onPlayerSelect}
                 maxSelections={totalMax || 0}
                 onBlockedSelect={onBlockSelect}
                 compact={true}
-                compactShowPrice={false}
+                compactShowPrice={isAuction}
+                showPoolFilters={isAuction}
+                contestFormat={contestFormat}
+                getDisabledReason={
+                  isAuction && getSelectionBlock
+                    ? (player) => getSelectionBlock(player)
+                    : undefined
+                }
                 isPlayerDisabled={(player) => {
                   if (selectedPlayers.includes(player.id)) {
                     return false;
+                  }
+                  if (isAuction) {
+                    return getSelectionBlock
+                      ? getSelectionBlock(player) !== null
+                      : false;
                   }
                   const playerSlotId = (
                     players.find((p) => p.id === player.id) as any
@@ -202,7 +270,21 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
               />
             )}
 
-            {isLastSlot ? (
+            {isAuction ? (
+              <div className="flex items-center justify-center mt-6">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={onContinue}
+                  disabled={!canSubmitAuctionSquad}
+                  className="w-full sm:w-auto"
+                >
+                  {selectedPlayers.length === totalMax
+                    ? "Continue"
+                    : `Select ${totalMax - selectedPlayers.length} more`}
+                </Button>
+              </div>
+            ) : isLastSlot ? (
               <div className="flex items-center justify-center mt-6">
                 <div className="flex gap-3 w-full sm:w-auto">
                   <Button

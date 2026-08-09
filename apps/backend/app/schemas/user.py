@@ -22,5 +22,14 @@ class UserResponse(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     """Schema for account deletion request"""
-    password: str = Field(..., min_length=1, description="Current password for verification")
+    password: Optional[str] = Field(
+        None, description="Current password for verification; accounts with no password ignore this"
+    )
+    google_id_token: Optional[str] = Field(
+        None,
+        description=(
+            "Fresh Google Identity Services ID token, required in place of "
+            "password for passwordless (Google) accounts"
+        ),
+    )
     reason: Optional[str] = Field(None, max_length=500, description="Optional deletion reason")

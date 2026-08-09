@@ -8,7 +8,7 @@ from datetime import datetime
 from config.settings import settings
 import logging
 from config.database import connect_to_mongo, close_mongo_connection
-from app.routes import auth_router, users_router, sponsors_router, leaderboard_router, contests_router, settings_router
+from app.routes import auth_router, users_router, sponsors_router, leaderboard_router, contests_router, settings_router, tournaments_router
 from app.routes.players import router as players_router
 from app.routes.players_hot import router as players_hot_router
 from app.routes.slots import router as slots_router
@@ -21,6 +21,7 @@ from app.routes.admin import (
     contests_router as admin_contests_router,
     users_teams_router as admin_users_teams_router,
     settings_router as admin_settings_router,
+    tournaments_router as admin_tournaments_router,
 )
 
 # Logging configuration
@@ -76,6 +77,8 @@ app.include_router(admin_players_import_router)
 app.include_router(admin_contests_router)
 app.include_router(admin_users_teams_router)
 app.include_router(admin_settings_router)
+app.include_router(admin_tournaments_router)
+app.include_router(tournaments_router)
 app.include_router(players_router)
 app.include_router(players_hot_router)
 app.include_router(slots_router)

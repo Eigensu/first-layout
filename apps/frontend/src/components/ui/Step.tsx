@@ -71,12 +71,12 @@ const StepCard: React.FC<StepProps> = ({
           <div className="mb-2 sm:mb-4">
             <div className="flex items-center gap-2 sm:block">
               <div
-                className={`sm:hidden w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${
+                className={`sm:hidden w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
                   isCompleted
-                    ? "bg-success-500"
+                    ? "bg-success text-bg-body"
                     : isActive
-                      ? "bg-primary-500"
-                      : "bg-gray-400"
+                      ? "bg-accent-pink-500 text-bg-body"
+                      : "bg-bg-chip text-text-main"
                 }`}
               >
                 {getStepIcon()}

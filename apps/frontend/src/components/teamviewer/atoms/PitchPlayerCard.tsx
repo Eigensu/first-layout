@@ -2,7 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+import { cn, formatPoints } from "@/lib/utils";
 import { API_BASE_URL } from "@/common/consts";
 import type { PitchPlayer } from "../types";
 import { getSlotGradient, getInitials } from "../types";
@@ -147,7 +147,7 @@ export function PitchPlayerCard({
               : "bg-gradient-to-r from-red-500 to-red-600 text-white"
           )}
         >
-          {player.points} pts
+          {formatPoints(player.points)} pts
         </div>
       )}
     </div>

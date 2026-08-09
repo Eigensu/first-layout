@@ -1,10 +1,11 @@
 import os
 import re
-from typing import Optional
 from functools import lru_cache
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from typing import Optional
+
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 # Get the root directory of the monorepo (two levels up from backend/config)
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
@@ -13,56 +14,72 @@ ENV_FILE = ROOT_DIR / ".env"
 
 class Settings(BaseSettings):
     """Application settings with environment variable validation."""
-    
+
     # Environment
     node_env: str = Field(default="development", alias="NODE_ENV")
     debug: bool = Field(default=True, alias="DEBUG")
-    
+
     # Security
     secret_key: str = Field(..., min_length=32, alias="SECRET_KEY")
     jwt_secret_key: str = Field(..., min_length=32, alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=1440, alias="JWT_EXPIRE_MINUTES")
-    
+
+    # Google OAuth (Sign in with Google)
+    google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
+
     # MongoDB Database
     mongodb_url: str = Field(default="mongodb://localhost:27017", alias="MONGODB_URL")
     mongodb_db_name: str = Field(default="world-tower", alias="MONGODB_DB_NAME")
-    
+
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
-    
+
     # CORS
     cors_origins: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000", 
-        alias="CORS_ORIGINS"
+        default="http://localhost:3000,http://127.0.0.1:3000", alias="CORS_ORIGINS"
     )
-    
+
     # Optional external services (for future use)
     redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
     cricket_api_key: Optional[str] = Field(default=None, alias="CRICKET_API_KEY")
-    payment_gateway_key: Optional[str] = Field(default=None, alias="PAYMENT_GATEWAY_KEY")
+    payment_gateway_key: Optional[str] = Field(
+        default=None, alias="PAYMENT_GATEWAY_KEY"
+    )
     email_service_key: Optional[str] = Field(default=None, alias="EMAIL_SERVICE_KEY")
 
     # Cloudinary
-    cloudinary_cloud_name: Optional[str] = Field(default=None, alias="CLOUDINARY_CLOUD_NAME")
+    cloudinary_cloud_name: Optional[str] = Field(
+        default=None, alias="CLOUDINARY_CLOUD_NAME"
+    )
     cloudinary_api_key: Optional[str] = Field(default=None, alias="CLOUDINARY_API_KEY")
-    cloudinary_api_secret: Optional[str] = Field(default=None, alias="CLOUDINARY_API_SECRET")
+    cloudinary_api_secret: Optional[str] = Field(
+        default=None, alias="CLOUDINARY_API_SECRET"
+    )
     cloudinary_secure: bool = Field(default=True, alias="CLOUDINARY_SECURE")
-    cloudinary_default_folder: str = Field(default="walle", alias="CLOUDINARY_DEFAULT_FOLDER")
-    
-     # 2Factor / OTP configuration
+    cloudinary_default_folder: str = Field(
+        default="walle", alias="CLOUDINARY_DEFAULT_FOLDER"
+    )
+
+    # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")
-    twofactor_template_name: Optional[str] = Field(default=None, alias="TWOFACTOR_TEMPLATE_NAME")
-    twofactor_base_url: str = Field(default="https://2factor.in/API/V1", alias="TWOFACTOR_BASE_URL")
+    twofactor_template_name: Optional[str] = Field(
+        default=None, alias="TWOFACTOR_TEMPLATE_NAME"
+    )
+    twofactor_base_url: str = Field(
+        default="https://2factor.in/API/V1", alias="TWOFACTOR_BASE_URL"
+    )
     otp_expiry_seconds: int = Field(default=600, alias="OTP_EXPIRY_SECONDS")
     otp_max_attempts: int = Field(default=5, alias="OTP_MAX_ATTEMPTS")
     reset_token_ttl_seconds: int = Field(default=600, alias="RESET_TOKEN_TTL_SECONDS")
-    
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Convert CORS origins string to list and support wildcard patterns."""
-        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        origins = [
+            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+        ]
         return origins
 
     @property
@@ -93,22 +110,22 @@ class Settings(BaseSettings):
 
         combined = "^(?:" + "|".join(patterns) + ")$"
         return combined
-    
+
     @property
     def is_production(self) -> bool:
         """Check if running in production."""
         return self.node_env.lower() == "production"
-    
+
     @property
     def is_development(self) -> bool:
         """Check if running in development."""
         return self.node_env.lower() == "development"
-    
+
     @property
     def is_test(self) -> bool:
         """Check if running in test mode."""
         return self.node_env.lower() == "test"
-    
+
     class Config:
         # Load from .env file in the monorepo root
         env_file = str(ENV_FILE)

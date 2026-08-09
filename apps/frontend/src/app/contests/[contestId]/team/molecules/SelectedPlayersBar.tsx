@@ -1,11 +1,15 @@
 import React from "react";
 import { Player } from "@/components";
+import { formatPoints } from "@/utils/playerValue";
 
 interface SelectedPlayersBarProps {
   selectedPlayersCount: number;
   totalMax: number;
   selectedPlayerObjs: Player[];
   onPlayerRemove: (playerId: string) => void;
+  /** Auction contests show the remaining purse alongside the squad count */
+  isAuction?: boolean;
+  remainingPurse?: number;
 }
 
 export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
@@ -13,7 +17,22 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
   totalMax,
   selectedPlayerObjs,
   onPlayerRemove,
+  isAuction = false,
+  remainingPurse = 0,
 }) => {
+  const purseChip = isAuction ? (
+    <span
+      className={`px-1.5 py-0 rounded-full text-[9px] sm:text-xs font-bold shadow-sm ${
+        remainingPurse < 0
+          ? "bg-red-500 text-white"
+          : "bg-emerald-500/15 text-emerald-500"
+      }`}
+      title="Purse remaining"
+    >
+      {formatPoints(remainingPurse)} left
+    </span>
+  ) : null;
+
   return (
     <div className="sticky top-14 z-40 px-2 sm:px-4 pt-2 pb-1 sm:py-2 -mt-10">
       <div className="max-w-6xl mx-auto">
@@ -24,8 +43,11 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
               <h5 className="font-bold text-text-main text-xs">
                 Selected Players
               </h5>
-              <div className="px-1.5 py-0 rounded-full text-[9px] font-bold bg-gradient-brand text-white shadow-sm">
-                {selectedPlayersCount}/{totalMax || 0}
+              <div className="flex items-center gap-1">
+                {purseChip}
+                <div className="px-1.5 py-0 rounded-full text-[9px] font-bold bg-gradient-brand text-white shadow-sm">
+                  {selectedPlayersCount}/{totalMax || 0}
+                </div>
               </div>
             </div>
             <div>
@@ -44,7 +66,7 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-gray-500 italic">
+                <p className="text-[10px] text-text-muted italic">
                   No players selected yet
                 </p>
               )}
@@ -57,8 +79,11 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
               <h5 className="font-bold text-text-main text-base md:text-lg">
                 Selected Players
               </h5>
-              <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-brand text-white shadow-sm w-fit ml-8 md:ml-10">
-                {selectedPlayersCount}/{totalMax || 0}
+              <div className="flex items-center gap-2 ml-8 md:ml-10">
+                {purseChip}
+                <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-brand text-white shadow-sm w-fit">
+                  {selectedPlayersCount}/{totalMax || 0}
+                </div>
               </div>
             </div>
             <div className="flex-1 min-w-0">

@@ -87,6 +87,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [router]
   );
 
+  const loginWithGoogle = useCallback(
+    async (idToken: string) => {
+      try {
+        const tokens = await authApi.googleLogin(idToken);
+
+        // Google sign-in has no "remember me" checkbox; persist like a
+        // normal remembered session.
+        localStorage.setItem(LS_KEYS.ACCESS_TOKEN, tokens.access_token);
+        localStorage.setItem(LS_KEYS.REFRESH_TOKEN, tokens.refresh_token);
+
+        const userData = await authApi.getCurrentUser();
+        setUser(userData);
+        localStorage.setItem(LS_KEYS.USER, JSON.stringify(userData));
+
+        router.push(ROUTES.HOME);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        throw new Error(message);
+      }
+    },
+    [router]
+  );
+
   const register = useCallback(
     async (credentials: RegisterCredentials) => {
       try {
@@ -167,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: !!user,
     isLoading,
     login,
+    loginWithGoogle,
     register,
     logout,
     refreshToken,

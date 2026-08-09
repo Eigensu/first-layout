@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Literal
 from datetime import datetime
 from app.utils.timezone import to_ist, IST
@@ -17,6 +17,17 @@ class ContestCreate(BaseModel):
     contest_type: Literal["daily", "full"] = "full"
     # Allowed real-world team names (e.g., "IND", "AUS") for daily contests
     allowed_teams: List[str] = Field(default_factory=list)
+    # Squad assembly format; independent of contest_type
+    contest_format: Literal["slot_based", "auction_purse"] = "slot_based"
+    purse: float = Field(default=1_000_000.0, ge=0)
+    squad_size: Optional[int] = Field(default=None, ge=1)
+    max_players_per_team: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def require_squad_size_for_auction(self):
+        if self.contest_format == "auction_purse" and self.squad_size is None:
+            raise ValueError("squad_size is required when contest_format is auction_purse")
+        return self
 
     @field_validator('start_at', 'end_at', mode='before')
     @classmethod
@@ -51,6 +62,10 @@ class ContestUpdate(BaseModel):
     points_scope: Optional[Literal["time_window", "snapshot"]] = None
     contest_type: Optional[Literal["daily", "full"]] = None
     allowed_teams: Optional[List[str]] = None
+    contest_format: Optional[Literal["slot_based", "auction_purse"]] = None
+    purse: Optional[float] = Field(default=None, ge=0)
+    squad_size: Optional[int] = Field(default=None, ge=1)
+    max_players_per_team: Optional[int] = Field(default=None, ge=1)
 
     @field_validator('start_at', 'end_at', mode='before')
     @classmethod
@@ -88,6 +103,14 @@ class ContestResponse(BaseModel):
     points_scope: str
     contest_type: str
     allowed_teams: List[str]
+    contest_format: str
+    purse: float
+    squad_size: Optional[int] = None
+    # Raw per-contest override; None means "inherit the global setting".
+    max_players_per_team: Optional[int] = None
+    # The limit actually enforced, with the global fallback already applied, so
+    # clients never have to combine the two sources themselves.
+    effective_max_players_per_team: int
     created_at: datetime
     updated_at: datetime
 

@@ -23,13 +23,12 @@ const Badge: React.FC<BadgeProps> = ({
     "inline-flex items-center justify-center rounded-full font-medium";
 
   const variantClasses = {
-    primary: "bg-primary-100 text-primary-800 border border-primary-200",
-    secondary:
-      "bg-secondary-100 text-secondary-800 border border-secondary-200",
-    success: "bg-success-100 text-success-800 border border-success-200",
-    warning: "bg-warning-100 text-warning-800 border border-warning-200",
-    error: "bg-error-100 text-error-800 border border-error-200",
-    neutral: "bg-gray-100 text-gray-800 border border-gray-200",
+    primary: "bg-bg-card-soft text-accent-pink-50 border border-border-strong",
+    secondary: "bg-bg-chip text-text-main border border-border-strong",
+    success: "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40",
+    warning: "bg-amber-500/20 text-amber-300 border border-amber-400/40",
+    error: "bg-red-500/20 text-red-300 border border-red-400/40",
+    neutral: "bg-bg-elevated text-text-muted border border-border-subtle",
   };
 
   const sizeClasses = {

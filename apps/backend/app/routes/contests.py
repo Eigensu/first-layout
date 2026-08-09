@@ -5,6 +5,7 @@ from beanie.operators import Or, RegEx
 from datetime import datetime
 from pydantic import BaseModel
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from app.utils.timezone import now_ist, to_ist
 from app.utils.gridfs import open_contest_logo_stream
 
@@ -54,10 +55,12 @@ class ContestTeamResponse(BaseModel):
 async def to_contest_response(contest: Contest, skip_save: bool = True) -> ContestResponse:
     # Keep stored status in sync with real-time lifecycle.
     computed = await sync_contest_status(contest, persist=not skip_save)
+    from app.models.settings import GlobalSettings
+    from app.services.auction import resolve_max_players_per_team
+
+    settings = await GlobalSettings.get_instance()
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
-        from app.models.settings import GlobalSettings
-        settings = await GlobalSettings.get_instance()
         if settings.default_contest_logo_file_id:
             logo_url = "/api/settings/logo"
 
@@ -75,6 +78,11 @@ async def to_contest_response(contest: Contest, skip_save: bool = True) -> Conte
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
         allowed_teams=contest.allowed_teams or [],
+        contest_format=contest.contest_format,
+        purse=contest.purse,
+        squad_size=contest.squad_size,
+        max_players_per_team=contest.max_players_per_team,
+        effective_max_players_per_team=resolve_max_players_per_team(contest, settings),
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
@@ -339,6 +347,9 @@ async def enroll_in_contest(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
+    if str(team.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="You can only enroll your own team")
+
     # Only allow non-owners to view when contest is ONGOING
     computed_status = compute_contest_status(contest)
     is_owner = current_user is not None and str(team.user_id) == str(current_user.id)
@@ -380,6 +391,17 @@ async def enroll_in_contest(
             removed_at=existing.removed_at,
         )
 
+    existing_user_enrollment = await TeamContestEnrollment.find_one({
+        "user_id": current_user.id,
+        "contest_id": contest.id,
+        "status": EnrollmentStatus.ACTIVE,
+    })
+    if existing_user_enrollment:
+        raise HTTPException(
+            status_code=409,
+            detail="You can enroll only one team in this contest",
+        )
+
     # Create enrollment without baseline fields (points will be contest-scoped)
     assert team.id is not None, "Team ID should not be None"
     assert contest.id is not None, "Contest ID should not be None"
@@ -391,7 +413,15 @@ async def enroll_in_contest(
         status=EnrollmentStatus.ACTIVE,
         enrolled_at=now_ist(),
     )
-    await enr.insert()  # type: ignore
+    try:
+        await enr.insert()  # type: ignore
+    except DuplicateKeyError as exc:
+        # A concurrent request won the race past the check above; the unique
+        # partial index is the authority.
+        raise HTTPException(
+            status_code=409,
+            detail="You can enroll only one team in this contest",
+        ) from exc
 
     return EnrollmentResponse(
         id=str(enr.id),

@@ -54,6 +54,12 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "fifth-api.wallearena.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "mscsuper.blr1.digitaloceanspaces.com",
         port: "",
         pathname: "/**",

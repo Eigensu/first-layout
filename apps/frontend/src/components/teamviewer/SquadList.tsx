@@ -71,7 +71,7 @@ export function SquadList({
                   {player.team}
                 </p>
               </div>
-              <div className="text-right text-xs sm:text-sm font-medium text-success-400 whitespace-nowrap">
+              <div className="text-right text-xs sm:text-sm font-medium text-success whitespace-nowrap">
                 {formatPoints(points)} pts
               </div>
             </div>

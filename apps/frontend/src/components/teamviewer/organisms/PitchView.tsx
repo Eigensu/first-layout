@@ -41,7 +41,10 @@ export function PitchView({
             "border-2 md:border-4 border-primary-400/40"
           )}
           style={{
-            backgroundImage: "url('/ground.png')",
+            // JPEG at 1600px, not the original 2752px PNG: the pitch renders
+            // at most 672px wide (max-w-2xl), so the PNG shipped ~5.9 MB for
+            // no visible gain. See public/ground.jpg.
+            backgroundImage: "url('/ground.jpg')",
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}

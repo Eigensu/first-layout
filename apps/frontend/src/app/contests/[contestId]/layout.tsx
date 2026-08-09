@@ -69,7 +69,7 @@ export default function ContestLayout({
             !pathname?.endsWith("/team") && (
               <div className="bg-bg-card/80 backdrop-blur-sm rounded-2xl sm:rounded-3xl shadow p-4 sm:p-6 border border-border-subtle">
                 {loading ? (
-                  <div className="text-gray-500">Loading contest...</div>
+                  <div className="text-text-muted">Loading contest...</div>
                 ) : error ? (
                   <div className="text-red-600">{error}</div>
                 ) : contest ? (

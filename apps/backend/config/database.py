@@ -1,3 +1,5 @@
+from typing import Optional
+
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from config.settings import get_settings
@@ -14,11 +16,12 @@ from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.settings import GlobalSettings
+from app.models.tournament import Tournament
 
 settings = get_settings()
 
 # MongoDB client
-client: AsyncIOMotorClient = None
+client: Optional[AsyncIOMotorClient] = None
 
 
 async def connect_to_mongo():
@@ -28,14 +31,15 @@ async def connect_to_mongo():
     try:
         # Create MongoDB client
         client = AsyncIOMotorClient(settings.mongodb_url)
+        mongo_client = client
 
         # Test connection
-        await client.admin.command('ping')
-        print(f"✓ Connected to MongoDB at {settings.mongodb_url}")
+        await mongo_client.admin.command('ping')
+        print(f"[OK] Connected to MongoDB at {settings.mongodb_url}")
 
         # Initialize Beanie with document models
         await init_beanie(
-            database=client[settings.mongodb_db_name],
+            database=mongo_client.get_database(settings.mongodb_db_name),
             document_models=[
                 User,
                 RefreshToken,
@@ -53,12 +57,13 @@ async def connect_to_mongo():
                 PasswordResetSession,
                 PasswordResetToken,
                 GlobalSettings,
+                Tournament,
             ]
         )
-        print(f"✓ Initialized Beanie ODM with database: {settings.mongodb_db_name}")
+        print(f"[OK] Initialized Beanie ODM with database: {settings.mongodb_db_name}")
 
     except Exception as e:
-        print(f"✗ Failed to connect to MongoDB: {e}")
+        print(f"[FAIL] Failed to connect to MongoDB: {e}")
         raise
 
 
@@ -67,11 +72,13 @@ async def close_mongo_connection():
     global client
     if client:
         client.close()
-        print("✓ Closed MongoDB connection")
+        client = None
+        print("[OK] Closed MongoDB connection")
 
 
 def get_database():
     """Get MongoDB database instance"""
-    if client is None:
-        raise Exception("Database not initialized. Call connect_to_mongo() first.")
-    return client[settings.mongodb_db_name]
+    mongo_client = client
+    if mongo_client is None:
+        raise RuntimeError("Database not initialized. Call connect_to_mongo() first.")
+    return mongo_client.get_database(settings.mongodb_db_name)

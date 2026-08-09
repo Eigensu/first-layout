@@ -39,4 +39,5 @@
  } as const;
 
 export * from '@/common/consts/contest';
+export * from '@/common/consts/tournament';
 

@@ -172,22 +172,28 @@ async def validate_player_row(
         If error is not None, normalized_data may be partial
     """
     known_fields = {
-        "name", "team", "status", "points",
+        "name", "team", "status", "points", "price",
         "slot_code", "slot_name", "image_url", "image", "_row_number"
     }
-    
+
     try:
-        # Use points for the price field (since we're using points in the template)
-        points_value = validate_number(row.get("points", 0), "points", 0)
-        
+        # Auction sale value. The dedicated "Price" column wins when present;
+        # sheets that only carry "Points" keep feeding price as they always have.
+        # Left at 0, the player counts as never auctioned and is excluded from
+        # auction-purse contests.
+        raw_price = row.get("price")
+        if raw_price is None or (isinstance(raw_price, str) and not raw_price.strip()):
+            raw_price = row.get("points", 0)
+        price_value = validate_number(raw_price, "price", 0)
+
         # Accept both "image" and "image_url" columns
         image_url = row.get("image_url") or row.get("image")
-        
+
         data = {
             "name": validate_name(row.get("name")),
             "team": validate_team(row.get("team")),
             "status": normalize_status(row.get("status")),
-            "price": points_value,  # Map points to price for database
+            "price": price_value,
             "points": 0,  # Always start with 0 accumulated points
             "image_url": image_url,
             "stats": extract_stats(row, known_fields),

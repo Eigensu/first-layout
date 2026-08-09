@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import LogoLoop from "@/components/ui/LogoLoop";
+import SponsorLogoLoop from "@/components/ui/SponsorLogoLoop";
 import { useRouter } from "next/navigation";
 import { Trophy, ChevronRight } from "lucide-react";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
@@ -141,23 +141,16 @@ export default function LeaderboardIndexPage() {
         </div>
       </div>
 
-      {/* LogoLoop pinned to bottom */}
+      {/* Sponsor Logo Loop pinned to bottom — auto-synced from backend */}
       <div className="mt-12 pb-10">
-        <LogoLoop
-          logos={[
-            { src: "/logos/company1.png", alt: "Company 1" },
-            { src: "/logos/c2.png", alt: "Company 2" },
-            { src: "/logos/c3.png", alt: "Company 3" },
-            { src: "/logos/c4.png", alt: "Company 4" },
-          ]}
+        <SponsorLogoLoop
           speed={120}
           direction="left"
           logoHeight={48}
           gap={40}
           hoverSpeed={0}
           scaleOnHover
-          ariaLabel="Our Partners"
-          className="[&_img]:brightness-0 [&_img]:invert [&_img]:opacity-90"
+          ariaLabel="Our Sponsors"
         />
       </div>
     </div>

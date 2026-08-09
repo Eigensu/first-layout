@@ -4,6 +4,7 @@ export interface FrontendEnv {
   NEXT_PUBLIC_API_URL: string;
   NEXT_PUBLIC_APP_NAME: string;
   NEXT_PUBLIC_APP_VERSION: string;
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: string;
 }
 
 // Validate and load environment variables
@@ -13,6 +14,7 @@ function validateFrontendEnv(): FrontendEnv {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Fantasy11',
     NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
   };
 
   // Validate required public variables in production
@@ -34,6 +36,7 @@ export const {
   NEXT_PUBLIC_API_URL,
   NEXT_PUBLIC_APP_NAME,
   NEXT_PUBLIC_APP_VERSION,
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID,
 } = env;
 
 // Helper functions

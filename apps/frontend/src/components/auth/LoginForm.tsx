@@ -10,6 +10,7 @@ import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 // Removed legacy ForgotPasswordModal in favor of new OTP flow pages
 
 // Validation schema: allow username (>=3 chars) OR mobile number (10-20 digits)
@@ -34,10 +35,24 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGoogleCredential = async (idToken: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await loginWithGoogle(idToken);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Google sign-in failed. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const {
     register,
@@ -141,6 +156,21 @@ export function LoginForm() {
           >
             {isLoading ? "Signing in..." : "Sign In"}
           </Button>
+
+          {/* Google Sign-In */}
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border-subtle" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-bg-card px-3 text-text-muted">or</span>
+            </div>
+          </div>
+          <GoogleSignInButton
+            onCredential={handleGoogleCredential}
+            text="signin_with"
+            disabled={isLoading}
+          />
 
           {/* Register Link */}
           <div className="text-center pt-4">

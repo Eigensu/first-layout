@@ -1,7 +1,8 @@
-from beanie import Document, Indexed, PydanticObjectId
-from pydantic import Field, EmailStr, ConfigDict
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document, Indexed, PydanticObjectId
+from pydantic import ConfigDict, EmailStr, Field
 
 
 class User(Document):
@@ -9,7 +10,11 @@ class User(Document):
 
     username: Indexed(str, unique=True)  # type: ignore
     email: Indexed(EmailStr, unique=True)  # type: ignore
-    hashed_password: str
+    # Optional because Google-signup accounts have no password until the
+    # user sets one (see auth_provider).
+    hashed_password: Optional[str] = None
+    auth_provider: str = "password"  # "password" | "google"
+    google_id: Optional[str] = None
     full_name: Optional[str] = None
     mobile: Optional[str] = None
     is_active: bool = True
@@ -29,6 +34,7 @@ class User(Document):
         indexes = [
             "username",
             "email",
+            "google_id",
             [("created_at", -1)],
         ]
 

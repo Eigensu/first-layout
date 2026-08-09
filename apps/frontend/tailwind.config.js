@@ -41,7 +41,11 @@ module.exports = {
           muted: "var(--text-muted)",
           subtle: "var(--text-subtle)",
         },
-        border: "hsl(var(--border))",
+        border: {
+          DEFAULT: "hsl(var(--border))",
+          subtle: "var(--border-subtle)",
+          strong: "var(--border-strong)",
+        },
         success: "var(--success)",
         warning: "var(--warning)",
         danger: "var(--danger)",

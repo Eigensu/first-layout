@@ -5,14 +5,14 @@ interface PlayerTableRowProps {
   player: Player;
   slotMap: Record<string, string>;
   onDelete: (playerId: string) => void;
-  onEditPoints: (player: Player) => void;
+  onEdit: (player: Player) => void;
 }
 
 export function PlayerTableRow({
   player,
   slotMap,
   onDelete,
-  onEditPoints,
+  onEdit,
 }: PlayerTableRowProps) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
@@ -69,7 +69,7 @@ export function PlayerTableRow({
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <div className="flex justify-end gap-2">
           <button
-            onClick={() => onEditPoints(player)}
+            onClick={() => onEdit(player)}
             className="text-blue-600 hover:text-blue-900"
           >
             <Edit className="w-4 h-4" />
