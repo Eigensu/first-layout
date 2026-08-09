@@ -8,7 +8,9 @@ class PlayerBase(BaseModel):
     team: str = Field(..., min_length=1, max_length=100)
     points: float = Field(default=0.0)
     status: str = Field(default="Active", description="Active, Inactive, Injured")
-    price: float = Field(default=8.0, ge=0)
+    # Auction sale value; 0 means never auctioned, which keeps the player out
+    # of auction-purse contests until a real value is set.
+    price: float = Field(default=0.0, ge=0)
     slot: Optional[str] = None
     image_url: Optional[str] = None
     stats: Optional[dict] = None

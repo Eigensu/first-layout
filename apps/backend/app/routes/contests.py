@@ -76,6 +76,10 @@ async def to_contest_response(contest: Contest, skip_save: bool = True) -> Conte
         points_scope=contest.points_scope,
         contest_type=contest.contest_type,
         allowed_teams=contest.allowed_teams or [],
+        contest_format=contest.contest_format,
+        purse=contest.purse,
+        squad_size=contest.squad_size,
+        max_players_per_team=contest.max_players_per_team,
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )

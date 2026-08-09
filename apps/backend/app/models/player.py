@@ -9,10 +9,16 @@ class Player(Document):
     
     name: str
     team: Optional[str] = None
+    # Auction sale value; 0 means never auctioned. Shared collection with
+    # app.models.admin.player.Player.
     price: float = 0.0
     slot: Optional[str] = None  # Slot ObjectId string
     points: float = 0.0
     is_available: bool = True
+    # Mirrors the admin model's field so auction eligibility can be checked on
+    # players fetched through this model. None (absent in the document) reads
+    # as Active.
+    status: Optional[str] = None
     
     # Additional stats
     stats: Optional[Dict] = None  # {"matches": 0, "runs": 0, "wickets": 0, etc.}
