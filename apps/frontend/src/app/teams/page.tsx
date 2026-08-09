@@ -316,12 +316,15 @@ export default function TeamsPage() {
     return map;
   }, [enrollmentByTeam, contests]);
 
-  // Fetch public contests (open ones)
+  // Fetch public contests (open ones). Re-polled while the page stays open so
+  // a contest going live doesn't leave the pre-match note stuck until reload.
   useEffect(() => {
+    let mounted = true;
     const loadContests = async () => {
       try {
         setLoadingContests(true);
         const res = await publicContestsApi.list({ page_size: 100 });
+        if (!mounted) return;
         const open = res.contests.filter(
           (c) => c.status !== "completed" && c.status !== "archived",
         );
@@ -329,10 +332,15 @@ export default function TeamsPage() {
       } catch (e) {
         // ignore silently
       } finally {
-        setLoadingContests(false);
+        if (mounted) setLoadingContests(false);
       }
     };
     loadContests();
+    const intervalId = setInterval(loadContests, 60_000);
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Detect a joined contest for the current user
