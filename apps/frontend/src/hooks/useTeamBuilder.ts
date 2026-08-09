@@ -65,13 +65,12 @@ export function useTeamBuilder(
         setError(null);
 
         // The contest decides how the pool is shaped, so it has to load first.
+        // A failure here must not fall through to the slot-based path: an
+        // auction contest would then render with the wrong pool and no
+        // purse/per-team validation until submission is rejected.
         let loadedContest: Contest | null = null;
         if (contestId) {
-          try {
-            loadedContest = await publicContestsApi.get(contestId);
-          } catch {
-            // Fall through to the slot-based path if the contest can't be read.
-          }
+          loadedContest = await publicContestsApi.get(contestId);
         }
         if (!cancelled) setContest(loadedContest);
 
