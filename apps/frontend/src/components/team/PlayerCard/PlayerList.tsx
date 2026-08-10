@@ -4,7 +4,8 @@ import { SearchInput } from "./SearchInput";
 import { Pagination } from "./Pagination";
 import { POOL_SORTS, type PlayerListProps, type PoolSort } from "./types";
 import { playerValueLabel } from "@/utils/playerValue";
-import { PRICE_RANGES } from "./priceRanges";
+import { priceRangesFor } from "./priceRanges";
+import { CONTEST_FORMAT } from "@/common/consts/contest";
 
 const PLAYERS_PER_PAGE = 20;
 
@@ -38,6 +39,12 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
   const canSelectMoreTotal = selectedPlayers.length < maxSelections;
 
+  // An auction pool's price is points on the purse's scale, not rupees, so
+  // the two formats need different bands.
+  const priceRanges = priceRangesFor(
+    contestFormat === CONTEST_FORMAT.AUCTION_PURSE,
+  );
+
   const teamOptions = React.useMemo(() => {
     const names = new Set<string>();
     players.forEach((p) => {
@@ -60,8 +67,8 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     }
 
     // Apply price range filter
-    if (priceRangeIndex !== null) {
-      const { min, max } = PRICE_RANGES[priceRangeIndex];
+    if (priceRangeIndex !== null && priceRanges[priceRangeIndex]) {
+      const { min, max } = priceRanges[priceRangeIndex];
       list = list.filter((p) => p.price >= min && p.price <= max);
     }
 
@@ -79,14 +86,13 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       const bySort: Record<PoolSort, (a: typeof list[0], b: typeof list[0]) => number> = {
         [POOL_SORTS.VALUE_DESC]: (a, b) => b.price - a.price,
         [POOL_SORTS.VALUE_ASC]: (a, b) => a.price - b.price,
-        [POOL_SORTS.POINTS_DESC]: (a, b) => b.points - a.points,
         [POOL_SORTS.NAME_ASC]: (a, b) => a.name.localeCompare(b.name),
       };
       list.sort(bySort[sort]);
     }
 
     return list;
-  }, [players, filterSlot, searchQuery, showPoolFilters, teamFilter, sort, priceRangeIndex]);
+  }, [players, filterSlot, searchQuery, showPoolFilters, teamFilter, sort, priceRangeIndex, priceRanges]);
 
   // Reset to page 1 when search or filters change
   React.useEffect(() => {
@@ -152,7 +158,6 @@ export const PlayerList: React.FC<PlayerListProps> = ({
               <option value={POOL_SORTS.VALUE_ASC}>
                 {playerValueLabel(contestFormat)}: low to high
               </option>
-              <option value={POOL_SORTS.POINTS_DESC}>Fantasy points</option>
               <option value={POOL_SORTS.NAME_ASC}>Name (A–Z)</option>
             </select>
           </label>
@@ -161,7 +166,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
       {/* Price Range Filter Chips */}
       <div className="flex overflow-x-auto gap-1.5 pb-0.5 -mx-1 px-1 scrollbar-hide">
-        {PRICE_RANGES.map((range, idx) => {
+        {priceRanges.map((range, idx) => {
           const isActive = priceRangeIndex === idx;
           return (
             <button

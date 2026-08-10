@@ -439,20 +439,21 @@ export function EditPlayersModal({
         aria-hidden
       />
 
-      {/* Sheet */}
+      {/* Sheet — full screen: editing a squad needs every row it can show */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-squad-title"
-        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-[#130D2A] border-t border-white/10 shadow-2xl max-h-[92dvh]"
+        className="fixed inset-0 z-50 flex flex-col bg-[#130D2A] shadow-2xl"
+        // No utility exists for these, and covering the whole viewport puts
+        // the header under the notch and the footer under the home indicator.
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
-
         {/* Header — squad name rides on the title line so it costs no extra row */}
-        <div className="px-3 sm:px-4 pb-2 border-b border-white/[0.08] flex items-center justify-between gap-2">
+        <div className="px-3 sm:px-4 pt-3 pb-2 border-b border-white/[0.08] flex items-center justify-between gap-2">
           <h2
             id="edit-squad-title"
             className="min-w-0 text-sm sm:text-base font-bold text-text-main leading-tight truncate"
