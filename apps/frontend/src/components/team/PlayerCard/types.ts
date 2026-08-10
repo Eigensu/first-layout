@@ -73,7 +73,6 @@ export interface PlayerListProps {
 export const POOL_SORTS = {
   VALUE_DESC: "value_desc",
   VALUE_ASC: "value_asc",
-  POINTS_DESC: "points_desc",
   NAME_ASC: "name_asc",
 } as const;
 

@@ -171,7 +171,6 @@ export function PoolFilterBar({
                 <option value={POOL_SORTS.VALUE_ASC}>
                   {valueLabel}: low to high
                 </option>
-                <option value={POOL_SORTS.POINTS_DESC}>Fantasy points</option>
                 <option value={POOL_SORTS.NAME_ASC}>Name (A–Z)</option>
               </select>
             </label>
