@@ -50,7 +50,13 @@ export default function LeaderboardIndexPage() {
       />
       <div className="h-20" />
 
-      <div className="max-w-5xl mx-auto p-4 flex-1 w-full">
+      {/*
+        Deliberately not flex-1: letting this grow pushed the sponsor loop to
+        the foot of the viewport, which on a short contest list left it
+        stranded below a screenful of empty space. Sized to its content, the
+        loop follows the last card instead.
+      */}
+      <div className="max-w-5xl mx-auto p-4 w-full">
         <div className="flex items-center justify-center gap-3 mb-6">
           <Trophy className="w-7 h-7 text-accent-pink-500" />
           <h1 className="text-3xl font-extrabold text-text-main">
@@ -141,8 +147,8 @@ export default function LeaderboardIndexPage() {
         </div>
       </div>
 
-      {/* Sponsor Logo Loop pinned to bottom — auto-synced from backend */}
-      <div className="mt-12 pb-10">
+      {/* Sponsor Logo Loop, following the contest list — auto-synced from backend */}
+      <div className="mt-10 pb-10">
         <SponsorLogoLoop
           speed={120}
           direction="left"
