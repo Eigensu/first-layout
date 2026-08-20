@@ -7,6 +7,7 @@ from datetime import timedelta
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
+from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player as AdminPlayer
 from app.models.team import Team
 from app.models.user import User
@@ -297,3 +298,42 @@ async def test_a_rule_change_still_trips_the_check_when_a_squad_is_broken(
 
     assert res.status_code == 400, res.text
     assert "would break" in res.json()["detail"]["message"]
+
+
+# --- who deleted the player -------------------------------------------------
+
+
+async def test_delete_player_logs_who_deleted_it(client, db, admin_user):
+    """Once the player document is gone, this log is the only trail left."""
+    await admin_user.insert()
+    await AdminPlayer(name="Loner", team="Z", price=50_000, status="Active").insert()
+    player = await AdminPlayer.find_one({"name": "Loner"})
+
+    res = await client.delete(f"/api/admin/players/{player.id}")
+    assert res.status_code == 204, res.text
+
+    log = await AdminActionLog.find_one({"target_id": str(player.id)})
+    assert log is not None
+    assert log.admin_id == str(admin_user.id)
+    assert log.action == "player.delete"
+    assert log.target_type == "player"
+    assert log.details["name"] == "Loner"
+    assert log.details["team"] == "Z"
+    assert log.details["force"] is False
+    assert log.details["stripped_from_teams"] == []
+
+
+async def test_force_delete_logs_which_squads_were_stripped(
+    client, user_client, db, admin_user
+):
+    await admin_user.insert()
+    contest_id = await _contest_with_one_team(client, user_client)
+    dropped = (await _squad()).player_ids[0]
+
+    res = await client.delete(f"/api/admin/players/{dropped}?force=true")
+    assert res.status_code == 204, res.text
+
+    log = await AdminActionLog.find_one({"target_id": dropped})
+    assert log is not None
+    assert log.details["force"] is True
+    assert log.details["stripped_from_teams"] == ["Squad One"]
