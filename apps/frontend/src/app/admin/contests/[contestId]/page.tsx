@@ -76,6 +76,14 @@ export default function AdminManageContestPage() {
 
   // No fixed steps; free time input via <input type="time">
 
+  // Set when the server refuses a rule change because existing squads would
+  // break under it. Holds the payload so "Apply anyway" can resend it.
+  const [forcePrompt, setForcePrompt] = useState<{
+    payload: any;
+    message: string;
+  } | null>(null);
+  const [forcing, setForcing] = useState(false);
+
   // Alert dialog state
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertTitle, setAlertTitle] = useState<string | undefined>(undefined);
@@ -123,6 +131,17 @@ export default function AdminManageContestPage() {
     setEditLogoUrl(c.logo_url || "");
   };
 
+  // Shared by the initial save and the "Apply anyway" retry, so the two paths
+  // cannot drift on what happens after a successful write.
+  const applySettings = async (payload: any, force?: boolean) => {
+    if (!contest) return;
+    const updated = await adminContestsApi.update(contest.id, payload, force);
+    setContest(updated);
+    reseedFrom(updated);
+    setRedirectAfterSave(true);
+    showAlert("Contest settings saved", "Success");
+  };
+
   const saveAllSettings = async () => {
     if (!contest) return;
     // validate schedule first
@@ -137,35 +156,42 @@ export default function AdminManageContestPage() {
       return;
     }
 
+    // Built outside the try so the catch can hand the same payload to the
+    // "Apply anyway" retry. Nothing here can throw.
+    const payload: any = {
+      start_at: startIso,
+      end_at: endIso,
+    };
+    if (editVisibility) payload.visibility = editVisibility;
+    if (editContestType) payload.contest_type = editContestType;
+    if (editContestType === "daily") {
+      payload.allowed_teams = editAllowedTeamsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    } else {
+      payload.allowed_teams = [];
+    }
+    if (editName.trim()) payload.name = editName.trim();
+    if (editLogoUrl !== undefined) payload.logo_url = editLogoUrl;
+
     try {
       setSavingSettings(true);
-      const payload: any = {
-        start_at: startIso,
-        end_at: endIso,
-      };
-      if (editVisibility) payload.visibility = editVisibility;
-      if (editContestType) payload.contest_type = editContestType;
-      if (editContestType === "daily") {
-        payload.allowed_teams = editAllowedTeamsRaw
-          .split(",")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-      } else {
-        payload.allowed_teams = [];
-      }
-      if (editName.trim()) payload.name = editName.trim();
-      if (editLogoUrl !== undefined) payload.logo_url = editLogoUrl;
-
-      const updated = await adminContestsApi.update(contest.id, payload);
-
-      setContest(updated);
-      reseedFrom(updated);
-      setRedirectAfterSave(true);
-      showAlert("Contest settings saved", "Success");
+      await applySettings(payload);
     } catch (e: any) {
-      // Surfaces the server's reason (infeasible config, or existing teams the
-      // change would invalidate) rather than a bare status code.
-      showAlert(parseApiError(e, "Failed to save settings"), "Update failed");
+      // The server refuses rule changes that would strand existing squads, and
+      // names force=true as the way through. Offer that instead of dead-ending
+      // on a message the UI has no way to act on.
+      if (e?.response?.data?.detail?.broken_teams) {
+        setForcePrompt({
+          payload,
+          message: parseApiError(e, "Failed to save settings"),
+        });
+      } else {
+        // Surfaces the server's reason (infeasible config, bad dates) rather
+        // than a bare status code.
+        showAlert(parseApiError(e, "Failed to save settings"), "Update failed");
+      }
     } finally {
       if (editLogoFile && contest) {
         try {
@@ -357,6 +383,34 @@ export default function AdminManageContestPage() {
             if (redirectAfterSave) {
               setRedirectAfterSave(false);
               router.push("/admin/contests");
+            }
+          }}
+        />
+        <ConfirmDialog
+          open={!!forcePrompt}
+          title="Apply anyway?"
+          description={
+            `${forcePrompt?.message ?? ""}\n\nApplying leaves those squads ` +
+            `enrolled and scoring while they break the contest's rules.`
+          }
+          cancelText="Cancel"
+          confirmText={forcing ? "Applying..." : "Apply anyway"}
+          destructive
+          loading={forcing}
+          onCancel={() => {
+            if (!forcing) setForcePrompt(null);
+          }}
+          onConfirm={async () => {
+            if (!forcePrompt) return;
+            try {
+              setForcing(true);
+              await applySettings(forcePrompt.payload, true);
+              setForcePrompt(null);
+            } catch (e: any) {
+              setForcePrompt(null);
+              showAlert(parseApiError(e, "Failed to save settings"), "Update failed");
+            } finally {
+              setForcing(false);
             }
           }}
         />

@@ -8,6 +8,7 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from app.models.admin.player import Player as AdminPlayer
+from app.models.team import Team
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
 from app.utils.timezone import now_ist
@@ -211,3 +212,88 @@ async def test_unrelated_edits_do_not_trip_the_team_check(client, user_client, d
 
     assert res.status_code == 200, res.text
     assert res.json()["name"] == "Renamed"
+
+
+# --- deleting a player out from under a squad -----------------------------
+
+
+async def _squad():
+    """The single squad built by _contest_with_one_team."""
+    return await Team.find_one({"team_name": "Squad One"})
+
+
+async def test_delete_player_is_refused_while_a_squad_holds_them(
+    client, user_client, db
+):
+    contest_id = await _contest_with_one_team(client, user_client)
+    picked = (await _squad()).player_ids[0]
+
+    res = await client.delete(f"/api/admin/players/{picked}")
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert "1 squad(s) still include this player" in detail["message"]
+    assert "Squad One" in detail["teams"]
+    # Refusing has to mean refusing: the squad is untouched.
+    assert len((await _squad()).player_ids) == 4
+
+
+async def test_force_delete_strips_the_player_from_the_squad(
+    client, user_client, db
+):
+    contest_id = await _contest_with_one_team(client, user_client)
+    captain = (await _squad()).captain_id
+
+    res = await client.delete(f"/api/admin/players/{captain}?force=true")
+    assert res.status_code == 204, res.text
+
+    team = await _squad()
+    # No dangling ID left behind, so the squad is honestly 3 rather than a 4
+    # that only ever resolves to 3.
+    assert captain not in team.player_ids
+    assert len(team.player_ids) == 3
+    assert team.captain_id is None
+    assert team.total_value == 300_000
+
+
+async def test_an_unrelated_edit_survives_an_already_broken_squad(
+    client, user_client, db
+):
+    """The reported symptom: one short squad froze every contest edit.
+
+    Distinct from test_unrelated_edits_do_not_trip_the_team_check above, whose
+    squad is still valid — it passes whether or not the check is gated.
+    """
+    contest_id = await _contest_with_one_team(client, user_client)
+    dropped = (await _squad()).player_ids[0]
+    res = await client.delete(f"/api/admin/players/{dropped}?force=true")
+    assert res.status_code == 204, res.text
+
+    # A schedule move cannot affect squad validity, so it must go through even
+    # though the squad now breaks the rules.
+    start = now_ist() + timedelta(days=3)
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}",
+        json={
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(days=7)).isoformat(),
+        },
+    )
+
+    assert res.status_code == 200, res.text
+
+
+async def test_a_rule_change_still_trips_the_check_when_a_squad_is_broken(
+    client, user_client, db
+):
+    """The gate narrows which edits are checked, not whether they are."""
+    contest_id = await _contest_with_one_team(client, user_client)
+    dropped = (await _squad()).player_ids[0]
+    await client.delete(f"/api/admin/players/{dropped}?force=true")
+
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}", json={"purse": 200_000}
+    )
+
+    assert res.status_code == 400, res.text
+    assert "would break" in res.json()["detail"]["message"]
