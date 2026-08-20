@@ -4,6 +4,7 @@ from beanie.operators import RegEx, Or, And
 from datetime import datetime
 
 from app.models.admin.player import Player
+from app.models.admin.audit_log import AdminActionLog
 from app.models.team import Team
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
@@ -354,5 +355,22 @@ async def delete_player(
         await team.save()
 
     await player.delete()
+
+    # The player document is gone after this point, so there is no other
+    # trail of who deleted it or what it was — capture that here rather than
+    # leaving it unanswerable later (see PR #28 discussion).
+    await AdminActionLog(
+        admin_id=str(current_user.id),
+        action="player.delete",
+        target_type="player",
+        target_id=player_id,
+        details={
+            "name": player.name,
+            "team": player.team,
+            "price": player.price,
+            "force": force,
+            "stripped_from_teams": [t.team_name for t in referencing_teams],
+        },
+    ).insert()
 
     return None
