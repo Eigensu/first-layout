@@ -124,8 +124,13 @@ export const adminContestsApi = {
     const response = await apiClient.post('/api/admin/contests', data);
     return response.data;
   },
-  update: async (id: string, data: ContestUpdate): Promise<Contest> => {
-    const response = await apiClient.put(`/api/admin/contests/${id}`, data);
+  // force=true tells the server to apply rule changes that would leave
+  // existing squads breaking them. The server names this escape hatch in its
+  // own error message, so the client has to be able to send it.
+  update: async (id: string, data: ContestUpdate, force?: boolean): Promise<Contest> => {
+    const response = await apiClient.put(`/api/admin/contests/${id}`, data, {
+      params: force ? { force: true } : undefined,
+    });
     return response.data;
   },
   delete: async (id: string, force?: boolean): Promise<{ message: string }> => {

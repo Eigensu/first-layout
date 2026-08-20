@@ -294,17 +294,65 @@ async def update_player(
 @router.delete("/{player_id}", status_code=204)
 async def delete_player(
     player_id: str,
+    force: bool = Query(
+        False,
+        description=(
+            "Force delete: strip the player from every squad that picked them, "
+            "then delete"
+        ),
+    ),
     current_user: User = Depends(get_admin_user),
 ):
     """
-    Delete a player.
+    Delete a player. Blocks by default while squads still reference them.
+
+    Deleting the document alone used to leave those IDs behind, and a dangling
+    ID is not inert: squad validation counts the players that actually resolve,
+    so the squad silently reads one short. That shows up much later as a size
+    violation which blocks every subsequent edit of the contest the squad is
+    enrolled in, far from the delete that caused it.
+
     Requires authentication.
     """
     player = await Player.get(player_id)
-    
+
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    
+
+    referencing_teams = await Team.find({"player_ids": player_id}).to_list()
+
+    if referencing_teams and not force:
+        shown = [t.team_name for t in referencing_teams[:5]]
+        more = len(referencing_teams) - len(shown)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"{len(referencing_teams)} squad(s) still include this player. "
+                    f"Remove them from those squads first, or repeat the request "
+                    f"with force=true to strip them and delete anyway."
+                ),
+                "teams": shown + ([f"and {more} more"] if more > 0 else []),
+            },
+        )
+
+    for team in referencing_teams:
+        team.player_ids = [pid for pid in team.player_ids if pid != player_id]
+        # A dropped player cannot keep captaincy; leaving the ID behind would
+        # dangle exactly like the squad entry just removed.
+        if team.captain_id == player_id:
+            team.captain_id = None
+        if team.vice_captain_id == player_id:
+            team.vice_captain_id = None
+        # Stored totals are derived from the squad, so they follow it down
+        # rather than keep counting someone who is gone. Subtracting the one
+        # player avoids re-reading every other squad member; the floor guards
+        # against drift pushing a total negative.
+        team.total_points = max(team.total_points - player.points, 0.0)
+        team.total_value = max(team.total_value - player.price, 0.0)
+        team.updated_at = datetime.utcnow()
+        await team.save()
+
     await player.delete()
-    
+
     return None
