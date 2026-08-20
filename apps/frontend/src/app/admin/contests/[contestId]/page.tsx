@@ -404,7 +404,14 @@ export default function AdminManageContestPage() {
             if (!forcePrompt) return;
             try {
               setForcing(true);
-              await applySettings(forcePrompt.payload, true);
+              // saveAllSettings uploads a newly picked logo in its finally
+              // block, after this payload was captured — so logo_url may have
+              // moved on since. Re-read it, rather than resending the
+              // pre-upload value and reverting the logo just saved.
+              await applySettings(
+                { ...forcePrompt.payload, logo_url: editLogoUrl },
+                true,
+              );
               setForcePrompt(null);
             } catch (e: any) {
               setForcePrompt(null);
