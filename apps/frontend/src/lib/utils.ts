@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { API_BASE_URL } from "@/common/consts"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -78,9 +79,12 @@ export function getImageUrl(path: string | null | undefined, fallback: string = 
   if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("blob:") || path.startsWith("data:")) {
     return path;
   }
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-  if (apiUrl && path.startsWith("/api")) {
-    return `${apiUrl}${path}`;
+  // Resolve against the shared API origin rather than the raw env var: it
+  // hardens http -> https in production (avatars/logos are blocked as mixed
+  // content otherwise), strips a trailing /api so the path can't double up,
+  // and falls back to localhost when the var is unset.
+  if (API_BASE_URL && path.startsWith("/api")) {
+    return `${API_BASE_URL}${path}`;
   }
   // If it's starting with a slash but not /api (e.g. /Contests/logo.png), return as is
   return path;
