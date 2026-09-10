@@ -23,6 +23,7 @@ Read-only; it never writes.
 
 import asyncio
 import os
+import re
 import sys
 from collections import defaultdict
 
@@ -56,7 +57,11 @@ async def main() -> None:
     mongo_uri = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
     db_name = os.environ.get("MONGODB_DB_NAME", "walle_arena")
 
-    print(f"Connecting to MongoDB at: {mongo_uri}")
+    # Never print the raw URI: it carries the password, and this script is
+    # meant to be run against production and pasted into tickets.
+    safe_uri = re.sub(r"://[^@/]*@", "://<redacted>@", mongo_uri)
+    print(f"Connecting to MongoDB at: {safe_uri}")
+    print(f"Database: {db_name}")
     client = AsyncIOMotorClient(mongo_uri)
     users = client.get_database(db_name)["users"]
 
