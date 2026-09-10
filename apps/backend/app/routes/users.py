@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pymongo.errors import DuplicateKeyError
 
 from app.models.user import RefreshToken, User
 from app.schemas.user import DeleteAccountRequest, UserResponse, UserUpdateRequest
@@ -47,7 +48,15 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
     if not target:
         return False
 
-    async for other in User.find(User.mobile != None):  # noqa: E711
+    # Every write path normalizes to digits, so an indexed equality lookup
+    # settles the common case without reading the collection.
+    existing = await User.find_one(User.mobile == target)
+    if existing is not None and str(existing.id) != str(current_user.id):
+        return True
+
+    # Rows written before normalization may hold the same number with symbols,
+    # which the lookup above cannot match. Scan only those, not every user.
+    async for other in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
         if str(other.id) == str(current_user.id):
             continue
         if "".join(ch for ch in (other.mobile or "") if ch.isdigit()) == target:
@@ -126,7 +135,16 @@ async def patch_current_user(
         current_user.mobile = payload.mobile
 
     current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    try:
+        await current_user.save()
+    except DuplicateKeyError:
+        # The check above is read-then-write, so a concurrent request can take
+        # the number in between. uniq_mobile rejects the loser; surface it as
+        # the same 409 rather than a 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This mobile number is already linked to another account",
+        )
 
     return _user_response(current_user)
 

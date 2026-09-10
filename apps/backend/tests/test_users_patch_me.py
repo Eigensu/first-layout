@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from pymongo.errors import DuplicateKeyError
 
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
@@ -70,6 +71,23 @@ async def test_patch_rejects_mobile_held_by_another_account(user_client):
 
 
 @pytest.mark.asyncio
+async def test_patch_rejects_mobile_held_in_legacy_format(user_client):
+    """A row written before digits-only normalization stores symbols, so the
+    indexed equality lookup cannot match it; the fallback scan must."""
+    legacy = User(
+        username="legacy",
+        email="legacy@example.com",
+        mobile="+91 98765 43210",
+        hashed_password="not-a-real-hash",
+    )
+    await legacy.insert()
+
+    resp = await user_client.patch("/api/users/me", json={"mobile": "919876543210"})
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_patch_allows_resaving_own_mobile(user_client, google_user):
     google_user.mobile = "9876543210"
     await google_user.save()
@@ -109,3 +127,21 @@ async def test_get_me_exposes_auth_provider(user_client):
 
     assert resp.status_code == 200
     assert resp.json()["auth_provider"] == "google"
+
+
+@pytest.mark.asyncio
+async def test_patch_maps_duplicate_key_race_to_409(
+    user_client, google_user, monkeypatch
+):
+    """If a concurrent request takes the number between the check and the
+    save, uniq_mobile rejects this write -- surface it as 409, not 500."""
+
+    async def _raise_duplicate(*args, **kwargs):
+        raise DuplicateKeyError("E11000 duplicate key error: uniq_mobile")
+
+    monkeypatch.setattr(type(google_user), "save", _raise_duplicate)
+
+    resp = await user_client.patch("/api/users/me", json={"mobile": "9876543210"})
+
+    assert resp.status_code == 409
+    assert "already linked" in resp.json()["detail"]
