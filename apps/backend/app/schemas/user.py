@@ -3,6 +3,11 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+# ASCII only: str.isdigit() also accepts Unicode numerals (Arabic-Indic and
+# friends), which would be stored verbatim and never compare equal to their
+# ASCII form, slipping past both the collision check and the uniq_mobile index.
+ASCII_DIGITS = "0123456789"
+
 
 class UserResponse(BaseModel):
     """Schema for user response (excludes password)"""
@@ -38,7 +43,7 @@ class UserUpdateRequest(BaseModel):
     def normalize_mobile(cls, v):
         if v is None:
             return v
-        digits = "".join(ch for ch in v.strip() if ch.isdigit())
+        digits = "".join(ch for ch in v.strip() if ch in ASCII_DIGITS)
         if len(digits) < 10 or len(digits) > 15:
             raise ValueError("Mobile must be 10-15 digits")
         # Store digits-only, as registration and PUT /me already do. Login and

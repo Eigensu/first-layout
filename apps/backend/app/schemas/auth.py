@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, validator
 
+ASCII_DIGITS = "0123456789"
+
 
 class UserRegister(BaseModel):
     """Schema for user registration"""
@@ -36,7 +38,11 @@ class UserRegister(BaseModel):
     @validator("mobile")
     def normalize_mobile(cls, v):
         v = v.strip()
-        digits = "".join(ch for ch in v if ch.isdigit())
+        # ASCII only: str.isdigit() also accepts Unicode numerals (Arabic-Indic
+        # and friends), which would be stored verbatim and never compare equal
+        # to their ASCII form, slipping past both the collision check and the
+        # uniq_mobile index.
+        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
         if len(digits) != 10:
             raise ValueError("Mobile must be exactly 10 digits")
         return digits
@@ -48,7 +54,7 @@ class ForgotPasswordRequest(BaseModel):
     @validator("phone")
     def mobile_basic_validation(cls, v):
         v = v.strip()
-        digits = "".join(ch for ch in v if ch.isdigit())
+        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
         if len(digits) < 10 or len(digits) > 15:
             raise ValueError("Mobile must be 10-15 digits")
         return v
@@ -61,7 +67,7 @@ class ForgotPasswordVerify(BaseModel):
     @validator("phone")
     def mobile_basic_validation(cls, v):
         v = v.strip()
-        digits = "".join(ch for ch in v if ch.isdigit())
+        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
         if len(digits) < 10 or len(digits) > 15:
             raise ValueError("Mobile must be 10-15 digits")
         return v
@@ -119,7 +125,7 @@ class ResetPasswordByMobile(BaseModel):
     @validator("mobile")
     def mobile_basic_validation(cls, v):
         v = v.strip()
-        digits = "".join(ch for ch in v if ch.isdigit())
+        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
         if len(digits) < 10 or len(digits) > 15:
             raise ValueError("Mobile must be 10-15 digits")
         return v

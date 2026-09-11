@@ -145,3 +145,54 @@ async def test_patch_maps_duplicate_key_race_to_409(
 
     assert resp.status_code == 409
     assert "already linked" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_unicode_digits(user_client):
+    """str.isdigit() accepts Arabic-Indic numerals, which would be stored
+    verbatim and never compare equal to their ASCII form -- slipping past both
+    the collision check and uniq_mobile."""
+    resp = await user_client.patch("/api/users/me", json={"mobile": "٩٨٧٦٥٤٣٢١٠"})
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_put_maps_duplicate_key_race_to_400(
+    user_client, google_user, monkeypatch
+):
+    """uniq_mobile constrains PUT too, not just the PATCH that introduced it."""
+
+    async def _raise_duplicate(*args, **kwargs):
+        raise DuplicateKeyError("E11000 duplicate key error: uniq_mobile")
+
+    monkeypatch.setattr(type(google_user), "save", _raise_duplicate)
+
+    resp = await user_client.put("/api/users/me", params={"mobile": "9876543210"})
+
+    assert resp.status_code == 400
+    assert "already registered" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_register_maps_duplicate_key_race_to_400(anon_client, monkeypatch):
+    """A concurrent registration claiming the same mobile loses at the index,
+    which must read as the route's own 400, not a 500."""
+
+    async def _raise_duplicate(self, *args, **kwargs):
+        raise DuplicateKeyError("E11000 duplicate key error: uniq_mobile")
+
+    monkeypatch.setattr(User, "insert", _raise_duplicate)
+
+    resp = await anon_client.post(
+        "/api/auth/register",
+        data={
+            "username": "racer",
+            "email": "racer@example.com",
+            "password": "Passw0rdd",
+            "mobile": "9876543210",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "already registered" in resp.json()["detail"]

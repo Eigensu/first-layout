@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from app.models.user import RefreshToken, User
-from app.schemas.user import DeleteAccountRequest, UserResponse, UserUpdateRequest
+from app.schemas.user import (
+    ASCII_DIGITS,
+    DeleteAccountRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import open_avatar_stream
@@ -44,7 +49,7 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
     ambiguous. Soft-deleted accounts are included on purpose: they keep their
     mobile, and login matches them before rejecting them as disabled.
     """
-    target = "".join(ch for ch in mobile if ch.isdigit())
+    target = "".join(ch for ch in mobile if ch in ASCII_DIGITS)
     if not target:
         return False
 
@@ -59,7 +64,7 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
     async for other in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
         if str(other.id) == str(current_user.id):
             continue
-        if "".join(ch for ch in (other.mobile or "") if ch.isdigit()) == target:
+        if "".join(ch for ch in (other.mobile or "") if ch in ASCII_DIGITS) == target:
             return True
     return False
 
@@ -83,7 +88,7 @@ async def update_current_user(
         current_user.full_name = full_name
 
     if mobile:
-        normalized_mobile = "".join(ch for ch in mobile.strip() if ch.isdigit())
+        normalized_mobile = "".join(ch for ch in mobile.strip() if ch in ASCII_DIGITS)
         if len(normalized_mobile) != 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -105,7 +110,15 @@ async def update_current_user(
         current_user.avatar_url = avatar_url
 
     current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    try:
+        await current_user.save()
+    except DuplicateKeyError:
+        # See patch_current_user: the check above is read-then-write, so
+        # uniq_mobile is what actually settles a concurrent claim.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile already registered",
+        )
 
     return _user_response(current_user)
 
