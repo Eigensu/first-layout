@@ -1,7 +1,10 @@
-from beanie import Document, Indexed, PydanticObjectId
-from pydantic import Field
 from datetime import datetime, timedelta
 from typing import Optional
+
+from beanie import Document, Indexed, PydanticObjectId
+from pydantic import Field
+
+from app.common.datetime_utils import utc_now
 
 
 class PasswordResetSession(Document):
@@ -12,9 +15,9 @@ class PasswordResetSession(Document):
     status: str = "pending"
     attempts: int = 0
     max_attempts: int = 5
-    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + timedelta(minutes=10))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime = Field(default_factory=lambda: utc_now() + timedelta(minutes=10))
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "password_reset_sessions"
@@ -30,7 +33,7 @@ class PasswordResetToken(Document):
     token_hash: Indexed(str, unique=True)  # type: ignore
     expires_at: datetime
     used_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "password_reset_tokens"

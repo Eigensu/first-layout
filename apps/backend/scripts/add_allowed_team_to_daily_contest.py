@@ -1,5 +1,5 @@
-import asyncio
 import argparse
+import asyncio
 import os
 import sys
 from datetime import datetime
@@ -13,8 +13,9 @@ BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from config.database import connect_to_mongo, close_mongo_connection
+from app.common.datetime_utils import utc_now
 from app.models.contest import Contest
+from config.database import close_mongo_connection, connect_to_mongo
 
 
 async def resolve_contest(contest_id: Optional[str], contest_code: Optional[str]) -> Optional[Contest]:
@@ -46,7 +47,7 @@ async def add_allowed_team(contest: Contest, team_code: str, dry_run: bool = Fal
         return True
 
     contest.allowed_teams.append(team_code)
-    contest.updated_at = datetime.utcnow()
+    contest.updated_at = utc_now()
     await contest.save()
     print(f"[OK] Added team '{team_code}' to contest {contest.code} ({contest.id})")
     return True

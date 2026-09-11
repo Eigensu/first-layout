@@ -1,24 +1,23 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
-from beanie.operators import RegEx, Or, And
-from beanie import PydanticObjectId
+from typing import List, Optional
 
-from app.models.admin.slot import Slot
+from beanie import PydanticObjectId
+from beanie.operators import And, Or, RegEx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player as AdminPlayer
+from app.models.admin.slot import Slot
+from app.models.user import User
+from app.schemas.admin.player import PlayerListResponse, PlayerResponse
 from app.schemas.admin.slot import (
     SlotCreate,
-    SlotUpdate,
-    SlotResponse,
     SlotListResponse,
-)
-from app.schemas.admin.player import (
-    PlayerResponse,
-    PlayerListResponse,
+    SlotResponse,
+    SlotUpdate,
 )
 from app.utils.dependencies import get_admin_user
-from app.models.user import User
 
 router = APIRouter(prefix="/api/admin/slots", tags=["Admin - Slots"])
 
@@ -124,8 +123,8 @@ async def migrate_slots_from_players(
                             name=name,
                             min_select=4,
                             max_select=4,
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow(),
+                            created_at=utc_now(),
+                            updated_at=utc_now(),
                         )
                         await slot_doc.insert()
                     created.append({"legacy": val, "code": code, "name": name})
@@ -180,7 +179,7 @@ async def create_slot(
     if await Slot.find_one(Slot.name == data.name):
         raise HTTPException(status_code=400, detail="Slot name already exists")
 
-    now = datetime.utcnow()
+    now = utc_now()
     slot = Slot(
         code=data.code,
         name=data.name,
@@ -228,7 +227,7 @@ async def update_slot(
         update_fields.pop("code")  # code is immutable
     for k, v in update_fields.items():
         setattr(slot, k, v)
-    slot.updated_at = datetime.utcnow()
+    slot.updated_at = utc_now()
     await slot.save()
     return await build_slot_response(slot)
 

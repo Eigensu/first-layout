@@ -4,10 +4,11 @@ from typing import Optional
 
 from beanie import PydanticObjectId
 
-from config.database import connect_to_mongo, close_mongo_connection
-from app.models.team import Team
+from app.common.datetime_utils import utc_now
 from app.models.contest import Contest
+from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from config.database import close_mongo_connection, connect_to_mongo
 
 
 async def resolve_contest(contest_id_value: str) -> Optional[Contest]:
@@ -74,7 +75,7 @@ async def backfill(dry_run: bool = True) -> None:
                 user_id=team.user_id,
                 contest_id=contest.id,
                 status="active",
-                enrolled_at=datetime.utcnow(),
+                enrolled_at=utc_now(),
             )
             await enr.insert()
             print(

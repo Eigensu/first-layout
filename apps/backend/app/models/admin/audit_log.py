@@ -1,7 +1,10 @@
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 from beanie import Document
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, Dict, Any
+
+from app.common.datetime_utils import utc_now
 
 
 class AdminActionLog(Document):
@@ -15,7 +18,7 @@ class AdminActionLog(Document):
     target_type: str  # e.g. "player"
     target_id: str
     details: Optional[Dict[str, Any]] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "admin_action_logs"

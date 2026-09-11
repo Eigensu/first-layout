@@ -1,9 +1,12 @@
-from beanie import Document, Indexed
-from pydantic import Field, HttpUrl, ConfigDict
 from datetime import datetime
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import ConfigDict, Field, HttpUrl
 from pymongo import IndexModel
+
+from app.common.datetime_utils import utc_now
 
 
 class SponsorTier(str, Enum):
@@ -33,8 +36,8 @@ class Sponsor(Document):
     # New priority used to control ordering within featured and non-featured groups
     # Default 0 for backward compatibility; migration will set to >= 1
     priority: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "sponsors"  # MongoDB collection name

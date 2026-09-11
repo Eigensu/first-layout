@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List, Literal
 from datetime import datetime
-from app.utils.timezone import to_ist, IST
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.common.datetime_utils import IST, to_ist
 
 
 class ContestCreate(BaseModel):

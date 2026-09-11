@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
     ASCII_DIGITS,
@@ -102,8 +103,8 @@ async def register(
         hashed_password=hashed_password,
         full_name=user_data.full_name,
         mobile=user_data.mobile,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now(),
+        updated_at=utc_now(),
     )
 
     # Save to MongoDB
@@ -137,7 +138,7 @@ async def register(
     refresh_token_doc = RefreshToken(
         user_id=new_user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
 
@@ -185,7 +186,7 @@ async def login(user_data: UserLogin):
         )
 
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = utc_now()
     await user.save()
 
     # Generate tokens
@@ -196,7 +197,7 @@ async def login(user_data: UserLogin):
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
 
@@ -222,7 +223,7 @@ async def google_auth(payload: GoogleAuth):
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
+    user.last_login = utc_now()
     await user.save()
 
     access_token = create_access_token(data={"sub": user.username})
@@ -231,7 +232,7 @@ async def google_auth(payload: GoogleAuth):
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
 
@@ -265,7 +266,7 @@ async def refresh_token(refresh_token: str):
         )
 
     # Check if token is expired
-    if token_doc.expires_at < datetime.utcnow():
+    if token_doc.expires_at < utc_now():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
         )
@@ -291,7 +292,7 @@ async def refresh_token(refresh_token: str):
     new_token_doc = RefreshToken(
         user_id=user.id,
         token=new_refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await new_token_doc.insert()
 
@@ -337,7 +338,7 @@ async def reset_password_by_mobile(payload: ResetPasswordByMobile):
         )
 
     matched_user.hashed_password = get_password_hash(payload.new_password)
-    matched_user.updated_at = datetime.utcnow()
+    matched_user.updated_at = utc_now()
     await matched_user.save()
 
     return {"message": "Password updated successfully"}
@@ -432,7 +433,7 @@ async def change_password(
 
     # Update password
     current_user.hashed_password = get_password_hash(payload.new_password)
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     await current_user.save()
 
     return {"message": "Password changed successfully"}

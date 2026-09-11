@@ -5,6 +5,8 @@ from beanie import Document, Indexed, PydanticObjectId
 from pydantic import ConfigDict, EmailStr, Field
 from pymongo import IndexModel
 
+from app.common.datetime_utils import utc_now
+
 
 class User(Document):
     """User document model for MongoDB using Beanie ODM"""
@@ -23,8 +25,8 @@ class User(Document):
     deletion_reason: Optional[str] = None
     is_verified: bool = False
     is_admin: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     last_login: Optional[datetime] = None
     avatar_url: Optional[str] = None
     avatar_file_id: Optional[str] = None  # GridFS file id for avatar
@@ -65,7 +67,7 @@ class RefreshToken(Document):
     user_id: PydanticObjectId
     token: Indexed(str, unique=True)  # type: ignore
     expires_at: datetime
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     revoked: bool = False
 
     class Settings:

@@ -1,23 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Response
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.carousel import CarouselImage
 from app.models.user import User
 from app.schemas.carousel import (
     CarouselImageCreate,
-    CarouselImageUpdate,
     CarouselImageResponse,
     CarouselImagesListResponse,
+    CarouselImageUpdate,
+    ReorderRequest,
     UploadResponse,
-    ReorderRequest
 )
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import (
-    upload_carousel_image_to_gridfs,
-    open_carousel_image_stream,
     delete_carousel_image_from_gridfs,
+    open_carousel_image_stream,
+    upload_carousel_image_to_gridfs,
 )
 
 router = APIRouter(prefix="/api/v1/carousel", tags=["carousel"])
@@ -154,7 +165,7 @@ async def update_carousel_image(
     # Update fields
     update_data = carousel_data.model_dump(exclude_unset=True)
     if update_data:
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
         for field, value in update_data.items():
             setattr(carousel, field, value)
         await carousel.save()
@@ -222,7 +233,7 @@ async def upload_carousel_image(
         # Update carousel with API URL and file id
         carousel.image_file_id = file_id
         carousel.image_url = f"/api/v1/carousel/{carousel_id}/image"
-        carousel.updated_at = datetime.utcnow()
+        carousel.updated_at = utc_now()
         await carousel.save()
         return UploadResponse(
             url=carousel.image_url,
@@ -256,7 +267,7 @@ async def toggle_active(
         )
     
     carousel.active = not carousel.active
-    carousel.updated_at = datetime.utcnow()
+    carousel.updated_at = utc_now()
     await carousel.save()
     
     return CarouselImageResponse(**carousel_to_response(carousel))
@@ -281,7 +292,7 @@ async def reorder_carousel_images(
             carousel = await CarouselImage.get(carousel_id)
             if carousel:
                 carousel.display_order = new_order
-                carousel.updated_at = datetime.utcnow()
+                carousel.updated_at = utc_now()
                 await carousel.save()
     
     return {"message": "Carousel images reordered successfully"}

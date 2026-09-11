@@ -1,32 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, Response
-from typing import Optional, List, Dict, Annotated
+from datetime import datetime
+from typing import Annotated, Dict, List, Optional
+
 from beanie import PydanticObjectId
 from beanie.operators import Or, RegEx
-from datetime import datetime
-from pydantic import BaseModel
 from bson import ObjectId
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
-from app.utils.timezone import now_ist, to_ist
-from app.utils.gridfs import open_contest_logo_stream
 
+from app.common.datetime_utils import to_ist, utc_now
+from app.common.enums.contests import ContestStatus, ContestVisibility
+from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
-from app.models.team_contest_enrollment import TeamContestEnrollment
-from app.models.team import Team
-from app.models.user import User
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
-from app.utils.security import decode_token
+from app.models.team import Team
+from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.models.user import User
+from app.schemas.contest import ContestListResponse, ContestResponse
+from app.schemas.enrollment import EnrollmentResponse
+from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
 from app.services.contest_status import (
     compute_contest_status,
-    sync_contest_status,
     contest_status_filter_clauses,
+    sync_contest_status,
 )
-from app.schemas.contest import ContestListResponse, ContestResponse
-from app.schemas.leaderboard import LeaderboardResponseSchema, LeaderboardEntrySchema
 from app.utils.dependencies import get_current_active_user
-from app.schemas.enrollment import EnrollmentResponse
-from app.common.enums.contests import ContestVisibility, ContestStatus
-from app.common.enums.enrollments import EnrollmentStatus
+from app.utils.gridfs import open_contest_logo_stream
+from app.utils.security import decode_token
 
 router = APIRouter(prefix="/api/contests", tags=["contests"])
 
@@ -411,7 +412,7 @@ async def enroll_in_contest(
         contest_id=contest.id,
         user_id=current_user.id,
         status=EnrollmentStatus.ACTIVE,
-        enrolled_at=now_ist(),
+        enrolled_at=utc_now(),
     )
     try:
         await enr.insert()  # type: ignore

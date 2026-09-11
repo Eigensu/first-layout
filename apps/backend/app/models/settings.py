@@ -1,8 +1,11 @@
-from typing import Optional
-from beanie import Document
 from datetime import datetime
+from typing import Optional
+
+from beanie import Document
 from pydantic import Field
-from app.utils.timezone import now_ist
+
+from app.common.datetime_utils import utc_now
+
 
 class GlobalSettings(Document):
     """
@@ -19,7 +22,7 @@ class GlobalSettings(Document):
         default=7,
         description="Maximum limit of players that can be drafted from a single team.",
     )
-    updated_at: datetime = Field(default_factory=now_ist)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "global_settings"

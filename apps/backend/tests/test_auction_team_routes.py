@@ -9,15 +9,15 @@ from datetime import timedelta
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import now_ist
 from app.common.enums.contests import ContestFormat
 from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.user import User
-from app.utils.dependencies import get_current_active_user, get_admin_user
-from app.utils.timezone import now_ist
+from app.utils.dependencies import get_admin_user, get_current_active_user
 
 
 @pytest_asyncio.fixture

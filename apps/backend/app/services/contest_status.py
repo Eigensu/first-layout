@@ -1,6 +1,6 @@
+from app.common.datetime_utils import to_utc_naive, utc_now
 from app.common.enums.contests import ContestStatus
 from app.models.contest import Contest
-from app.utils.timezone import now_ist, to_ist
 
 
 def compute_contest_status(contest: Contest) -> ContestStatus:
@@ -8,9 +8,9 @@ def compute_contest_status(contest: Contest) -> ContestStatus:
     if contest.status == ContestStatus.ARCHIVED:
         return ContestStatus.ARCHIVED
 
-    now = now_ist()
-    start = to_ist(contest.start_at)
-    end = to_ist(contest.end_at)
+    now = utc_now()
+    start = to_utc_naive(contest.start_at)
+    end = to_utc_naive(contest.end_at)
 
     if end <= now:
         return ContestStatus.COMPLETED
@@ -25,7 +25,7 @@ async def sync_contest_status(contest: Contest, *, persist: bool = True) -> Cont
     if contest.status != computed:
         contest.status = computed
         if persist:
-            contest.updated_at = now_ist()
+            contest.updated_at = utc_now()
             await contest.save()  # type: ignore[misc]
     return computed
 
@@ -34,7 +34,7 @@ def contest_status_filter_clauses(
     status: ContestStatus, *, exclude_archived_for_time_window: bool = True
 ) -> list[object]:
     """Return Beanie filter clauses for status-based list queries."""
-    now = now_ist()
+    now = utc_now()
 
     if status == ContestStatus.ARCHIVED:
         return [Contest.status == ContestStatus.ARCHIVED]
