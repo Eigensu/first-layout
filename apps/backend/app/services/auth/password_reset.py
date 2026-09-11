@@ -1,22 +1,24 @@
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
-from secrets import token_urlsafe
 import hashlib
+from datetime import datetime, timedelta
+from secrets import token_urlsafe
+from typing import Optional, Tuple
 
 from beanie import PydanticObjectId
 from beanie.operators import In
 
-from config.settings import get_settings
-from app.models.user import User, RefreshToken
+from app.common.datetime_utils import utc_now
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
-from app.services.auth.twofactor import send_otp_autogen, verify_otp as provider_verify_otp
+from app.models.user import RefreshToken, User
+from app.services.auth.twofactor import send_otp_autogen
+from app.services.auth.twofactor import verify_otp as provider_verify_otp
 from app.utils.security import get_password_hash
+from config.settings import get_settings
 
 settings = get_settings()
 
 
 def _now():
-    return datetime.utcnow()
+    return utc_now()
 
 
 def _hash_token(token: str) -> str:

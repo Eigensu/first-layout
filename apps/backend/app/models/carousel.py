@@ -1,8 +1,11 @@
-from beanie import Document
-from pydantic import Field, HttpUrl
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document
+from pydantic import Field, HttpUrl
 from pymongo import IndexModel
+
+from app.common.datetime_utils import utc_now
 
 
 class CarouselImage(Document):
@@ -17,8 +20,8 @@ class CarouselImage(Document):
     link_url: Optional[HttpUrl] = None
     display_order: int = 0
     active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "carousel_images"  # MongoDB collection name

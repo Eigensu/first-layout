@@ -1,7 +1,10 @@
-from beanie import Document, PydanticObjectId
-from pydantic import Field, BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
+
+from beanie import Document, PydanticObjectId
+from pydantic import BaseModel, Field
+
+from app.common.datetime_utils import utc_now
 
 
 class PlayerSelection(BaseModel):
@@ -26,8 +29,8 @@ class Team(Document):
     contest_id: Optional[str] = None  # Optional: reference to a contest
     
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     
     class Settings:
         name = "teams"

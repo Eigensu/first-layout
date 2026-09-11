@@ -1,9 +1,11 @@
-from beanie import Document, Indexed
-from pydantic import Field
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import Field
+
+from app.common.datetime_utils import utc_now
 from app.common.enums.tournaments import TournamentStatus
-from app.utils.timezone import now_ist
 
 
 class Tournament(Document):
@@ -34,8 +36,8 @@ class Tournament(Document):
     # only for legacy per-tournament deployments (e.g. https://api-lpcl.wallearena.com).
     api_base_url: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=now_ist)
-    updated_at: datetime = Field(default_factory=now_ist)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "tournaments"

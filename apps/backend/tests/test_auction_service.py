@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from app.common.datetime_utils import now_ist
 from app.common.enums.contests import ContestFormat
 from app.models.admin.player import Player as AdminPlayer
 from app.models.contest import Contest
@@ -13,7 +14,6 @@ from app.services.auction import (
     resolve_max_players_per_team,
     validate_auction_squad,
 )
-from app.utils.timezone import now_ist
 
 
 def _entries(*pairs) -> list[PoolEntry]:

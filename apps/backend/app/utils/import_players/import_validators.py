@@ -1,5 +1,7 @@
 """Validation and normalization utilities for player imports"""
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
+
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player
 from app.models.admin.slot import Slot
 
@@ -117,8 +119,8 @@ async def resolve_slot(
                 name=slot_code.strip(),
                 min_select=4,
                 max_select=4,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=utc_now(),
+                updated_at=utc_now(),
             )
             await slot_doc.insert()
     
@@ -137,8 +139,8 @@ async def resolve_slot(
                 name=slot_name.strip(),
                 min_select=4,
                 max_select=4,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=utc_now(),
+                updated_at=utc_now(),
             )
             await slot_doc.insert()
     

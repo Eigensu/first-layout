@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
+
+from app.common.datetime_utils import utc_now
 from app.models.settings import GlobalSettings
 from app.models.user import User
-from app.utils.dependencies import get_admin_user
-from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs, open_contest_logo_stream
-from app.utils.timezone import now_ist
 from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
-from pydantic import BaseModel
+from app.utils.dependencies import get_admin_user
+from app.utils.gridfs import (
+    delete_contest_logo_from_gridfs,
+    open_contest_logo_stream,
+    upload_contest_logo_to_gridfs,
+)
 
 router = APIRouter(prefix="/api/admin/settings", tags=["Admin - Settings"])
 
@@ -58,7 +63,7 @@ async def update_settings(
 
     settings.min_players_per_team = new_min
     settings.max_players_per_team = new_max
-    settings.updated_at = now_ist()
+    settings.updated_at = utc_now()
     await settings.save()
 
     return _to_settings_response(settings)
@@ -85,7 +90,7 @@ async def upload_default_logo(
     try:
         file_id = await upload_contest_logo_to_gridfs(file, filename_prefix="default_contest_logo")
         settings.default_contest_logo_file_id = file_id
-        settings.updated_at = now_ist()
+        settings.updated_at = utc_now()
         await settings.save()
         
         return UploadResponse(

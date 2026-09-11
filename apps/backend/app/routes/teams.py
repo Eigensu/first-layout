@@ -1,27 +1,28 @@
-from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List, Dict, Optional
-from beanie import PydanticObjectId
 from datetime import datetime
+from typing import Dict, List, Optional
 
-from app.models.team import Team
-from app.models.player import Player
-from app.models.team_contest_enrollment import TeamContestEnrollment
-from app.models.contest import Contest
-from app.models.user import User
-from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamsListResponse
-from app.utils.dependencies import get_current_active_user
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.common.datetime_utils import utc_now
+from app.common.enums.contests import ContestStatus
+from app.common.enums.enrollments import EnrollmentStatus
 from app.models.admin.slot import Slot
-from app.services.contest_status import compute_contest_status
-from app.services.team_composition import validate_team_composition
+from app.models.contest import Contest
+from app.models.player import Player
+from app.models.settings import GlobalSettings
+from app.models.team import Team
+from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.models.user import User
+from app.schemas.team import TeamCreate, TeamResponse, TeamsListResponse, TeamUpdate
 from app.services.auction import (
     is_auction_contest,
     resolve_max_players_per_team,
     validate_auction_squad,
 )
-from app.models.settings import GlobalSettings
-from app.common.enums.contests import ContestStatus
-from app.common.enums.enrollments import EnrollmentStatus
-from app.utils.timezone import now_ist
+from app.services.contest_status import compute_contest_status
+from app.services.team_composition import validate_team_composition
+from app.utils.dependencies import get_current_active_user
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -436,7 +437,7 @@ async def update_team(
     }).to_list()
     if active_enrs:
         contest_ids = [enr.contest_id for enr in active_enrs]
-        now = now_ist()
+        now = utc_now()
         active_contest_count = await Contest.find({
             "_id": {"$in": contest_ids},
             "status": {"$ne": ContestStatus.ARCHIVED},
@@ -533,7 +534,7 @@ async def update_team(
                     )
                     await _validate_slot_constraints(players)
         
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
         
         for key, value in update_data.items():
             setattr(team, key, value)
@@ -605,9 +606,8 @@ async def rename_team(
         "status": "active",
     }).to_list()
     if active_enrs:
-        from datetime import datetime as _dt
         contest_ids = [enr.contest_id for enr in active_enrs]
-        now = _dt.utcnow()
+        now = utc_now()
         active_contest_count = await Contest.find({
             "_id": {"$in": contest_ids},
             "status": "ongoing",
@@ -622,7 +622,7 @@ async def rename_team(
     
     # Update team name
     team.team_name = team_name.strip()
-    team.updated_at = datetime.utcnow()
+    team.updated_at = utc_now()
     await team.save()  # type: ignore[misc]
     
     return TeamResponse(
@@ -678,7 +678,7 @@ async def delete_team(
     }).to_list()
 
     if active_enrollments:
-        now = datetime.utcnow()
+        now = utc_now()
         for enr in active_enrollments:
             enr.status = EnrollmentStatus.REMOVED
             enr.removed_at = now

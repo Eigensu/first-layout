@@ -1,7 +1,10 @@
-from beanie import Document, Indexed
-from pydantic import Field, field_validator
 from datetime import datetime
 from typing import Optional, Union
+
+from beanie import Document, Indexed
+from pydantic import Field, field_validator
+
+from app.common.datetime_utils import utc_now
 
 
 class Player(Document):
@@ -17,8 +20,8 @@ class Player(Document):
     slot: Optional[str] = None  # Slot assignment for the player (Slot ObjectId string)
     image_url: Optional[str] = None
     stats: Optional[dict] = None  # Batting avg, bowling avg, etc.
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     @field_validator('slot', mode='before')
     @classmethod

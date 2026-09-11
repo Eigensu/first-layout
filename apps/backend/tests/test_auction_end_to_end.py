@@ -7,12 +7,12 @@ format, loads the open pool, then submits a squad.
 from datetime import timedelta
 
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import now_ist
 from app.models.admin.player import Player as AdminPlayer
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
-from app.utils.timezone import now_ist
 
 
 @pytest_asyncio.fixture

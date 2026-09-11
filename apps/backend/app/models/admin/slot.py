@@ -1,7 +1,10 @@
-from beanie import Document, Indexed
-from pydantic import Field
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import Field
+
+from app.common.datetime_utils import utc_now
 
 
 class Slot(Document):
@@ -13,8 +16,8 @@ class Slot(Document):
     max_select: int = 4
     description: Optional[str] = None
     requirements: Optional[dict] = None  # e.g., minimum stats required
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "slots"

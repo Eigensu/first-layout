@@ -1,14 +1,15 @@
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from pydantic import ValidationError
 
+from app.common.datetime_utils import IST
 from app.schemas.tournament import (
-    validate_slug,
     TournamentCreate,
-    TournamentUpdate,
     TournamentResponse,
+    TournamentUpdate,
+    validate_slug,
 )
-from app.utils.timezone import IST
 
 
 class TestValidateSlug:

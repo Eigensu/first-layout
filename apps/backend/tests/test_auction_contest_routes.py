@@ -6,8 +6,8 @@ discovered by a user who cannot finish a squad.
 
 from datetime import timedelta
 
+from app.common.datetime_utils import now_ist
 from app.models.admin.player import Player as AdminPlayer
-from app.utils.timezone import now_ist
 
 
 def _payload(**overrides):

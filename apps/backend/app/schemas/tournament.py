@@ -1,10 +1,12 @@
 import re
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
 from datetime import datetime
-from app.common.consts.index import TOURNAMENT_SLUG_PATTERN, RESERVED_SUBDOMAINS
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.common.consts.index import RESERVED_SUBDOMAINS, TOURNAMENT_SLUG_PATTERN
+from app.common.datetime_utils import IST, to_ist
 from app.common.enums.tournaments import TournamentStatus
-from app.utils.timezone import to_ist, IST
 
 SLUG_RE = re.compile(TOURNAMENT_SLUG_PATTERN)
 

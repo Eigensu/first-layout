@@ -1,15 +1,17 @@
+from datetime import datetime
+from typing import List, Optional
+
 from beanie import Document, Indexed
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, List
+
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import (
+    ContestFormat,
     ContestStatus,
+    ContestType,
     ContestVisibility,
     PointsScope,
-    ContestType,
-    ContestFormat,
 )
-from app.utils.timezone import now_ist
 
 
 class Contest(Document):
@@ -52,8 +54,8 @@ class Contest(Document):
     # None means fall back to the global setting.
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
 
-    created_at: datetime = Field(default_factory=now_ist)
-    updated_at: datetime = Field(default_factory=now_ist)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "contests"

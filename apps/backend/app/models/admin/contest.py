@@ -1,7 +1,10 @@
+from datetime import datetime
+from typing import List, Optional
+
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, List
+
+from app.common.datetime_utils import utc_now
 
 
 class Contest(Document):
@@ -20,8 +23,8 @@ class Contest(Document):
     rules: Optional[dict] = None
     prize_distribution: Optional[dict] = None  # 1st place: 50%, 2nd: 30%, etc.
     created_by: Optional[PydanticObjectId] = None  # Admin user who created
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "contests"

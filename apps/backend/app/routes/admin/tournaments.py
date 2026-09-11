@@ -1,20 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from beanie import PydanticObjectId
 
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.common.datetime_utils import IST, to_utc_naive, utc_now
+from app.common.enums.tournaments import TournamentStatus
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.common.enums.tournaments import TournamentStatus
 from app.schemas.tournament import (
-    TournamentCreate,
-    TournamentUpdate,
-    TournamentResponse,
-    TournamentListResponse,
     SlugAvailabilityResponse,
+    TournamentCreate,
+    TournamentListResponse,
+    TournamentResponse,
+    TournamentUpdate,
     validate_slug,
 )
 from app.utils.dependencies import get_admin_user
-from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
 
@@ -76,7 +77,7 @@ async def create_tournament(
     if existing:
         raise HTTPException(status_code=400, detail="Slug is already taken")
 
-    now = now_ist()
+    now = utc_now()
     tournament = Tournament(
         slug=data.slug,
         name=data.name,
@@ -171,11 +172,11 @@ async def update_tournament(
     if (
         tournament.start_at
         and tournament.end_at
-        and to_ist(tournament.start_at) >= to_ist(tournament.end_at)
+        and to_utc_naive(tournament.start_at) >= to_utc_naive(tournament.end_at)
     ):
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
-    tournament.updated_at = now_ist()
+    tournament.updated_at = utc_now()
     await tournament.save()
     return to_response(tournament)
 
@@ -193,6 +194,6 @@ async def delete_tournament(
         return {"message": f"Tournament '{tournament.slug}' permanently deleted"}
 
     tournament.status = TournamentStatus.ARCHIVED
-    tournament.updated_at = now_ist()
+    tournament.updated_at = utc_now()
     await tournament.save()
     return {"message": f"Tournament '{tournament.slug}' archived; its subdomain no longer resolves"}

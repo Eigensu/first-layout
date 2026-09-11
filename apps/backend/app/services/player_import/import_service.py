@@ -1,24 +1,25 @@
 """Player import service - Business logic for importing players"""
 import hashlib
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from fastapi import UploadFile
 
-from app.models.admin.player import Player
+from app.common.datetime_utils import utc_now
 from app.models.admin.import_log import ImportLog
-from app.utils.import_players.import_parsers import parse_xlsx, parse_csv, detect_format
-from app.utils.import_players.import_validators import (
-    validate_player_row,
-    check_conflict,
-    ValidationError,
-)
+from app.models.admin.player import Player
 from app.schemas.admin.player_import import (
-    ImportResponse,
-    RowError,
     ConflictDetail,
+    ImportResponse,
     PlayerSample,
+    RowError,
 )
-
+from app.utils.import_players.import_parsers import detect_format, parse_csv, parse_xlsx
+from app.utils.import_players.import_validators import (
+    ValidationError,
+    check_conflict,
+    validate_player_row,
+)
 
 # Configuration
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB for XLSX
@@ -69,7 +70,7 @@ class PlayerImportService:
 
         # Parse file
         import io
-        
+
         # Parse file
         file_stream = io.BytesIO(content)
         if file_format == "xlsx":
@@ -203,7 +204,7 @@ class PlayerImportService:
                     existing.slot = validated_data.get("slot")
                     existing.image_url = validated_data.get("image_url")
                     existing.stats = validated_data.get("stats")
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = utc_now()
                     await existing.save()
                     updated_count += 1
                 else:
@@ -217,8 +218,8 @@ class PlayerImportService:
                         slot=validated_data.get("slot"),
                         image_url=validated_data.get("image_url"),
                         stats=validated_data.get("stats"),
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
+                        created_at=utc_now(),
+                        updated_at=utc_now(),
                     )
                     await new_player.insert()
                     created_count += 1
@@ -247,8 +248,8 @@ class PlayerImportService:
         """Create and save import log"""
         import_log = ImportLog(
             user_id=user_id,
-            started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
+            started_at=utc_now(),
+            completed_at=utc_now(),
             dry_run=dry_run,
             filename=filename,
             file_size=file_size,

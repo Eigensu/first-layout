@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.user import RefreshToken, User
 from app.schemas.user import (
     ASCII_DIGITS,
@@ -110,7 +111,7 @@ async def update_current_user(
     if avatar_url:
         current_user.avatar_url = avatar_url
 
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     try:
         await current_user.save()
     except DuplicateKeyError:
@@ -207,9 +208,9 @@ async def delete_current_user(
 
     # Soft delete by deactivating and recording timestamp
     current_user.is_active = False
-    current_user.deleted_at = datetime.utcnow()
+    current_user.deleted_at = utc_now()
     current_user.deletion_reason = request.reason
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     await current_user.save()
 
     # Revoke all refresh tokens for this user

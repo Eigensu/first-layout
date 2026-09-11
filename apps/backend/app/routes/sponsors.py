@@ -1,25 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Response
-from fastapi.responses import RedirectResponse
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import RedirectResponse
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.sponsor import Sponsor, SponsorTier
 from app.models.user import User
 from app.schemas.sponsor import (
     SponsorCreate,
-    SponsorUpdate,
+    SponsorDetailResponse,
     SponsorResponse,
     SponsorsListResponse,
-    SponsorDetailResponse,
-    UploadResponse
+    SponsorUpdate,
+    UploadResponse,
 )
+from app.utils.cloudinary import delete_image, upload_image
 from app.utils.dependencies import get_current_active_user
-from app.utils.gridfs import (
-    open_sponsor_logo_stream,
-    delete_sponsor_logo_from_gridfs,
-)
-from app.utils.cloudinary import upload_image, delete_image
+from app.utils.gridfs import delete_sponsor_logo_from_gridfs, open_sponsor_logo_stream
 
 router = APIRouter(prefix="/api/v1/sponsors", tags=["sponsors"])
 
@@ -259,7 +267,7 @@ async def update_sponsor(
             if not isinstance(pr, int) or pr <= 0:
                 update_data["priority"] = await _get_next_priority(update_data.get("featured", sponsor.featured))
 
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
         for field, value in update_data.items():
             setattr(sponsor, field, value)
         try:
@@ -345,7 +353,7 @@ async def upload_sponsor_logo(
         sponsor.logo_public_id = upload_result["public_id"]
         # Keep this null to indicate the asset is no longer stored in GridFS.
         sponsor.logo_file_id = None
-        sponsor.updated_at = datetime.utcnow()
+        sponsor.updated_at = utc_now()
         await sponsor.save()
         return UploadResponse(
             url=uploaded_logo_url,
@@ -402,7 +410,7 @@ async def toggle_featured(
     # When moving groups, assign next available priority if current priority conflicts or is zero
     if not sponsor.priority or sponsor.priority <= 0:
         sponsor.priority = await _get_next_priority(sponsor.featured)
-    sponsor.updated_at = datetime.utcnow()
+    sponsor.updated_at = utc_now()
     await sponsor.save()
     
     return SponsorDetailResponse(
@@ -430,7 +438,7 @@ async def toggle_active(
         )
     
     sponsor.active = not sponsor.active
-    sponsor.updated_at = datetime.utcnow()
+    sponsor.updated_at = utc_now()
     await sponsor.save()
     
     return SponsorDetailResponse(
