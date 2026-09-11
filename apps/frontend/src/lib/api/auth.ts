@@ -72,15 +72,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Update current user profile
-   */
-  updateProfile: async (data: { full_name?: string; avatar_url?: string }): Promise<User> => {
-    const response = await apiClient.put<User>('/api/users/me', null, {
-      params: data
-    });
-    return response.data;
-  },
   
   /**
    * Reset password by verifying mobile number

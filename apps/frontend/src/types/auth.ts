@@ -31,10 +31,6 @@ export interface AuthTokens {
   token_type: string;
 }
 
-export interface AuthResponse extends AuthTokens {
-  user?: User;
-}
-
 export interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
