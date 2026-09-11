@@ -20,6 +20,7 @@ from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
 from app.models.admin.import_log import ImportLog
+from app.models.admin.audit_log import AdminActionLog
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
@@ -39,6 +40,7 @@ DOCUMENT_MODELS = [
     PlayerContestPoints,
     Slot,
     ImportLog,
+    AdminActionLog,
     Contest,
     TeamContestEnrollment,
     PasswordResetSession,

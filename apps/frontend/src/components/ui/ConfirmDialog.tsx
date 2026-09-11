@@ -45,7 +45,7 @@ export function ConfirmDialog({
             {title}
           </div>
           {description && (
-            <p className="mt-1 text-sm text-gray-700">{description}</p>
+            <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{description}</p>
           )}
           <div className="mt-5 flex items-center justify-end gap-2">
             <button

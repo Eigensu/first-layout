@@ -166,6 +166,21 @@ async def get_contest(contest_id: str, current_user: User = Depends(get_admin_us
     return await to_response(contest)
 
 
+# Fields that define what a legal squad looks like. Only a change to one of
+# these can turn a squad that was legal when it was built into a broken one,
+# which is what gates the broken-team checks in update_contest below.
+_RULE_FIELDS = (
+    "squad_size",
+    "purse",
+    "max_players_per_team",
+    "contest_format",
+    "allowed_teams",
+    # contest_type decides whether allowed_teams applies at all, so switching
+    # between daily and full changes the rules without touching the list.
+    "contest_type",
+)
+
+
 @router.put("/{contest_id}", response_model=ContestResponse)
 async def update_contest(
     contest_id: str,
@@ -191,6 +206,18 @@ async def update_contest(
     # Re-check feasibility against the merged result, so an edit cannot leave a
     # contest in a state no participant could satisfy.
     new_format = update_fields.get("contest_format", contest.contest_format)
+
+    # Re-validating every squad on every save meant a single already-broken
+    # squad froze all contest editing — including edits that cannot affect
+    # squad validity at all, like moving the schedule. A squad only becomes
+    # broken when the rules move under it, so that is what the checks below
+    # key on. Note this compares against the stored value: resubmitting the
+    # same rule unchanged is not a change.
+    rules_changed = any(
+        f in update_fields and update_fields[f] != getattr(contest, f)
+        for f in _RULE_FIELDS
+    )
+
     if new_format == ContestFormat.AUCTION_PURSE:
         settings = await GlobalSettings.get_instance()
         new_max = update_fields.get("max_players_per_team", contest.max_players_per_team)
@@ -210,7 +237,7 @@ async def update_contest(
 
         # Tightening the rules must not silently strand squads that were legal
         # when they were built; they would stay enrolled and keep scoring.
-        if not force:
+        if rules_changed and not force:
             broken = await find_teams_breaking_auction_rules(
                 contest_id=str(contest.id),
                 squad_size=new_squad_size,
@@ -233,7 +260,7 @@ async def update_contest(
                         + ([f"and {more} more"] if more > 0 else []),
                     },
                 )
-    elif new_format == ContestFormat.SLOT_BASED and not force:
+    elif new_format == ContestFormat.SLOT_BASED and rules_changed and not force:
         # Symmetric to the auction_purse branch above: a squad shape now
         # comes from slot config instead of the purse, so a switch away from
         # auction_purse (or an edit while already slot_based) must not leave

@@ -78,7 +78,13 @@ export default function ContestsPage() {
       />
       <div className="h-24" />
 
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 pt-1 sm:pt-0 flex-1 w-full">
+      {/*
+        Deliberately not flex-1: letting this grow pushed the sponsor loop to
+        the foot of the viewport, which on a short contest list left it
+        stranded below a screenful of empty space. Sized to its content, the
+        loop follows the last card instead.
+      */}
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 pt-1 sm:pt-0 w-full">
         <h1 className="flex items-center justify-center gap-2 sm:gap-3 text-2xl sm:text-3xl font-extrabold mb-6 sm:mb-8 text-center text-text-main">
           <Trophy className="w-7 h-7 text-accent-pink-500" />
           <span>Contests</span>
@@ -123,8 +129,8 @@ export default function ContestsPage() {
         </div>
       </div>
 
-      {/* Sponsor Logo Loop at the bottom — auto-synced from backend */}
-      <div className="mt-12 pb-10">
+      {/* Sponsor Logo Loop, following the contest list — auto-synced from backend */}
+      <div className="mt-10 pb-10">
         <SponsorLogoLoop
           speed={120}
           direction="left"
