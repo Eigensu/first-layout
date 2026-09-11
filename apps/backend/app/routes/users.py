@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
@@ -126,7 +127,7 @@ async def update_current_user(
 @router.patch("/me", response_model=UserResponse)
 async def patch_current_user(
     payload: UserUpdateRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     """Partially update the current user's own profile.
 
@@ -147,7 +148,7 @@ async def patch_current_user(
             )
         current_user.mobile = payload.mobile
 
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = datetime.now(timezone.utc)
     try:
         await current_user.save()
     except DuplicateKeyError:
