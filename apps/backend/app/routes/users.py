@@ -1,36 +1,79 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Annotated
 
-from app.models.user import User, RefreshToken
-from app.schemas.user import UserResponse, DeleteAccountRequest
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pymongo.errors import DuplicateKeyError
+
+from app.models.user import RefreshToken, User
+from app.schemas.user import (
+    ASCII_DIGITS,
+    DeleteAccountRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
+from app.services.auth.google import GoogleTokenError, verify_google_id_token
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import open_avatar_stream
 from app.utils.security import verify_password
-from app.services.auth.google import verify_google_id_token, GoogleTokenError
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
+
+
+def _user_response(user: User) -> UserResponse:
+    """Build the public view of a user, pointing avatar_url at the streaming
+    endpoint when the avatar lives in GridFS rather than at an external URL."""
+    avatar_url = user.avatar_url
+    if user.avatar_file_id and not avatar_url:
+        avatar_url = f"/api/users/{user.id}/avatar"
+
+    return UserResponse(
+        id=str(user.id),
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        mobile=user.mobile,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        is_admin=user.is_admin,
+        created_at=user.created_at,
+        avatar_url=avatar_url,
+        auth_provider=user.auth_provider,
+    )
+
+
+async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
+    """True if another account already holds this number.
+
+    Compared digits-only rather than by exact string, because POST
+    /api/auth/login accepts a mobile as the identifier and takes the FIRST
+    digit match it finds -- two accounts sharing a number make that login
+    ambiguous. Soft-deleted accounts are included on purpose: they keep their
+    mobile, and login matches them before rejecting them as disabled.
+    """
+    target = "".join(ch for ch in mobile if ch in ASCII_DIGITS)
+    if not target:
+        return False
+
+    # Every write path normalizes to digits, so an indexed equality lookup
+    # settles the common case without reading the collection.
+    existing = await User.find_one(User.mobile == target)
+    if existing is not None and str(existing.id) != str(current_user.id):
+        return True
+
+    # Rows written before normalization may hold the same number with symbols,
+    # which the lookup above cannot match. Scan only those, not every user.
+    async for other in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
+        if str(other.id) == str(current_user.id):
+            continue
+        if "".join(ch for ch in (other.mobile or "") if ch in ASCII_DIGITS) == target:
+            return True
+    return False
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """Get current user information"""
-    # Ensure avatar_url is populated to the streaming endpoint if stored in GridFS
-    avatar_url = current_user.avatar_url
-    if current_user.avatar_file_id and not avatar_url:
-        avatar_url = f"/api/users/{current_user.id}/avatar"
-
-    return UserResponse(
-        id=str(current_user.id),
-        username=current_user.username,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        mobile=current_user.mobile,
-        is_active=current_user.is_active,
-        is_verified=current_user.is_verified,
-        is_admin=current_user.is_admin,
-        created_at=current_user.created_at,
-        avatar_url=avatar_url,
-    )
+    return _user_response(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -46,7 +89,7 @@ async def update_current_user(
         current_user.full_name = full_name
 
     if mobile:
-        normalized_mobile = "".join(ch for ch in mobile.strip() if ch.isdigit())
+        normalized_mobile = "".join(ch for ch in mobile.strip() if ch in ASCII_DIGITS)
         if len(normalized_mobile) != 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -68,20 +111,56 @@ async def update_current_user(
         current_user.avatar_url = avatar_url
 
     current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    try:
+        await current_user.save()
+    except DuplicateKeyError:
+        # See patch_current_user: the check above is read-then-write, so
+        # uniq_mobile is what actually settles a concurrent claim.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile already registered",
+        )
 
-    return UserResponse(
-        id=str(current_user.id),
-        username=current_user.username,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        mobile=current_user.mobile,
-        is_active=current_user.is_active,
-        is_verified=current_user.is_verified,
-        is_admin=current_user.is_admin,
-        created_at=current_user.created_at,
-        avatar_url=current_user.avatar_url,
-    )
+    return _user_response(current_user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def patch_current_user(
+    payload: UserUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Partially update the current user's own profile.
+
+    JSON-bodied counterpart to PUT /me (which takes query params and is kept
+    as-is for backwards compatibility). Exists so a client can collect a
+    mobile number after the fact -- a Google ID token never carries one, so
+    Google accounts are created with mobile unset.
+    """
+
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name.strip() or None
+
+    if payload.mobile is not None:
+        if await _mobile_taken_by_other(payload.mobile, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This mobile number is already linked to another account",
+            )
+        current_user.mobile = payload.mobile
+
+    current_user.updated_at = datetime.now(timezone.utc)
+    try:
+        await current_user.save()
+    except DuplicateKeyError:
+        # The check above is read-then-write, so a concurrent request can take
+        # the number in between. uniq_mobile rejects the loser; surface it as
+        # the same 409 rather than a 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This mobile number is already linked to another account",
+        )
+
+    return _user_response(current_user)
 
 
 @router.delete("/me")
@@ -94,7 +173,9 @@ async def delete_current_user(
 
     if current_user.hashed_password:
         try:
-            is_valid = verify_password(request.password or "", current_user.hashed_password)
+            is_valid = verify_password(
+                request.password or "", current_user.hashed_password
+            )
         except Exception:
             # If verification fails (e.g. invalid hash format), treat as auth failure
             is_valid = False

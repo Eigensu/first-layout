@@ -4,9 +4,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import EmailStr, ValidationError
+from pymongo.errors import DuplicateKeyError
 
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
+    ASCII_DIGITS,
     ChangePassword,
     ForgotPasswordRequest,
     ForgotPasswordReset,
@@ -105,7 +107,17 @@ async def register(
     )
 
     # Save to MongoDB
-    await new_user.insert()
+    try:
+        await new_user.insert()
+    except DuplicateKeyError:
+        # The checks above are read-then-write, so a concurrent registration
+        # can take the username, email or mobile in between. The unique
+        # indexes reject the loser; surface that as the same 400 those checks
+        # return rather than a 500.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username, email or mobile already registered",
+        )
 
     # If avatar uploaded, save to GridFS and update user
     if avatar is not None:
@@ -147,10 +159,10 @@ async def login(user_data: UserLogin):
 
     # If not found and identifier looks like a mobile, try matching by mobile digits
     if not user:
-        input_digits = "".join(ch for ch in identifier if ch.isdigit())
+        input_digits = "".join(ch for ch in identifier if ch in ASCII_DIGITS)
         if input_digits:
             async for u in User.find(User.mobile != None):
-                digits = "".join(ch for ch in (u.mobile or "") if ch.isdigit())
+                digits = "".join(ch for ch in (u.mobile or "") if ch in ASCII_DIGITS)
                 if digits and digits == input_digits:
                     user = u
                     break
@@ -308,12 +320,12 @@ async def logout(refresh_token: str):
 async def reset_password_by_mobile(payload: ResetPasswordByMobile):
     """Reset password by verifying the provided mobile number matches a stored user."""
     # Normalize input by digits to compare fairly
-    input_digits = "".join(ch for ch in payload.mobile if ch.isdigit())
+    input_digits = "".join(ch for ch in payload.mobile if ch in ASCII_DIGITS)
 
     matched_user = None
     # Since mobile may be stored with symbols/spaces, scan users with a mobile set
     async for u in User.find(User.mobile != None):
-        digits = "".join(ch for ch in (u.mobile or "") if ch.isdigit())
+        digits = "".join(ch for ch in (u.mobile or "") if ch in ASCII_DIGITS)
         if digits and digits == input_digits:
             matched_user = u
             break

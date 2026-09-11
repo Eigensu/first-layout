@@ -3,6 +3,7 @@ from typing import Optional
 
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import ConfigDict, EmailStr, Field
+from pymongo import IndexModel
 
 
 class User(Document):
@@ -36,6 +37,19 @@ class User(Document):
             "email",
             "google_id",
             [("created_at", -1)],
+            # Database-level guarantee that one mobile belongs to one account.
+            # The duplicate checks in the register and profile-update routes
+            # are read-then-write and so are racy under concurrent requests;
+            # this closes that window. It also gives the number lookups in
+            # login and password reset an index to use.
+            # The partial filter exempts accounts with no mobile: null and
+            # missing values would otherwise all collide with each other.
+            IndexModel(
+                [("mobile", 1)],
+                unique=True,
+                partialFilterExpression={"mobile": {"$type": "string"}},
+                name="uniq_mobile",
+            ),
         ]
 
     def __repr__(self):
