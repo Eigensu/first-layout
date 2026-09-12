@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from beanie import PydanticObjectId
 
+from app.common.enums.enrollments import EnrollmentStatus
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
-from app.common.enums.enrollments import EnrollmentStatus
 
 
 async def count_global(player_id: str) -> int:
@@ -24,19 +25,27 @@ async def count_in_contest(player_id: str, contest_id: str) -> int:
     except Exception:
         return 0
 
-    enrollments = await TeamContestEnrollment.find({
-        "contest_id": contest_oid,
-        "status": EnrollmentStatus.ACTIVE,
-    }).project(TeamContestEnrollment.team_id).to_list()
+    enrollments = (
+        await TeamContestEnrollment.find(
+            {
+                "contest_id": contest_oid,
+                "status": EnrollmentStatus.ACTIVE,
+            }
+        )
+        .project(TeamContestEnrollment.team_id)
+        .to_list()
+    )
 
     if not enrollments:
         return 0
 
     team_ids = list({enr.team_id for enr in enrollments if enr.team_id})
-    return await Team.find({
-        "_id": {"$in": team_ids},
-        "player_ids": str(player_id),
-    }).count()
+    return await Team.find(
+        {
+            "_id": {"$in": team_ids},
+            "player_ids": str(player_id),
+        }
+    ).count()
 
 
 async def aggregate_hot_global(skip: int = 0, limit: int = 200) -> List[Dict[str, Any]]:
@@ -56,7 +65,9 @@ async def aggregate_hot_global(skip: int = 0, limit: int = 200) -> List[Dict[str
     return await coll.aggregate(pipeline).to_list(length=limit)
 
 
-async def aggregate_hot_in_contest(contest_id: str, skip: int = 0, limit: int = 200) -> List[Dict[str, Any]]:
+async def aggregate_hot_in_contest(
+    contest_id: str, skip: int = 0, limit: int = 200
+) -> List[Dict[str, Any]]:
     """Aggregate contest-specific hotness counts for all players in a contest.
 
     Returns list of documents: {"_id": player_id_str, "selection_count": int}

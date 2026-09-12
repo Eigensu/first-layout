@@ -1,8 +1,10 @@
 from typing import Optional, Tuple
-from fastapi import UploadFile, HTTPException, status
+
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorGridFSBucket
+from fastapi import HTTPException, UploadFile, status
 from gridfs import NoFile
+from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorGridFSBucket
+
 from config.database import get_database
 
 ALLOWED_MIME_TYPES = {
@@ -18,7 +20,8 @@ def _validate_image_file(file: UploadFile) -> None:
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_MIME_TYPES))}")
+            detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_MIME_TYPES))}",
+        )
 
 
 async def upload_avatar_to_gridfs(file: UploadFile, filename_prefix: str) -> str:
@@ -57,7 +60,9 @@ async def open_avatar_stream(file_id: str):
     try:
         oid = ObjectId(file_id)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id"
+        )
 
     db: AsyncIOMotorDatabase = get_database()
     bucket = AsyncIOMotorGridFSBucket(db, bucket_name="avatars")
@@ -65,7 +70,9 @@ async def open_avatar_stream(file_id: str):
     try:
         stream = await bucket.open_download_stream(oid)
     except NoFile:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found"
+        )
 
     # contentType can be on file document metadata
     file_doc = await bucket.find({"_id": oid}).to_list(length=1)
@@ -135,7 +142,9 @@ async def open_sponsor_logo_stream(file_id: str):
     try:
         oid = ObjectId(file_id)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id"
+        )
 
     db: AsyncIOMotorDatabase = get_database()
     bucket = AsyncIOMotorGridFSBucket(db, bucket_name="sponsor_logos")
@@ -143,7 +152,9 @@ async def open_sponsor_logo_stream(file_id: str):
     try:
         stream = await bucket.open_download_stream(oid)
     except NoFile:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found"
+        )
 
     file_doc = await bucket.find({"_id": oid}).to_list(length=1)
     content_type: Optional[str] = None
@@ -154,7 +165,9 @@ async def open_sponsor_logo_stream(file_id: str):
     return stream, (content_type or "application/octet-stream")
 
 
-async def upload_carousel_image_to_gridfs(file: UploadFile, filename_prefix: str) -> str:
+async def upload_carousel_image_to_gridfs(
+    file: UploadFile, filename_prefix: str
+) -> str:
     """Upload carousel image to GridFS (bucket 'carousel_images') and return file id"""
     _validate_image_file(file)
 
@@ -181,7 +194,9 @@ async def open_carousel_image_stream(file_id: str):
     try:
         oid = ObjectId(file_id)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id"
+        )
 
     db: AsyncIOMotorDatabase = get_database()
     bucket = AsyncIOMotorGridFSBucket(db, bucket_name="carousel_images")
@@ -189,7 +204,9 @@ async def open_carousel_image_stream(file_id: str):
     try:
         stream = await bucket.open_download_stream(oid)
     except NoFile:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Image not found"
+        )
 
     file_doc = await bucket.find({"_id": oid}).to_list(length=1)
     content_type: Optional[str] = None
@@ -213,6 +230,7 @@ async def delete_carousel_image_from_gridfs(file_id: str) -> bool:
         return True
     except Exception:
         return False
+
 
 async def delete_contest_logo_from_gridfs(file_id: str) -> bool:
     """Delete a contest logo file from the 'contest_logos' GridFS bucket"""
@@ -256,7 +274,9 @@ async def open_contest_logo_stream(file_id: str):
     try:
         oid = ObjectId(file_id)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file id"
+        )
 
     db: AsyncIOMotorDatabase = get_database()
     bucket = AsyncIOMotorGridFSBucket(db, bucket_name="contest_logos")
@@ -264,7 +284,9 @@ async def open_contest_logo_stream(file_id: str):
     try:
         stream = await bucket.open_download_stream(oid)
     except NoFile:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found"
+        )
 
     file_doc = await bucket.find({"_id": oid}).to_list(length=1)
     content_type: Optional[str] = None

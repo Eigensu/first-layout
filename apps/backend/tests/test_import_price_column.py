@@ -67,11 +67,11 @@ async def test_csv_example_row_matches_the_column_order(db):
     import csv
     import io
 
+    from app.utils.import_players.import_parsers import normalize_header
     from app.utils.import_players.import_template import (
         TEMPLATE_COLUMNS,
         generate_csv_template,
     )
-    from app.utils.import_players.import_parsers import normalize_header
 
     rows = list(csv.reader(io.StringIO(generate_csv_template())))
     header, example = rows[0], rows[1]
@@ -90,11 +90,11 @@ async def test_csv_example_row_matches_the_column_order(db):
 async def test_xlsx_example_row_matches_the_column_order(db):
     from openpyxl import load_workbook
 
+    from app.utils.import_players.import_parsers import normalize_header
     from app.utils.import_players.import_template import (
         TEMPLATE_HEADERS,
         generate_xlsx_template,
     )
-    from app.utils.import_players.import_parsers import normalize_header
 
     ws = load_workbook(await generate_xlsx_template())["Players"]
     header = [c.value for c in ws[1]]

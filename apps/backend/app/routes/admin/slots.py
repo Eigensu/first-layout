@@ -1,24 +1,22 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
-from beanie.operators import RegEx, Or, And
-from beanie import PydanticObjectId
+from typing import List, Optional
 
-from app.models.admin.slot import Slot
+from beanie import PydanticObjectId
+from beanie.operators import And, Or, RegEx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
 from app.models.admin.player import Player as AdminPlayer
+from app.models.admin.slot import Slot
+from app.models.user import User
+from app.schemas.admin.player import PlayerListResponse, PlayerResponse
 from app.schemas.admin.slot import (
     SlotCreate,
-    SlotUpdate,
-    SlotResponse,
     SlotListResponse,
-)
-from app.schemas.admin.player import (
-    PlayerResponse,
-    PlayerListResponse,
+    SlotResponse,
+    SlotUpdate,
 )
 from app.utils.dependencies import get_admin_user
-from app.models.user import User
 
 router = APIRouter(prefix="/api/admin/slots", tags=["Admin - Slots"])
 
@@ -53,7 +51,12 @@ async def get_slots(
     """List slots from the DB with computed player_count."""
     conditions = []
     if search:
-        conditions.append(Or(RegEx(Slot.name, search, options="i"), RegEx(Slot.code, search, options="i")))
+        conditions.append(
+            Or(
+                RegEx(Slot.name, search, options="i"),
+                RegEx(Slot.code, search, options="i"),
+            )
+        )
 
     if conditions:
         query = Slot.find(And(*conditions))
@@ -78,7 +81,9 @@ async def get_slots(
 
 @router.post("/migrate")
 async def migrate_slots_from_players(
-    dry_run: bool = Query(False, description="When true, does not write changes; returns a plan only."),
+    dry_run: bool = Query(
+        False, description="When true, does not write changes; returns a plan only."
+    ),
     current_user: User = Depends(get_admin_user),
 ):
     """Backfill Slot documents from distinct AdminPlayer.slot values and normalize players to reference Slot ObjectIds.
@@ -143,7 +148,11 @@ async def migrate_slots_from_players(
                 conditions = [AdminPlayer.slot == val]
                 if numeric_alt is not None:
                     conditions.append(AdminPlayer.slot == numeric_alt)
-                query = AdminPlayer.find(Or(*conditions)) if len(conditions) > 1 else AdminPlayer.find(AdminPlayer.slot == val)
+                query = (
+                    AdminPlayer.find(Or(*conditions))
+                    if len(conditions) > 1
+                    else AdminPlayer.find(AdminPlayer.slot == val)
+                )
                 players_to_update = await query.to_list()
 
                 for p in players_to_update:
@@ -154,7 +163,11 @@ async def migrate_slots_from_players(
                 conditions = [AdminPlayer.slot == val]
                 if numeric_alt is not None:
                     conditions.append(AdminPlayer.slot == numeric_alt)
-                query = AdminPlayer.find(Or(*conditions)) if len(conditions) > 1 else AdminPlayer.find(AdminPlayer.slot == val)
+                query = (
+                    AdminPlayer.find(Or(*conditions))
+                    if len(conditions) > 1
+                    else AdminPlayer.find(AdminPlayer.slot == val)
+                )
                 count = await query.count()
                 updated_counts[str(val)] = count
 
@@ -171,8 +184,14 @@ async def create_slot(
     current_user: User = Depends(get_admin_user),
 ):
     """Create and persist a new slot."""
-    if data.min_select is not None and data.max_select is not None and data.min_select > data.max_select:
-        raise HTTPException(status_code=400, detail="min_select cannot be greater than max_select")
+    if (
+        data.min_select is not None
+        and data.max_select is not None
+        and data.min_select > data.max_select
+    ):
+        raise HTTPException(
+            status_code=400, detail="min_select cannot be greater than max_select"
+        )
 
     # Uniqueness checks
     if await Slot.find_one(Slot.code == data.code):
@@ -220,7 +239,9 @@ async def update_slot(
     new_min = data.min_select if data.min_select is not None else slot.min_select
     new_max = data.max_select if data.max_select is not None else slot.max_select
     if new_min > new_max:
-        raise HTTPException(status_code=400, detail="min_select cannot be greater than max_select")
+        raise HTTPException(
+            status_code=400, detail="min_select cannot be greater than max_select"
+        )
 
     # Apply updates
     update_fields = data.model_dump(exclude_unset=True)
@@ -236,7 +257,9 @@ async def update_slot(
 @router.delete("/{slot_id}")
 async def delete_slot(
     slot_id: str,
-    force: bool = Query(False, description="Force delete: unassign players then delete"),
+    force: bool = Query(
+        False, description="Force delete: unassign players then delete"
+    ),
     current_user: User = Depends(get_admin_user),
 ):
     """Delete a slot. By default blocks if players are assigned; with force=true unassigns all then deletes."""
@@ -246,7 +269,10 @@ async def delete_slot(
 
     players_in_slot = await AdminPlayer.find(AdminPlayer.slot == slot_id).to_list()
     if players_in_slot and not force:
-        raise HTTPException(status_code=409, detail="Slot has assigned players. Use force=true to unassign and delete.")
+        raise HTTPException(
+            status_code=409,
+            detail="Slot has assigned players. Use force=true to unassign and delete.",
+        )
 
     unassigned = 0
     if players_in_slot:
@@ -278,7 +304,11 @@ async def get_slot_players(
     if team:
         conditions.append(AdminPlayer.team == team)
 
-    query = AdminPlayer.find(And(*conditions)) if len(conditions) > 1 else AdminPlayer.find(AdminPlayer.slot == slot_id)
+    query = (
+        AdminPlayer.find(And(*conditions))
+        if len(conditions) > 1
+        else AdminPlayer.find(AdminPlayer.slot == slot_id)
+    )
     total = await query.count()
     skip = (page - 1) * page_size
     players = await query.skip(skip).limit(page_size).to_list()
@@ -297,7 +327,8 @@ async def get_slot_players(
                 stats=p.stats,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
-            ) for p in players
+            )
+            for p in players
         ],
         "total": total,
         "page": page,

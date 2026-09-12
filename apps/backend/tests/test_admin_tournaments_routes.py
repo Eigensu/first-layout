@@ -48,7 +48,10 @@ class TestCreateTournament:
         assert first.status_code == 201
         second = await client.post("/api/admin/tournaments", json=payload)
         assert second.status_code == 400
-        assert "already exists" in second.json()["detail"] or "taken" in second.json()["detail"]
+        assert (
+            "already exists" in second.json()["detail"]
+            or "taken" in second.json()["detail"]
+        )
 
     async def test_create_rejects_start_after_end(self, client):
         resp = await client.post(
@@ -117,8 +120,15 @@ class TestListTournaments:
         assert body["tournaments"][0]["slug"] == "dpcl"
 
     async def test_list_combined_status_and_search_filters(self, client):
-        await self._create(client, "dpcl", "Delhi Premier Cricket League", status="live")
-        await self._create(client, "dpcl-archive", "Delhi Premier Cricket League Old", status="archived")
+        await self._create(
+            client, "dpcl", "Delhi Premier Cricket League", status="live"
+        )
+        await self._create(
+            client,
+            "dpcl-archive",
+            "Delhi Premier Cricket League Old",
+            status="archived",
+        )
         resp = await client.get(
             "/api/admin/tournaments", params={"status": "live", "search": "delhi"}
         )

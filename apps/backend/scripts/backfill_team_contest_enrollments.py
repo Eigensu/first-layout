@@ -4,10 +4,10 @@ from typing import Optional
 
 from beanie import PydanticObjectId
 
-from config.database import connect_to_mongo, close_mongo_connection
-from app.models.team import Team
 from app.models.contest import Contest
+from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from config.database import close_mongo_connection, connect_to_mongo
 
 
 async def resolve_contest(contest_id_value: str) -> Optional[Contest]:
@@ -48,7 +48,9 @@ async def backfill(dry_run: bool = True) -> None:
 
         contest = await resolve_contest(team.contest_id)
         if not contest:
-            print(f"[SKIP] No contest found for team {team.id} legacy contest_id='{team.contest_id}'")
+            print(
+                f"[SKIP] No contest found for team {team.id} legacy contest_id='{team.contest_id}'"
+            )
             skipped += 1
             continue
 
@@ -59,7 +61,9 @@ async def backfill(dry_run: bool = True) -> None:
             & (TeamContestEnrollment.status == "active")
         )
         if existing:
-            print(f"[SKIP] Enrollment already exists for team={team.id} contest={contest.id}")
+            print(
+                f"[SKIP] Enrollment already exists for team={team.id} contest={contest.id}"
+            )
             skipped += 1
             continue
 

@@ -1,7 +1,8 @@
-from beanie import Document, Indexed
-from pydantic import Field
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import Field
 
 
 class Slot(Document):

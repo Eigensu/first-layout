@@ -1,4 +1,5 @@
 import os
+
 import pymongo
 from pymongo.errors import DuplicateKeyError
 
@@ -7,11 +8,12 @@ NEW_DB_NAME = os.getenv("NEW_DB_NAME", "world_tower")
 USERS_COLL = os.getenv("USERS_COLL", "users")
 MONGO_URL = os.getenv("MONGO_URL")
 
+
 def main():
     if not MONGO_URL:
         print("Error: MONGO_URL environment variable is not set.")
         return
-    
+
     client = pymongo.MongoClient(MONGO_URL)
     old_coll = client[OLD_DB_NAME][USERS_COLL]
     new_coll = client[NEW_DB_NAME][USERS_COLL]
@@ -31,7 +33,10 @@ def main():
         except Exception as e:
             print(f"Error inserting user {user.get('_id')}: {e}")
 
-    print(f"Migration complete. Inserted {n_inserted} users into '{NEW_DB_NAME}.{USERS_COLL}'.")
+    print(
+        f"Migration complete. Inserted {n_inserted} users into '{NEW_DB_NAME}.{USERS_COLL}'."
+    )
+
 
 if __name__ == "__main__":
     main()
