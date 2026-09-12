@@ -25,6 +25,7 @@ from app.models.sponsor import Sponsor
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
+from app.models.tournament_membership import TournamentMembership
 from app.models.user import RefreshToken, User, UserProfile
 from app.utils.dependencies import get_admin_user
 
@@ -47,33 +48,55 @@ DOCUMENT_MODELS = [
     PasswordResetToken,
     GlobalSettings,
     Tournament,
+    TournamentMembership,
 ]
 
 
 # mongomock ignores partialFilterExpression and applies a unique index to every
 # document, so User's uniq_mobile would collide on the shared null of any two
 # accounts without a mobile -- which real MongoDB excludes from the index
-# entirely. Drop it for tests rather than forcing every fixture to invent a
-# distinct number. The routes' DuplicateKeyError handling is covered directly in
+# entirely. Drop these for tests rather than forcing every fixture to invent a
+# distinct value. The routes' DuplicateKeyError handling is covered directly in
 # tests/test_users_patch_me.py.
-_UNEMULATED_INDEXES = {"uniq_mobile"}
+#
+# The identity-array indexes are here for the same reason and one more: their
+# partial filters are what stop the unique constraint from applying to accounts
+# the backfill has not reached yet, so emulating them without the filter tests
+# the opposite of the intended behaviour. Their real shape is asserted
+# structurally in tests/test_user_identity.py.
+_UNEMULATED_INDEXES = {
+    "uniq_mobile",
+    "uniq_emails",
+    "uniq_mobiles",
+    "uniq_google_ids",
+    "uniq_legacy_row",
+}
 
 
 @pytest_asyncio.fixture
 async def db():
-    """Fresh in-memory MongoDB (via mongomock) and Beanie init per test."""
-    original = list(User.Settings.indexes)
-    User.Settings.indexes = [
-        idx
-        for idx in original
-        if getattr(idx, "document", {}).get("name") not in _UNEMULATED_INDEXES
-    ]
+    """Fresh in-memory MongoDB (via mongomock) and Beanie init per test.
+
+    Applies to every model rather than just User: TournamentMembership relies on
+    a partial filter for the same reason, and the next model to need one should
+    not have to rediscover why its tests fail.
+    """
+    originals = {
+        model: list(getattr(model.Settings, "indexes", [])) for model in DOCUMENT_MODELS
+    }
+    for model, original in originals.items():
+        model.Settings.indexes = [
+            idx
+            for idx in original
+            if getattr(idx, "document", {}).get("name") not in _UNEMULATED_INDEXES
+        ]
     client = AsyncMongoMockClient()
     try:
         await init_beanie(database=client["test-db"], document_models=DOCUMENT_MODELS)
         yield client
     finally:
-        User.Settings.indexes = original
+        for model, original in originals.items():
+            model.Settings.indexes = original
 
 
 @pytest.fixture
