@@ -71,16 +71,4 @@ export const authApi = {
     const response = await apiClient.get<User>('/api/users/me');
     return response.data;
   },
-
-  
-  /**
-   * Reset password by verifying mobile number
-   */
-  resetPasswordByMobile: async (payload: { mobile: string; new_password: string }): Promise<{ message: string }> => {
-    const response = await apiClient.post<{ message: string }>(
-      '/api/auth/reset-password-mobile',
-      payload
-    );
-    return response.data;
-  },
 };

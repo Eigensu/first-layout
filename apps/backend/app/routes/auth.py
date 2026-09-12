@@ -14,7 +14,6 @@ from app.schemas.auth import (
     ForgotPasswordReset,
     ForgotPasswordVerify,
     GoogleAuth,
-    ResetPasswordByMobile,
     Token,
     UserLogin,
     UserRegister,
@@ -314,33 +313,6 @@ async def logout(refresh_token: str):
         await token_doc.save()
 
     return {"message": "Successfully logged out"}
-
-
-@router.post("/reset-password-mobile")
-async def reset_password_by_mobile(payload: ResetPasswordByMobile):
-    """Reset password by verifying the provided mobile number matches a stored user."""
-    # Normalize input by digits to compare fairly
-    input_digits = "".join(ch for ch in payload.mobile if ch in ASCII_DIGITS)
-
-    matched_user = None
-    # Since mobile may be stored with symbols/spaces, scan users with a mobile set
-    async for u in User.find(User.mobile != None):
-        digits = "".join(ch for ch in (u.mobile or "") if ch in ASCII_DIGITS)
-        if digits and digits == input_digits:
-            matched_user = u
-            break
-
-    if not matched_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with provided mobile not found",
-        )
-
-    matched_user.hashed_password = get_password_hash(payload.new_password)
-    matched_user.updated_at = datetime.utcnow()
-    await matched_user.save()
-
-    return {"message": "Password updated successfully"}
 
 
 @router.post("/forgot-password/request")

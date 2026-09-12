@@ -11,7 +11,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
 import { GoogleSignInButton } from "./GoogleSignInButton";
-// Removed legacy ForgotPasswordModal in favor of new OTP flow pages
 
 // Validation schema: allow username (>=3 chars) OR mobile number (10-20 digits)
 const loginSchema = z.object({
