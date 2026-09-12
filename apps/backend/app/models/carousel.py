@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from pydantic import Field, HttpUrl
 from pymongo import IndexModel
 
@@ -21,10 +21,15 @@ class CarouselImage(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "carousel_images"  # MongoDB collection name
         use_state_management = False  # Disabled to avoid HttpUrl encoding issues
         indexes = [
+            "tournament_id",
             "display_order",
             "active",
             [(("created_at", -1))],

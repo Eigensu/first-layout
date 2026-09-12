@@ -15,6 +15,10 @@ class TeamContestEnrollment(Document):
     user_id: PydanticObjectId  # denormalized for faster queries
     contest_id: PydanticObjectId
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     status: EnrollmentStatus = EnrollmentStatus.ACTIVE
     enrolled_at: datetime = Field(default_factory=datetime.utcnow)
     removed_at: Optional[datetime] = None
@@ -22,6 +26,7 @@ class TeamContestEnrollment(Document):
     class Settings:
         name = "team_contest_enrollments"
         indexes = [
+            "tournament_id",
             "team_id",
             "contest_id",
             "user_id",
