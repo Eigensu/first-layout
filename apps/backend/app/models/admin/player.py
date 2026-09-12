@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Union
 
-from beanie import Document, Indexed
+from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field, field_validator
 
 
@@ -33,9 +33,14 @@ class Player(Document):
             f"Invalid type for slot: {type(v).__name__}. Expected str or int."
         )
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "players"
         indexes = [
+            "tournament_id",
             "name",
             "team",
             "slot",
