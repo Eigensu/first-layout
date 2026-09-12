@@ -1,12 +1,12 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import asyncio
 from datetime import datetime
 
-from config.database import connect_to_mongo, close_mongo_connection, get_database
+from config.database import close_mongo_connection, connect_to_mongo, get_database
 
 
 async def migrate() -> None:
@@ -15,8 +15,7 @@ async def migrate() -> None:
 
     # Unset legacy baseline fields from all documents
     result = await col.update_many(
-        {},
-        {"$unset": {"initial_points": "", "player_initial_points": ""}}
+        {}, {"$unset": {"initial_points": "", "player_initial_points": ""}}
     )
     print(
         f"[MIGRATION] unset initial_points/player_initial_points -> matched={result.matched_count}, modified={result.modified_count}"

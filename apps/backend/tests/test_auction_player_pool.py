@@ -36,9 +36,7 @@ async def _seed_players():
 
 async def test_auction_pool_excludes_unpriced_and_inactive(anon_client, db):
     await _seed_players()
-    contest = await _contest(
-        contest_format=ContestFormat.AUCTION_PURSE, squad_size=2
-    )
+    contest = await _contest(contest_format=ContestFormat.AUCTION_PURSE, squad_size=2)
 
     res = await anon_client.get(f"/api/players?contest_id={contest.id}")
 

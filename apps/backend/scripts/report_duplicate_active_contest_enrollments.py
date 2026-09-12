@@ -1,5 +1,5 @@
-import asyncio
 import argparse
+import asyncio
 import os
 import sys
 from datetime import datetime, timezone
@@ -7,7 +7,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-
 
 # Ensure the backend package root is importable when running this script directly.
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))

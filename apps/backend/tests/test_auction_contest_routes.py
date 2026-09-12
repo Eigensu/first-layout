@@ -51,9 +51,7 @@ async def test_rejects_squad_size_the_team_cap_cannot_satisfy(client, db):
     # Two teams only; a squad of 11 capped at 4 per team needs three.
     await _seed_pool(["A", "B"], per_team=8)
 
-    res = await client.post(
-        "/api/admin/contests", json=_payload(squad_size=11)
-    )
+    res = await client.post("/api/admin/contests", json=_payload(squad_size=11))
 
     assert res.status_code == 400
     assert "at least 3 teams" in res.json()["detail"]
@@ -107,9 +105,7 @@ async def test_update_cannot_make_a_contest_unsatisfiable(client, db):
     created = await client.post("/api/admin/contests", json=_payload())
     contest_id = created.json()["id"]
 
-    res = await client.put(
-        f"/api/admin/contests/{contest_id}", json={"squad_size": 99}
-    )
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"squad_size": 99})
 
     assert res.status_code == 400
     assert "auctioned player" in res.json()["detail"]

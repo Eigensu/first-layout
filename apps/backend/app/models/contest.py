@@ -1,13 +1,15 @@
+from datetime import datetime
+from typing import List, Optional
+
 from beanie import Document, Indexed
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, List
+
 from app.common.enums.contests import (
+    ContestFormat,
     ContestStatus,
+    ContestType,
     ContestVisibility,
     PointsScope,
-    ContestType,
-    ContestFormat,
 )
 from app.utils.timezone import now_ist
 
