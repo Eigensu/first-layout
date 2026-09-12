@@ -14,6 +14,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL, LS_KEYS } from "@/common/consts";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
+import { getImageUrl } from "@/lib/utils";
 import {
   publicContestsApi,
   type Contest,
@@ -398,11 +399,7 @@ function DashboardContent() {
                 <div className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-2xl overflow-hidden bg-slate-200 flex items-center justify-center text-xl font-bold text-slate-700 shrink-0">
                   {user?.avatar_url ? (
                     <img
-                      src={
-                        user.avatar_url.startsWith("/api")
-                          ? `${API_BASE_URL}${user.avatar_url}`
-                          : user.avatar_url
-                      }
+                      src={getImageUrl(user.avatar_url)}
                       alt={user?.username || "avatar"}
                       className="h-full w-full object-cover"
                     />

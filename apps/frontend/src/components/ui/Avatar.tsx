@@ -1,6 +1,6 @@
 import * as React from "react";
 import Image from "next/image";
-import { API_BASE_URL } from "@/common/consts";
+import { getImageUrl } from "@/lib/utils";
 
 interface AvatarProps {
   name: string;
@@ -56,9 +56,10 @@ const Avatar: React.FC<AvatarProps> = ({
   const baseClasses =
     "rounded-full flex items-center justify-center text-white font-bold";
 
-  // Build absolute src if backend returned a relative API path
-  const resolvedSrc =
-    src && src.startsWith("/api") ? `${API_BASE_URL}${src}` : src;
+  // GridFS-backed images come back as a relative "/api/..." path; getImageUrl
+  // resolves those against the API origin and passes absolute/blob/data URLs
+  // through untouched.
+  const resolvedSrc = getImageUrl(src) || undefined;
 
   if (resolvedSrc && !errored) {
     return (
