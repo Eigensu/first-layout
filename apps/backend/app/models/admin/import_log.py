@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from pydantic import Field
 
 
@@ -37,9 +37,14 @@ class ImportLog(Document):
     # Idempotency
     idempotency_key: Optional[str] = None
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "import_logs"
         indexes = [
+            "tournament_id",
             "user_id",
             "checksum",
             "idempotency_key",

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from beanie import Document, Indexed
+from beanie import Document, Indexed, PydanticObjectId
 from pydantic import ConfigDict, Field, HttpUrl
 from pymongo import IndexModel
 
@@ -38,10 +38,15 @@ class Sponsor(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "sponsors"  # MongoDB collection name
         use_state_management = False  # Disabled to avoid HttpUrl encoding issues
         indexes = [
+            "tournament_id",
             "name",
             "tier",
             [("display_order", 1)],

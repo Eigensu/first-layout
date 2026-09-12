@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, Optional
 
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from pydantic import Field, field_validator
 
 
@@ -39,9 +39,14 @@ class Player(Document):
             return str(v)
         return v
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "players"
         indexes = [
+            "tournament_id",
             "name",
             "team",
             "slot",

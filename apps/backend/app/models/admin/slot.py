@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from beanie import Document, Indexed
+from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field
 
 
@@ -17,9 +17,14 @@ class Slot(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "slots"
         indexes = [
+            "tournament_id",
             "code",
             "name",
         ]
