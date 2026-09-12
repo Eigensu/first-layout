@@ -1,7 +1,8 @@
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 from beanie import Document
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, Dict, Any
 
 
 class AdminActionLog(Document):

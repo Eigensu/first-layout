@@ -1,7 +1,8 @@
-from beanie import Document
-from pydantic import Field, HttpUrl
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document
+from pydantic import Field, HttpUrl
 from pymongo import IndexModel
 
 
@@ -32,7 +33,9 @@ class CarouselImage(Document):
         ]
 
     def __repr__(self):
-        return f"<CarouselImage {self.title or 'Untitled'} (order: {self.display_order})>"
+        return (
+            f"<CarouselImage {self.title or 'Untitled'} (order: {self.display_order})>"
+        )
 
     def __str__(self):
         return self.title or f"Carousel Image {self.id}"

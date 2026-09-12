@@ -19,7 +19,9 @@ def compute_contest_status(contest: Contest) -> ContestStatus:
     return ContestStatus.LIVE
 
 
-async def sync_contest_status(contest: Contest, *, persist: bool = True) -> ContestStatus:
+async def sync_contest_status(
+    contest: Contest, *, persist: bool = True
+) -> ContestStatus:
     """Compute and optionally persist the latest lifecycle status for a contest."""
     computed = compute_contest_status(contest)
     if contest.status != computed:

@@ -8,11 +8,12 @@ Run: python scripts/migrate_add_priority_to_sponsors.py
 """
 
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import init_beanie
 import sys
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
+
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Add parent directory to path to import from app
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -29,7 +30,9 @@ async def backfill_priorities():
         await client.admin.command("ping")
         print(f"✓ Connected to MongoDB at {settings.mongodb_url}")
 
-        await init_beanie(database=client[settings.mongodb_db_name], document_models=[Sponsor])
+        await init_beanie(
+            database=client[settings.mongodb_db_name], document_models=[Sponsor]
+        )
         print(f"✓ Initialized Beanie with database: {settings.mongodb_db_name}")
 
         # Load all sponsors
@@ -45,13 +48,26 @@ async def backfill_priorities():
         for featured_flag, items in groups.items():
             print(f"\nProcessing group featured={featured_flag} (count={len(items)})")
             # Already having priority > 0 remain in place; others get assigned
-            unset = [s for s in items if not isinstance(getattr(s, "priority", 0), int) or (s.priority or 0) <= 0]
-            keep = [s for s in items if isinstance(getattr(s, "priority", 0), int) and (s.priority or 0) > 0]
+            unset = [
+                s
+                for s in items
+                if not isinstance(getattr(s, "priority", 0), int)
+                or (s.priority or 0) <= 0
+            ]
+            keep = [
+                s
+                for s in items
+                if isinstance(getattr(s, "priority", 0), int) and (s.priority or 0) > 0
+            ]
 
             # Sort unset by display_order>0 then created_at
             def sort_key(s: Sponsor):
                 d = getattr(s, "display_order", 0) or 0
-                return (0 if d > 0 else 1, d if d > 0 else 0, getattr(s, "created_at", 0))
+                return (
+                    0 if d > 0 else 1,
+                    d if d > 0 else 0,
+                    getattr(s, "created_at", 0),
+                )
 
             unset.sort(key=sort_key)
 
@@ -83,7 +99,9 @@ async def backfill_priorities():
                     by_p[p] += 1
             dups = [p for p, c in by_p.items() if c > 1]
             if dups:
-                print(f"! WARNING: Duplicate priorities detected in featured={featured_flag}: {dups}")
+                print(
+                    f"! WARNING: Duplicate priorities detected in featured={featured_flag}: {dups}"
+                )
             else:
                 print(f"✓ Uniqueness within featured={featured_flag} verified")
 

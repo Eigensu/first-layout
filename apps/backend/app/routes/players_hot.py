@@ -1,12 +1,13 @@
-from typing import List, Optional, Literal
-from fastapi import APIRouter, HTTPException, Query
-from beanie import PydanticObjectId
+from typing import List, Literal, Optional
 
-from app.schemas.player_hot import PlayerHot, PlayerHotIds, PlayerHotSingle
-from app.schemas.player import PlayerOut
-from app.models.player import Player
-from app.services import hot_players as svc
+from beanie import PydanticObjectId
+from fastapi import APIRouter, HTTPException, Query
+
 from app.common.consts.index import HOT_PLAYER_TEAM_SELECTIONS_THRESHOLD
+from app.models.player import Player
+from app.schemas.player import PlayerOut
+from app.schemas.player_hot import PlayerHot, PlayerHotIds, PlayerHotSingle
+from app.services import hot_players as svc
 
 router = APIRouter(prefix="/api/players", tags=["players", "hot"])
 
@@ -50,7 +51,9 @@ async def list_hot_players(
 
     player_ids = [r["_id"] for r in rows if r.get("_id")]
     # Fetch Players in one query
-    players = await Player.find({"_id": {"$in": [PydanticObjectId(pid) for pid in player_ids if pid]}}).to_list()
+    players = await Player.find(
+        {"_id": {"$in": [PydanticObjectId(pid) for pid in player_ids if pid]}}
+    ).to_list()
     players_by_id = {str(p.id): p for p in players}
 
     items: List[PlayerHot] = []
@@ -90,7 +93,11 @@ async def list_hot_player_ids(
     else:
         rows = await svc.aggregate_hot_global(skip=skip, limit=limit)
 
-    ids = [str(r["_id"]) for r in rows if int(r.get("selection_count", 0)) >= thr and r.get("_id")]
+    ids = [
+        str(r["_id"])
+        for r in rows
+        if int(r.get("selection_count", 0)) >= thr and r.get("_id")
+    ]
     return PlayerHotIds(player_ids=ids, threshold=thr)
 
 

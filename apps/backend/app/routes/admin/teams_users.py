@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional, List
-from beanie import PydanticObjectId
+from typing import List, Optional
 
-from app.models.user import User
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.models.contest import Contest
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
-from app.models.contest import Contest
+from app.models.user import User
 from app.utils.dependencies import get_admin_user
 
 router = APIRouter(prefix="/api/admin", tags=["Admin - Users & Teams"])
@@ -22,7 +23,13 @@ async def users_with_teams(
     q = User.find_all()
     if search:
         from beanie.operators import Or, RegEx
-        q = User.find(Or(RegEx(User.username, search, options="i"), RegEx(User.full_name, search, options="i")))
+
+        q = User.find(
+            Or(
+                RegEx(User.username, search, options="i"),
+                RegEx(User.full_name, search, options="i"),
+            )
+        )
     total = await q.count()
     skip = (page - 1) * page_size
     users = await q.skip(skip).limit(page_size).to_list()
@@ -31,12 +38,14 @@ async def users_with_teams(
     for u in users:
         count = await Team.find(Team.user_id == u.id).count()
         if count > 0:
-            results.append({
-                "user_id": str(u.id),
-                "username": u.username,
-                "full_name": u.full_name,
-                "team_count": count,
-            })
+            results.append(
+                {
+                    "user_id": str(u.id),
+                    "username": u.username,
+                    "full_name": u.full_name,
+                    "team_count": count,
+                }
+            )
 
     return {
         "users": results,
@@ -74,11 +83,13 @@ async def get_user_teams_admin(
         if contest:
             team_ids = [t.id for t in teams]
             if team_ids:
-                enrs = await TeamContestEnrollment.find({
-                    "team_id": {"$in": team_ids},
-                    "contest_id": contest.id,
-                    "status": "active",
-                }).to_list()
+                enrs = await TeamContestEnrollment.find(
+                    {
+                        "team_id": {"$in": team_ids},
+                        "contest_id": contest.id,
+                        "status": "active",
+                    }
+                ).to_list()
                 for e in enrs:
                     enrollments_map[str(e.team_id)] = str(e.id)
 
@@ -94,7 +105,9 @@ async def get_user_teams_admin(
                 "team_name": t.team_name,
                 "total_points": t.total_points,
                 "created_at": t.created_at,
-                "enrolled": bool(enrollments_map.get(str(t.id))) if contest_id else None,
+                "enrolled": (
+                    bool(enrollments_map.get(str(t.id))) if contest_id else None
+                ),
                 "enrollment_id": enrollments_map.get(str(t.id)) if contest_id else None,
             }
             for t in teams

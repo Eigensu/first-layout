@@ -79,7 +79,10 @@ def test_players_without_a_team_are_not_capped():
 
 def test_contest_override_beats_global_setting(db):
     contest = Contest(
-        code="c", name="c", start_at=now_ist(), end_at=now_ist(),
+        code="c",
+        name="c",
+        start_at=now_ist(),
+        end_at=now_ist(),
         max_players_per_team=4,
     )
     settings = GlobalSettings(max_players_per_team=7)
@@ -107,9 +110,7 @@ async def _seed_pool(count_per_team: int, teams: list[str], price: float = 1000)
 @pytest.mark.asyncio
 async def test_feasible_config_passes(db):
     await _seed_pool(count_per_team=4, teams=["A", "B", "C"])
-    await assert_auction_config_feasible(
-        squad_size=6, purse=1_000_000, max_per_team=4
-    )
+    await assert_auction_config_feasible(squad_size=6, purse=1_000_000, max_per_team=4)
 
 
 @pytest.mark.asyncio
@@ -209,7 +210,10 @@ async def test_squad_over_purse_is_rejected(db):
     players = [_P(price=400_000, team=t, name=t) for t in ("A", "B", "C", "D")]
     with pytest.raises(HTTPException) as exc:
         await validate_auction_squad(
-            players, _auction_contest(purse=1_000_000), submitted_count=4, max_per_team=4
+            players,
+            _auction_contest(purse=1_000_000),
+            submitted_count=4,
+            max_per_team=4,
         )
     assert exc.value.detail["over_by"] == 600_000
 

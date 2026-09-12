@@ -7,7 +7,7 @@ format, loads the open pool, then submits a squad.
 from datetime import timedelta
 
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.models.admin.player import Player as AdminPlayer
 from app.models.user import User

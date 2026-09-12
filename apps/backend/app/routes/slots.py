@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
 
 from app.models.admin.slot import Slot
 from app.models.player import Player
-from app.schemas.slot import SlotPublic, SlotListPublic
+from app.schemas.slot import SlotListPublic, SlotPublic
 
 router = APIRouter(prefix="/api/slots", tags=["slots"])
 

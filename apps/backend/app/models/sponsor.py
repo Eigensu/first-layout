@@ -1,13 +1,15 @@
-from beanie import Document, Indexed
-from pydantic import Field, HttpUrl, ConfigDict
 from datetime import datetime
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import ConfigDict, Field, HttpUrl
 from pymongo import IndexModel
 
 
 class SponsorTier(str, Enum):
     """Sponsor tier levels"""
+
     PLATINUM = "platinum"
     GOLD = "gold"
     SILVER = "silver"
@@ -46,7 +48,11 @@ class Sponsor(Document):
             [("created_at", -1)],
             # Enforce uniqueness of priority per group (featured vs non-featured)
             # Partial index so it only applies when priority > 0 (before migration many docs have 0)
-            IndexModel([("featured", 1), ("priority", 1)], unique=True, partialFilterExpression={"priority": {"$gt": 0}}),
+            IndexModel(
+                [("featured", 1), ("priority", 1)],
+                unique=True,
+                partialFilterExpression={"priority": {"$gt": 0}},
+            ),
         ]
 
     def __repr__(self):

@@ -1,7 +1,9 @@
-from beanie import Document, Indexed
-from pydantic import Field
 from datetime import datetime
 from typing import Optional
+
+from beanie import Document, Indexed
+from pydantic import Field
+
 from app.common.enums.tournaments import TournamentStatus
 from app.utils.timezone import now_ist
 

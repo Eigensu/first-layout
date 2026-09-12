@@ -5,7 +5,7 @@ would strand squads that were legal when they were built.
 from datetime import timedelta
 
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player as AdminPlayer
@@ -146,9 +146,7 @@ async def test_tightening_the_purse_below_an_existing_team_is_refused(
 ):
     contest_id = await _contest_with_one_team(client, user_client)
 
-    res = await client.put(
-        f"/api/admin/contests/{contest_id}", json={"purse": 200_000}
-    )
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"purse": 200_000})
 
     assert res.status_code == 400
     detail = res.json()["detail"]
@@ -159,9 +157,7 @@ async def test_tightening_the_purse_below_an_existing_team_is_refused(
 async def test_shrinking_the_squad_size_is_refused(client, user_client, db):
     contest_id = await _contest_with_one_team(client, user_client)
 
-    res = await client.put(
-        f"/api/admin/contests/{contest_id}", json={"squad_size": 3}
-    )
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"squad_size": 3})
 
     assert res.status_code == 400
     detail = res.json()["detail"]
@@ -239,9 +235,7 @@ async def test_delete_player_is_refused_while_a_squad_holds_them(
     assert len((await _squad()).player_ids) == 4
 
 
-async def test_force_delete_strips_the_player_from_the_squad(
-    client, user_client, db
-):
+async def test_force_delete_strips_the_player_from_the_squad(client, user_client, db):
     contest_id = await _contest_with_one_team(client, user_client)
     captain = (await _squad()).captain_id
 
@@ -292,9 +286,7 @@ async def test_a_rule_change_still_trips_the_check_when_a_squad_is_broken(
     dropped = (await _squad()).player_ids[0]
     await client.delete(f"/api/admin/players/{dropped}?force=true")
 
-    res = await client.put(
-        f"/api/admin/contests/{contest_id}", json={"purse": 200_000}
-    )
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"purse": 200_000})
 
     assert res.status_code == 400, res.text
     assert "would break" in res.json()["detail"]["message"]

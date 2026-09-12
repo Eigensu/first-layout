@@ -21,8 +21,8 @@ import asyncio
 import sys
 from pathlib import Path
 
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Add parent directory to path to import from app
 sys.path.append(str(Path(__file__).resolve().parent.parent))

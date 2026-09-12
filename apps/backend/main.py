@@ -1,28 +1,36 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from pathlib import Path
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import uvicorn
-from datetime import datetime
-from config.settings import settings
 import logging
-from config.database import connect_to_mongo, close_mongo_connection
-from app.routes import auth_router, users_router, sponsors_router, leaderboard_router, contests_router, settings_router, tournaments_router
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from app.routes import (
+    auth_router,
+    contests_router,
+    leaderboard_router,
+    settings_router,
+    sponsors_router,
+    tournaments_router,
+    users_router,
+)
+from app.routes.admin import contests_router as admin_contests_router
+from app.routes.admin import players_import_router as admin_players_import_router
+from app.routes.admin import players_router as admin_players_router
+from app.routes.admin import settings_router as admin_settings_router
+from app.routes.admin import slots_router as admin_slots_router
+from app.routes.admin import tournaments_router as admin_tournaments_router
+from app.routes.admin import users_teams_router as admin_users_teams_router
+from app.routes.carousel import router as carousel_router
 from app.routes.players import router as players_router
 from app.routes.players_hot import router as players_hot_router
 from app.routes.slots import router as slots_router
 from app.routes.teams import router as teams_router
-from app.routes.carousel import router as carousel_router
-from app.routes.admin import (
-    players_router as admin_players_router,
-    slots_router as admin_slots_router,
-    players_import_router as admin_players_import_router,
-    contests_router as admin_contests_router,
-    users_teams_router as admin_users_teams_router,
-    settings_router as admin_settings_router,
-    tournaments_router as admin_tournaments_router,
-)
+from config.database import close_mongo_connection, connect_to_mongo
+from config.settings import settings
 
 # Logging configuration
 logging.basicConfig(
@@ -30,6 +38,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("app.startup")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,7 +55,7 @@ app = FastAPI(
     description="Fantasy Cricket Platform API with MongoDB Authentication",
     version="1.0.0",
     debug=settings.debug,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware with wildcard support (exact origins + optional regex)
@@ -87,23 +96,27 @@ app.include_router(carousel_router)
 
 # Files are served via API streaming endpoints (GridFS); no static uploads mount required
 
+
 @app.get("/")
 async def root():
     return {
         "message": "Walle Fantasy API is running!",
         "database": "MongoDB",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
+
 
 @app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",
         "database": "MongoDB connected",
-        "timestamp": datetime.now()
+        "timestamp": datetime.now(),
     }
 
+
 # Real players endpoints are provided via players_router
+
 
 @app.get("/api/leaderboard")
 async def get_leaderboard():
@@ -116,6 +129,7 @@ async def get_leaderboard():
         ]
     }
 
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
@@ -123,5 +137,5 @@ if __name__ == "__main__":
         port=settings.api_port,
         reload=settings.is_development,
         log_level="critical",
-        access_log=False
+        access_log=False,
     )

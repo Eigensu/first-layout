@@ -9,14 +9,14 @@ from datetime import timedelta
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.common.enums.contests import ContestFormat
 from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.user import User
-from app.utils.dependencies import get_current_active_user, get_admin_user
+from app.utils.dependencies import get_admin_user, get_current_active_user
 from app.utils.timezone import now_ist
 
 
@@ -101,10 +101,14 @@ def _body(players, contest, name="My Squad"):
 
 async def test_squad_within_purse_is_created(user_client, db):
     contest = await _auction_contest()
-    players = await _players([
-        ("a1", "A", 100_000), ("a2", "A", 100_000),
-        ("b1", "B", 100_000), ("b2", "B", 100_000),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 100_000),
+            ("a2", "A", 100_000),
+            ("b1", "B", 100_000),
+            ("b2", "B", 100_000),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -114,10 +118,14 @@ async def test_squad_within_purse_is_created(user_client, db):
 
 async def test_squad_over_purse_is_rejected(user_client, db):
     contest = await _auction_contest(purse=300_000)
-    players = await _players([
-        ("a1", "A", 100_000), ("a2", "A", 100_000),
-        ("b1", "B", 100_000), ("b2", "B", 100_000),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 100_000),
+            ("a2", "A", 100_000),
+            ("b1", "B", 100_000),
+            ("b2", "B", 100_000),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -127,9 +135,13 @@ async def test_squad_over_purse_is_rejected(user_client, db):
 
 async def test_squad_of_the_wrong_size_is_rejected(user_client, db):
     contest = await _auction_contest(squad_size=4)
-    players = await _players([
-        ("a1", "A", 1000), ("a2", "A", 1000), ("b1", "B", 1000),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 1000),
+            ("a2", "A", 1000),
+            ("b1", "B", 1000),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -140,10 +152,14 @@ async def test_squad_of_the_wrong_size_is_rejected(user_client, db):
 async def test_per_team_cap_uses_the_contest_override(user_client, db):
     # Global default is 7; this contest caps at 2.
     contest = await _auction_contest(max_players_per_team=2)
-    players = await _players([
-        ("a1", "A", 1000), ("a2", "A", 1000),
-        ("a3", "A", 1000), ("b1", "B", 1000),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 1000),
+            ("a2", "A", 1000),
+            ("a3", "A", 1000),
+            ("b1", "B", 1000),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -153,10 +169,14 @@ async def test_per_team_cap_uses_the_contest_override(user_client, db):
 
 async def test_unauctioned_player_cannot_be_picked(user_client, db):
     contest = await _auction_contest()
-    players = await _players([
-        ("a1", "A", 1000), ("a2", "A", 1000),
-        ("b1", "B", 1000), ("free", "B", 0),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 1000),
+            ("a2", "A", 1000),
+            ("b1", "B", 1000),
+            ("free", "B", 0),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -171,10 +191,14 @@ async def test_auction_squad_ignores_slot_rules(user_client, db):
 
     contest = await _auction_contest()
     # None of these carry a slot, which would fail the slot-based rules.
-    players = await _players([
-        ("a1", "A", 1000), ("a2", "A", 1000),
-        ("b1", "B", 1000), ("b2", "B", 1000),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 1000),
+            ("a2", "A", 1000),
+            ("b1", "B", 1000),
+            ("b2", "B", 1000),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -190,15 +214,20 @@ async def test_slot_based_contest_still_enforces_slot_rules(user_client, db):
 
     contest = await _make_contest(contest_format=ContestFormat.SLOT_BASED)
     # Only two players in a slot that requires four.
-    players = await _players([
-        ("a1", "A", 10, str(slot.id)),
-        ("a2", "A", 10, str(slot.id)),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 10, str(slot.id)),
+            ("a2", "A", 10, str(slot.id)),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
     assert res.status_code == 400
-    assert res.json()["detail"]["message"] == "Team violates per-slot selection constraints"
+    assert (
+        res.json()["detail"]["message"]
+        == "Team violates per-slot selection constraints"
+    )
 
 
 async def test_slot_based_contest_accepts_a_valid_squad(user_client, db):
@@ -206,10 +235,12 @@ async def test_slot_based_contest_accepts_a_valid_squad(user_client, db):
     await slot.insert()
 
     contest = await _make_contest(contest_format=ContestFormat.SLOT_BASED)
-    players = await _players([
-        ("a1", "A", 10, str(slot.id)),
-        ("b1", "B", 10, str(slot.id)),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 10, str(slot.id)),
+            ("b1", "B", 10, str(slot.id)),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
@@ -224,10 +255,12 @@ async def test_slot_based_squad_is_not_capped_by_a_purse(user_client, db):
     await slot.insert()
 
     contest = await _make_contest(contest_format=ContestFormat.SLOT_BASED, purse=1)
-    players = await _players([
-        ("a1", "A", 500_000, str(slot.id)),
-        ("b1", "B", 500_000, str(slot.id)),
-    ])
+    players = await _players(
+        [
+            ("a1", "A", 500_000, str(slot.id)),
+            ("b1", "B", 500_000, str(slot.id)),
+        ]
+    )
 
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 

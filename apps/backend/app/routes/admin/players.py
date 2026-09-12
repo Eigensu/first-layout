@@ -1,22 +1,23 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional
-from beanie.operators import RegEx, Or, And
 from datetime import datetime
+from typing import Optional
 
-from app.models.admin.player import Player
+from beanie import PydanticObjectId
+from beanie.operators import And, Or, RegEx
+from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.models.admin.audit_log import AdminActionLog
-from app.models.team import Team
+from app.models.admin.player import Player
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
-from beanie import PydanticObjectId
+from app.models.team import Team
+from app.models.user import User
 from app.schemas.admin.player import (
     PlayerCreate,
-    PlayerUpdate,
-    PlayerResponse,
     PlayerListResponse,
+    PlayerResponse,
+    PlayerUpdate,
 )
 from app.utils.dependencies import get_admin_user
-from app.models.user import User
 
 router = APIRouter(prefix="/api/admin/players", tags=["Admin - Players"])
 
@@ -85,7 +86,7 @@ async def get_players(
     """
     # Build query
     query_conditions = []
-    
+
     if search:
         query_conditions.append(
             Or(
@@ -93,27 +94,27 @@ async def get_players(
                 RegEx(Player.team, search, options="i"),
             )
         )
-    
+
     if status:
         query_conditions.append(Player.status == status)
-    
+
     # Execute query with filters
     if query_conditions:
         query = Player.find(And(*query_conditions))
     else:
         query = Player.find_all()
-    
+
     # Get total count
     total = await query.count()
-    
+
     # Apply sorting
     sort_direction = -1 if sort_order == "desc" else 1
     query = query.sort((sort_by, sort_direction))
-    
+
     # Apply pagination
     skip = (page - 1) * page_size
     players = await query.skip(skip).limit(page_size).to_list()
-    
+
     # Convert to response format
     player_responses = [
         PlayerResponse(
@@ -131,7 +132,7 @@ async def get_players(
         )
         for player in players
     ]
-    
+
     return PlayerListResponse(
         players=player_responses,
         total=total,
@@ -150,10 +151,10 @@ async def get_player(
     Requires authentication.
     """
     player = await Player.get(player_id)
-    
+
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    
+
     return PlayerResponse(
         id=str(player.id),
         name=player.name,
@@ -185,7 +186,7 @@ async def create_player(
             status_code=400,
             detail=f"Player with name '{player_data.name}' already exists",
         )
-    
+
     # Create player
     player = Player(
         name=player_data.name,
@@ -199,9 +200,9 @@ async def create_player(
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
-    
+
     await player.insert()
-    
+
     return PlayerResponse(
         id=str(player.id),
         name=player.name,
@@ -228,17 +229,17 @@ async def update_player(
     Requires authentication.
     """
     player = await Player.get(player_id)
-    
+
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    
+
     # Update only provided fields
     update_data = player_data.model_dump(exclude_unset=True)
-    
+
     if update_data:
         for field, value in update_data.items():
             setattr(player, field, value)
-        
+
         player.updated_at = datetime.utcnow()
         await player.save()
 
@@ -264,7 +265,9 @@ async def update_player(
             # Fetch all players needed across all teams in a single query
             players = []
             if all_player_ids:
-                players = await PublicPlayer.find({"_id": {"$in": list(all_player_ids)}}).to_list()
+                players = await PublicPlayer.find(
+                    {"_id": {"$in": list(all_player_ids)}}
+                ).to_list()
 
             # Build lookup of player -> points
             player_points_map = {p.id: float(p.points or 0.0) for p in players}
@@ -272,11 +275,13 @@ async def update_player(
             # Update each team's total using the pre-fetched points
             for team in impacted_teams:
                 player_object_ids = team_player_ids_map.get(team.id, [])
-                total = sum(player_points_map.get(obj_id, 0.0) for obj_id in player_object_ids)
+                total = sum(
+                    player_points_map.get(obj_id, 0.0) for obj_id in player_object_ids
+                )
                 team.total_points = total
                 team.updated_at = datetime.utcnow()
                 await team.save()
-    
+
     return PlayerResponse(
         id=str(player.id),
         name=player.name,
