@@ -924,19 +924,23 @@ nothing to rebuild:
 2. Delete `authApi.resetPasswordByMobile` and `ForgotPasswordModal.tsx` — both dead.
 3. Add the rate limits in §5.6.
 
-**But there is a hard ordering constraint, and it is the reason this cannot simply be
-deleted today.** Per §1.1a, `TWOFACTOR_API_KEY` is configured on **`lpcl` only**. On
-m11, third, mtc and fifth, `send_otp_autogen` fails, `/forgot-password/request`
-swallows the error and returns its generic success message, and the user waits for an
-SMS that was never sent. Deleting `/reset-password-mobile` on those four services
-would leave their users with **no working password reset at all**, silently.
+**Correcting an ordering constraint this document previously asserted.** An earlier
+draft said the endpoint could not be deleted until every tournament had a working OTP
+channel, on the reasoning that deleting it would strand users. That was wrong, and
+implementing it is what showed why: **`ForgotPasswordModal` is orphaned**, so the
+endpoint is not reachable from the product at all. No real user can get to it; only a
+direct API call can. Deleting it therefore takes nothing away from anyone.
 
-So stage C2 is really two steps:
+`fifth` having no working reset is a **separate, pre-existing outage** (§1.1a) that the
+deletion neither causes nor worsens. The two are independent:
 
-| | Step | Applies to |
-|---|---|---|
-| C2a | Configure a working reset channel — 2Factor credentials, or the Resend email channel from §5.4 — and verify end to end | **fifth** |
-| C2b | Delete the endpoint and the dead frontend code; add rate limits | lpcl, fifth |
+| | Step | Applies to | Depends on |
+|---|---|---|---|
+| C2a | Configure a working reset channel — 2Factor credentials, or the Resend email channel from §5.4 — and verify end to end | **fifth** | — |
+| C2b | Delete the endpoint and the dead frontend code | lpcl, fifth | — *(shipped)* |
+| C2c | Add rate limits (§5.6) | lpcl, fifth | a limiter backing store — `lpcl` has no `REDIS_URL` |
+
+C2b shipped first precisely because it turned out to depend on nothing.
 
 This also reframes C3: the **email channel is not merely additive**, it is a
 candidate way to give `fifth` a reset path at all — and, once there is one backend,
@@ -1696,7 +1700,8 @@ These block specific phases; everything else can be built without them.
 | B | `User` v2 model, membership model, identity/password services | A |
 | C | Auth route changes (`sub`, login resolution, register, Google) + tests | B |
 | C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a) | — |
-| C2b | **Close the reset gate** (§5.1): delete the endpoint + the dead modal and API wrapper, add rate limits (§5.6) | C2a |
+| C2b | ~~Close the reset gate~~ **shipped** — endpoint, schema, orphaned modal and dead API wrapper deleted; `client.ts` structured-error fix (§4.2) | — |
+| C2c | Rate limits on the auth routes (§5.6) | a limiter backing store — `lpcl` has no `REDIS_URL` |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B |
@@ -1714,10 +1719,13 @@ review before anything irreversible happens.
 the worst time to move teams and enrolments between databases. Off-season, most of the
 risk in that stage simply is not present.
 
-**C2a is the one to pull forward, and it depends on nothing at all.** `fifth` cannot
-reset a password today and fails silently while doing it (§1.1a) — a live user-facing
-outage nobody has reported because the UI says it worked. C2b (closing the gate) is
-blocked on it: delete the endpoint first and those users have no route back in.
+**C2b has shipped.** It turned out to depend on nothing: the endpoint was unreachable
+from the product, so removing it stranded nobody.
+
+**C2a is now the one to pull forward.** `fifth` cannot reset a password today and fails
+silently while doing it (§1.1a) — a live user-facing outage nobody has reported because
+the UI says it worked. It needs either 2Factor credentials on that service or the
+Resend channel from §5.4.
 
 Note the dependency change: **C3 no longer depends on C2.** If Resend lands before
 2Factor credentials are sorted, the email channel *is* C2a for `fifth` — and it is
