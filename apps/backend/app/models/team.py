@@ -27,6 +27,10 @@ class Team(Document):
     rank_change: Optional[int] = None  # positive = moved up, negative = moved down
     contest_id: Optional[str] = None  # Optional: reference to a contest
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -34,6 +38,7 @@ class Team(Document):
     class Settings:
         name = "teams"
         indexes = [
+            "tournament_id",
             "user_id",
             [("total_points", -1)],  # Descending order for leaderboard
             [("created_at", -1)],
