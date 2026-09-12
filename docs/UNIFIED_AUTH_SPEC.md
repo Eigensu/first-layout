@@ -938,7 +938,7 @@ deletion neither causes nor worsens. The two are independent:
 |---|---|---|---|
 | C2a | Configure a working reset channel — 2Factor credentials, or the Resend email channel from §5.4 — and verify end to end | **fifth** | — |
 | C2b | Delete the endpoint and the dead frontend code | lpcl, fifth | — *(shipped)* |
-| C2c | Add rate limits (§5.6) | lpcl, fifth | a limiter backing store — `lpcl` has no `REDIS_URL` |
+| C2c | Add rate limits — `docs/RATE_LIMITING_SPEC.md` | lpcl, fifth | — *(MongoDB-backed; no longer blocked on Redis)* |
 
 C2b shipped first precisely because it turned out to depend on nothing.
 
@@ -1098,22 +1098,25 @@ Behaviour to preserve or fix while touching this code:
 
 ### 5.6 Rate limiting
 
-There is none today, anywhere. Adding a second OTP channel without it means an
-attacker can burn your Resend quota and your 2Factor credits as well as enumerate
-accounts.
+There is none today, anywhere. Adding a second OTP channel without it means an attacker
+can burn your Resend quota and your 2Factor credits as well as enumerate accounts.
 
-`slowapi` is the conventional FastAPI choice. The one trap: **in-memory counters do not
-work across Railway replicas** — each instance keeps its own. `REDIS_URL` already exists
-in settings (currently unused) and is the natural backing store; a small Mongo
-TTL-collection counter is an acceptable alternative if you would rather not run Redis.
+**Specified separately in `docs/RATE_LIMITING_SPEC.md`** — it is platform-wide plumbing,
+independently shippable, and outlives this migration. The short version:
 
-| Endpoint | Suggested limit |
-|---|---|
-| `/forgot-password/request` | 3/hour per destination, 10/hour per IP |
-| `/forgot-password/verify` | 5 per session (already enforced by `attempts`), 20/hour per IP |
-| `/auth/login` | 10/minute per IP |
-| `/auth/register` | 5/hour per IP |
-| `/users/me/email/request` | 3/hour per user |
+- `slowapi` backed by **MongoDB** (`limits` supports `async+mongodb://`), so it needs no
+  new infrastructure and works on `lpcl`, which has no `REDIS_URL`.
+- **The identifier is the primary axis, not the IP.** Indian carriers run CGNAT, so an
+  IP-keyed login limit eventually locks out a whole carrier segment — during a contest
+  deadline. Tight per-account limits do the security work; the IP limit is a loose
+  backstop.
+- **Do not use slowapi's built-in key functions.** Behind Railway's proxy they resolve
+  to the proxy's address, which puts every user in one bucket.
+- **Ship in observe-only mode first**, tune from real traffic including one contest
+  deadline, then enforce the money endpoints before the login ones.
+
+The OTP send endpoints are the ones with a real budget attached, and they are the first
+to be enforced.
 
 ### 5.7 Changing the email on a profile
 
@@ -1701,7 +1704,7 @@ These block specific phases; everything else can be built without them.
 | C | Auth route changes (`sub`, login resolution, register, Google) + tests | B |
 | C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a) | — |
 | C2b | ~~Close the reset gate~~ **shipped** — endpoint, schema, orphaned modal and dead API wrapper deleted; `client.ts` structured-error fix (§4.2) | — |
-| C2c | Rate limits on the auth routes (§5.6) | a limiter backing store — `lpcl` has no `REDIS_URL` |
+| C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B |
