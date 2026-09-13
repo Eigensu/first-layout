@@ -1,8 +1,8 @@
 """Resolving who is signing in, and whether their password is one of theirs.
 
-Neither of these is wired into a route yet. They cannot be until the backfill
-populates `emails`/`mobiles` -- resolving against empty arrays would fail every
-login. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
+Used by the login and refresh routes. Every lookup falls back from the
+identity arrays to the scalar fields, so this works on accounts the backfill
+has not reached yet. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
 """
 
 from typing import List, Optional, Tuple
@@ -87,21 +87,76 @@ def mobile_candidates(digits: str) -> List[str]:
     return candidates
 
 
+def canonical_mobile(digits: str) -> str:
+    """The comparable form of a number, whichever way it was stored.
+
+    Reduces to the last ten digits, so "+91 98765 43210", "919876543210" and
+    "9876543210" -- all three of which the live data holds, written by
+    different code paths over the years -- compare equal.
+    """
+    return digits[-10:] if len(digits) > 10 else digits
+
+
+async def _holder_of(forms: List[str]) -> Optional[User]:
+    """The account holding any of these numbers, newest storage shape first.
+
+    The identity arrays are empty on every account until the backfill runs, so
+    a lookup that only consulted them would fail every existing user -- which
+    is the whole login route, on live tournaments. The scalar `mobile` is
+    therefore tried next, and it is indexed (uniq_mobile), so each form is a
+    single index hit rather than the collection walk this replaces.
+    """
+    for form in forms:
+        user = await User.find_one(User.mobiles == form)
+        if user:
+            return user
+    for form in forms:
+        user = await User.find_one(User.mobile == form)
+        if user:
+            return user
+    return None
+
+
+async def _holder_of_symbol_number(digits: str) -> Optional[User]:
+    """Last resort: a number stored before mobiles were normalised.
+
+    Registration and PATCH /me both store digits-only, so only rows written
+    before that normalisation can hold "+91 98765 43210", and only those are
+    read.
+    """
+    wanted = canonical_mobile(digits)
+    async for user in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
+        stored = digits_only(user.mobile or "")
+        # Compared canonically on both sides: the stored value is the one with
+        # the country code as often as the typed one is.
+        if stored and canonical_mobile(stored) == wanted:
+            return user
+    return None
+
+
+async def _by_email(value: str) -> Optional[User]:
+    """Email lookup, array first and the scalar behind it for the same reason."""
+    user = await User.find_one(User.emails == value)
+    if user:
+        return user
+    return await User.find_one(User.email == value)
+
+
 async def resolve_login_identity(identifier: str) -> Optional[User]:
     """Find the account signing in, by mobile, email, or (for now) username.
 
     Order matters, and the ordering rule is: exact matches on a real login key
     first, then an exact username, then the number forms that are only inferred.
 
-    Every lookup here is an indexed equality match. The paths this replaces
-    walked every user with a mobile set and compared digit by digit, which was
-    already the slowest thing in the login route and would have become five
-    times slower with five user collections merged into one.
+    Works before and after the backfill: the identity arrays are consulted
+    first and the scalar fields behind them, so this can ship to a live
+    tournament whose accounts have neither array populated yet.
     """
     value = identifier.strip().lower()
     if not value:
         return None
 
+    digits = ""
     derived: List[str] = []
 
     # An identifier holding "@" is an address, never a phone number, and it has
@@ -111,16 +166,17 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
     # resolve it to whichever unrelated account owns that mobile, then check
     # this person's password against that stranger's hash.
     if "@" in value:
-        user = await User.find_one(User.emails == value)
+        user = await _by_email(value)
         if user:
             return user
     elif is_phone_shaped(value):
         # Phone-shaped only: a username like "rahul123" must not be reduced to
         # "123" and looked up as somebody's number.
-        candidates = mobile_candidates(digits_only(value))
+        digits = digits_only(value)
+        candidates = mobile_candidates(digits)
         if candidates:
             exact, derived = candidates[0], candidates[1:]
-            user = await User.find_one(User.mobiles == exact)
+            user = await _holder_of([exact])
             if user:
                 return user
 
@@ -137,10 +193,11 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
     # username, so "9876543210" may be one person's name and, with a country
     # code bolted on, another person's number. An inferred form must never
     # outrank the exact username someone actually holds.
-    for candidate in derived:
-        user = await User.find_one(User.mobiles == candidate)
+    if digits:
+        user = await _holder_of(derived)
         if user:
             return user
+        return await _holder_of_symbol_number(digits)
 
     return None
 

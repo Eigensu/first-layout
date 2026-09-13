@@ -8,6 +8,7 @@ from beanie.operators import In
 
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.user import RefreshToken, User
+from app.services.auth.identity import resolve_login_identity
 from app.services.auth.twofactor import send_otp_autogen
 from app.services.auth.twofactor import verify_otp as provider_verify_otp
 from app.utils.security import get_password_hash
@@ -25,13 +26,9 @@ def _hash_token(token: str) -> str:
 
 
 async def start_session(phone: str) -> None:
-    user: Optional[User] = None
-    input_digits = "".join(ch for ch in phone if ch.isdigit())
-    async for u in User.find(User.mobile != None):
-        digits = "".join(ch for ch in (u.mobile or "") if ch.isdigit())
-        if digits and digits == input_digits:
-            user = u
-            break
+    # Same resolution the login route uses, rather than a second walk of the
+    # users collection that has to be kept in step with it by hand.
+    user: Optional[User] = await resolve_login_identity(phone)
     if not user:
         return
     await PasswordResetSession.find(
