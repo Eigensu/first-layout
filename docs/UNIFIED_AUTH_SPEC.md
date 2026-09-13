@@ -9,7 +9,7 @@ future, with each profile listing the tournaments that person took part in.
 
 ## 0. Decisions locked
 
-These twelve answers drive everything below. Changing one changes the design.
+These sixteen answers drive everything below. Changing one changes the design.
 
 | # | Decision | Choice |
 |---|---|---|
@@ -22,7 +22,7 @@ These twelve answers drive everything below. Changing one changes the design.
 | 7 | Admin rights | **Per-tournament roles** on the membership record, plus a small explicit **platform-admin** allowlist. A legacy admin does not become a platform admin. |
 | 8 | Cutover | **Backfill → verify → flip, one service at a time**, lowest-traffic first. |
 | 9 | Email OTP | **Password reset only**, via Resend, as a second channel alongside 2Factor SMS. Login stays password-based; signup gains no verification step. See §5. |
-| 10 | The open reset gate | **Fix deferred, tracked in §5.1**, not shipped as a standalone hotfix — it has to land on all five services. |
+| 10 | The open reset gate | **Endpoint deletion shipped as a standalone fix (C2b)** — it depended on nothing, per §5.1. Giving `fifth` a working reset channel (C2a) is a separate, still-open item. |
 | 11 | Email as a merge key | **Unchanged.** Any email match still auto-merges; mobile SMS reset stays available as the recovery path. Residual risk recorded in §10. |
 | 12 | Changing your email | Users can **change their email from their profile**, verified by a code sent to the new address (§5.7). |
 | 13 | Scope | Only **lpcl and fifth** are running tournaments, both on `main`. m11, third and mtc are retired — services archived, but their **user and participation data still migrates** so profiles show full history. |
@@ -1533,7 +1533,7 @@ app/routes/me_tournaments.py            GET /api/users/me/tournaments
 app/services/auth/email_otp.py          Resend transport, OTP generate/hash/verify
 app/services/auth/otp_session.py        channel-agnostic session start + verify
 app/routes/me_email.py                  POST /api/users/me/email/{request,verify}
-app/utils/rate_limit.py                 slowapi limiter, Redis-backed
+app/utils/rate_limit.py                 slowapi limiter, MongoDB-backed
 app/templates/otp_email.py              the reset-code email body
 scripts/unified_auth/00…07_*.py         env audit + migration scripts
 scripts/refresh_membership_stats.py     nightly reconcile
@@ -1556,8 +1556,8 @@ app/utils/dependencies.py   id-based sub, get_platform_admin, get_tournament_adm
 app/services/auth/google.py google_ids/emails arrays
 app/services/auth/password_reset.py   two channels, indexed lookups, verified-only
                                       reset, clears legacy_hashes (§5.5)
-app/routes/auth.py          DELETE /reset-password-mobile + its schema (§5.1)
-app/schemas/auth.py         drop ResetPasswordByMobile; channel on forgot-password
+app/schemas/auth.py         channel on forgot-password (ResetPasswordByMobile
+                             already dropped — shipped, §5.1)
 main.py                     mount the limiter (§5.6)
 app/routes/admin/*.py       guard swap (platform vs tournament)
 app/common/guards/auth_guard.py       update or delete
@@ -1571,10 +1571,12 @@ src/lib/api/tournaments.ts          new: getMyTournaments()
 src/lib/api/client.ts               send X-Tournament-Slug
 src/app/dashboard/page.tsx          Tournaments section (played / also registered)
 src/components/auth/LoginForm.tsx   "Mobile number or email"
-src/components/auth/ForgotPasswordModal.tsx  REBUILD as request → verify → set
-                                    password, with an SMS/email channel choice (§5.1)
-src/lib/api/auth.ts                 drop resetPasswordByMobile; add the three
-                                    forgot-password calls that were never wired up
+src/components/auth/ForgotPasswordModal.tsx  CREATE new: request → verify → set
+                                    password, with an SMS/email channel choice
+                                    (§5.1 — the old file was deleted as dead code)
+src/lib/api/auth.ts                 add the three forgot-password calls that were
+                                    never wired up (resetPasswordByMobile already
+                                    dropped — shipped, §5.1)
 src/app/dashboard/page.tsx          change-email flow (§5.7)
 src/utils/errors.ts                 ambiguous_identifier branch
 src/common/consts/index.ts          header name constant
@@ -1639,12 +1641,12 @@ New test files:
 | Extra valid passwords per account during the window | Low | Promote-on-use + 180-day sweep; stated in release notes. |
 | Profile page fans out across databases | Low | Stats are denormalized on the membership; cross-DB reads only in the nightly job. |
 | App and test model lists drift | Low | `tests/conftest.py` keeps its own list. Same class of bug `CLAUDE.md` already warns about. |
-| `/reset-password-mobile` stays open until the fix ships | **High** | Accepted by decision (§0, row 10). It is a live unauthenticated account takeover, and unification widens its blast radius from one tournament to all of them — so it should land early in stage C rather than late. Tracked in §5.1. |
+| ~~`/reset-password-mobile` stays open until the fix ships~~ | *Closed* | Endpoint, schema, orphaned modal and dead API wrapper deleted (§5.1, C2b) — it depended on nothing, so it shipped ahead of the rest of this migration. |
 | Unverified email as a merge key | Medium *(accepted)* | Decision #11 keeps auto-merge on any email match. Residual path: someone who typed a stranger's address at signup gets merged into that account and can sign in with their own password (§4.3 keeps both hashes). If this shows up in the Phase 1 report, the one-line mitigation is to add an `email_only_edge` flag so those components go to review instead of merging. |
 | Resend domain not warmed / mail lands in spam | Medium | Send from a verified subdomain, code in the subject line, DMARC at `p=none` first. Mobile SMS stays available as the fallback channel, so email deliverability is never the only route to recovery. |
 | Rate limiter state is per-replica | Medium | In-memory `slowapi` counters do not span Railway replicas. Back it with the existing `REDIS_URL`, or a Mongo TTL counter. |
 | Resend quota burned by an attacker | Low | The §5.6 per-destination and per-IP limits are the control; without them the request endpoint is an open mail relay to arbitrary addresses. |
-| **`fifth` has no working password reset** | **High** | `TWOFACTOR_*` is set on `lpcl` only (§1.1a); on `fifth` it fails silently behind the generic success message. Must be fixed *before* `/reset-password-mobile` is deleted, or those users lose reset entirely — stage C2a. |
+| **`fifth` has no working password reset** | **High** | `TWOFACTOR_*` is set on `lpcl` only (§1.1a); on `fifth` it fails silently behind the generic success message. A separate, pre-existing outage that `/reset-password-mobile`'s deletion (C2b, shipped) neither caused nor worsened — closing it is stage C2a. |
 | Recycled mobile numbers merge two strangers | **High** | `possible_recycled_mobile`: an uncorroborated mobile edge across disjoint activity windows goes to review. Threshold chosen from the Phase 1 gap histogram, not guessed (§7, Phase 1). |
 | ~~Feature branches drift further~~ | *Closed* | Both live services run `main` (§1.1). The feature branches and the forked repo belong to retired tournaments and are archived, not migrated. |
 | A route forgets its `tournament_id` filter and leaks across tournaments | **High** | One choke point (`scoped()`, §3.5) plus a test that walks every tenant model's routes. This is the cost of logical isolation and the reason it is bought in one place rather than trusted to twelve route files. |

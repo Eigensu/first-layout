@@ -51,19 +51,23 @@ async def test_reset_password_by_mobile_endpoint_is_gone(client, victim):
 
 @pytest.mark.asyncio
 async def test_knowing_a_mobile_cannot_change_a_password(client, victim):
-    """The property that actually matters, stated independently of the route.
+    """The property that actually matters, stated independently of any one route.
 
-    Asserted against the stored hash rather than the status code, so this still
-    fails if the endpoint returns under a different path or verb.
+    Walks the app's actual route table instead of guessing paths, so this still
+    fails if the same unauthenticated {mobile, new_password} takeover returns
+    under a different path or verb on any /api/auth/* route.
     """
-    for path in (
-        "/api/auth/reset-password-mobile",
-        "/api/auth/reset_password_mobile",
-        "/api/auth/reset-password",
-    ):
-        await client.post(
-            path, json={"mobile": "9876543210", "new_password": ATTACKER_PASSWORD}
-        )
+    from main import app
+
+    payload = {"mobile": "9876543210", "new_password": ATTACKER_PASSWORD}
+    unsafe_methods = {"POST", "PUT", "PATCH", "DELETE"}
+
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        if not path.startswith("/api/auth") or "{" in path:
+            continue
+        for method in getattr(route, "methods", set()) & unsafe_methods:
+            await client.request(method, path, json=payload)
 
     stored = await User.get(victim.id)
     assert verify_password(ORIGINAL_PASSWORD, stored.hashed_password)
