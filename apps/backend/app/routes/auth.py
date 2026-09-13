@@ -25,12 +25,18 @@ from app.services.auth.google import (
     find_or_create_google_user,
     verify_google_id_token,
 )
+from app.services.auth.identity import (
+    AmbiguousIdentifier,
+    promote_legacy_password,
+    resolve_login_identity,
+    verify_user_password,
+)
 from app.services.auth.password_reset import reset_password as pr_reset_password
 from app.services.auth.password_reset import start_session as pr_start_session
 from app.services.auth.password_reset import (
     verify_otp_and_issue_token as pr_verify_and_issue,
 )
-from app.utils.dependencies import get_current_active_user
+from app.utils.dependencies import get_current_active_user, resolve_token_subject
 from app.utils.gridfs import upload_avatar_to_gridfs
 from app.utils.security import (
     create_access_token,
@@ -99,6 +105,11 @@ async def register(
     new_user = User(
         username=user_data.username.lower(),
         email=user_data.email,
+        # Populated from the start so new accounts are already in the shape the
+        # backfill is working towards, and are covered by the unique identity
+        # indexes immediately rather than only once the migration reaches them.
+        emails=[str(user_data.email).lower()],
+        mobiles=[user_data.mobile] if user_data.mobile else [],
         hashed_password=hashed_password,
         full_name=user_data.full_name,
         mobile=user_data.mobile,
@@ -130,8 +141,8 @@ async def register(
         await new_user.save()
 
     # Generate tokens
-    access_token = create_access_token(data={"sub": new_user.username})
-    refresh_token = create_refresh_token(data={"sub": new_user.username})
+    access_token = create_access_token(data={"sub": str(new_user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(new_user.id)})
 
     # Store refresh token in database
     refresh_token_doc = RefreshToken(
@@ -154,24 +165,27 @@ async def login(user_data: UserLogin):
 
     identifier = (user_data.username or "").strip()
 
-    # First try username lookup (lowercased)
-    user = await User.find_one(User.username == identifier.lower())
+    try:
+        user = await resolve_login_identity(identifier)
+    except AmbiguousIdentifier:
+        # Structured on purpose: extractErrorMessage renders `message`, so the
+        # user is told what to do instead of being shown a generic failure for
+        # credentials that were actually correct.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ambiguous_identifier",
+                "message": (
+                    "That username belongs to more than one account. "
+                    "Please sign in with your mobile number or email instead."
+                ),
+            },
+        )
 
-    # If not found and identifier looks like a mobile, try matching by mobile digits
-    if not user:
-        input_digits = "".join(ch for ch in identifier if ch in ASCII_DIGITS)
-        if input_digits:
-            async for u in User.find(User.mobile != None):
-                digits = "".join(ch for ch in (u.mobile or "") if ch in ASCII_DIGITS)
-                if digits and digits == input_digits:
-                    user = u
-                    break
-
-    if (
-        not user
-        or not user.hashed_password
-        or not verify_password(user_data.password, user.hashed_password)
-    ):
+    password_ok, used_legacy = (
+        verify_user_password(user, user_data.password) if user else (False, False)
+    )
+    if not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -184,13 +198,18 @@ async def login(user_data: UserLogin):
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
+    if used_legacy:
+        # They signed in with a password carried over from one of the accounts
+        # this one was merged from. Promote it now so the merged account ends
+        # up with exactly one valid password rather than several.
+        await promote_legacy_password(user, user_data.password)
+
     # Update last login
     user.last_login = datetime.utcnow()
     await user.save()
 
-    # Generate tokens
-    access_token = create_access_token(data={"sub": user.username})
-    refresh_token = create_refresh_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
     # Store refresh token
     refresh_token_doc = RefreshToken(
@@ -225,8 +244,8 @@ async def google_auth(payload: GoogleAuth):
     user.last_login = datetime.utcnow()
     await user.save()
 
-    access_token = create_access_token(data={"sub": user.username})
-    refresh_token = create_refresh_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
     refresh_token_doc = RefreshToken(
         user_id=user.id,
@@ -270,9 +289,7 @@ async def refresh_token(refresh_token: str):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
         )
 
-    # Get user
-    username = payload.get("sub")
-    user = await User.find_one(User.username == username)
+    user = await resolve_token_subject(payload.get("sub") or "")
 
     if not user:
         raise HTTPException(
@@ -284,8 +301,8 @@ async def refresh_token(refresh_token: str):
     await token_doc.save()
 
     # Generate new tokens
-    new_access_token = create_access_token(data={"sub": user.username})
-    new_refresh_token = create_refresh_token(data={"sub": user.username})
+    new_access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
     # Store new refresh token
     new_token_doc = RefreshToken(

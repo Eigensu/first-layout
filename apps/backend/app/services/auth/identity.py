@@ -35,6 +35,16 @@ def digits_only(value: str) -> str:
     return "".join(ch for ch in value if ch in ASCII_DIGITS)
 
 
+def canonical_mobile(digits: str) -> str:
+    """The comparable form of a number, whichever way it was stored.
+
+    Reduces to the last ten digits, so "+91 98765 43210", "919876543210" and
+    "9876543210" -- all three of which the live data holds, written by
+    different code paths over the years -- compare equal.
+    """
+    return digits[-10:] if len(digits) > 10 else digits
+
+
 def mobile_candidates(digits: str) -> List[str]:
     """The forms a typed number might be stored as, most exact first.
 
@@ -58,26 +68,68 @@ def mobile_candidates(digits: str) -> List[str]:
     return candidates
 
 
+async def _by_mobile(digits: str) -> Optional[User]:
+    """Mobile lookup, newest storage shape first.
+
+    The identity arrays are empty on every account until the backfill runs, so
+    a lookup that only consulted them would fail every existing user -- which
+    is the whole login route, on live tournaments. The scalar `mobile` is
+    therefore tried next, and it is indexed (uniq_mobile), so the common case
+    is now a single index hit rather than the collection walk this replaces.
+
+    The scan at the end is the last resort, and it is much narrower than the
+    one it replaces: registration and PATCH /me both store digits-only, so only
+    rows written before that normalisation can hold a number with symbols in
+    it, and only those are read.
+    """
+    for candidate in mobile_candidates(digits):
+        user = await User.find_one(User.mobiles == candidate)
+        if user:
+            return user
+
+    for candidate in mobile_candidates(digits):
+        user = await User.find_one(User.mobile == candidate)
+        if user:
+            return user
+
+    wanted = canonical_mobile(digits)
+    async for user in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
+        stored = digits_only(user.mobile or "")
+        # Compared canonically on both sides: the stored value is the one with
+        # the country code as often as the typed one is.
+        if stored and canonical_mobile(stored) == wanted:
+            return user
+
+    return None
+
+
+async def _by_email(value: str) -> Optional[User]:
+    """Email lookup, array first and the scalar behind it for the same reason."""
+    user = await User.find_one(User.emails == value)
+    if user:
+        return user
+    return await User.find_one(User.email == value)
+
+
 async def resolve_login_identity(identifier: str) -> Optional[User]:
     """Find the account signing in, by mobile, email, or (for now) username.
 
-    Every lookup here is an indexed equality match. The paths this replaces
-    walked every user with a mobile set and compared digit by digit, which was
-    already the slowest thing in the login route and would have become five
-    times slower with five user collections merged into one.
+    Works before and after the backfill: the identity arrays are consulted
+    first and the scalar fields behind them, so this can ship to a live
+    tournament whose accounts have neither array populated yet.
     """
     value = identifier.strip().lower()
     if not value:
         return None
 
     digits = digits_only(value)
-    for candidate in mobile_candidates(digits):
-        user = await User.find_one(User.mobiles == candidate)
+    if digits:
+        user = await _by_mobile(digits)
         if user:
             return user
 
     if "@" in value:
-        user = await User.find_one(User.emails == value)
+        user = await _by_email(value)
         if user:
             return user
 
