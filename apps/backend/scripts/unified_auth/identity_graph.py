@@ -53,6 +53,10 @@ class LegacyRow:
     full_name: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True
+    # Not used to decide who is who -- only to build the account afterwards.
+    hashed_password: Optional[str] = None
+    is_verified: bool = False
+    avatar_file_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
