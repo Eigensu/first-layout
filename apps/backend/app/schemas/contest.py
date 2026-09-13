@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List, Literal
 from datetime import datetime
-from app.utils.timezone import to_ist, IST
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.utils.timezone import IST, to_ist
 
 
 class ContestCreate(BaseModel):
@@ -23,20 +25,23 @@ class ContestCreate(BaseModel):
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def require_squad_size_for_auction(self):
         if self.contest_format == "auction_purse" and self.squad_size is None:
-            raise ValueError("squad_size is required when contest_format is auction_purse")
+            raise ValueError(
+                "squad_size is required when contest_format is auction_purse"
+            )
         return self
 
-    @field_validator('start_at', 'end_at', mode='before')
+    @field_validator("start_at", "end_at", mode="before")
     @classmethod
     def parse_as_ist(cls, v):
         """Parse datetime as IST if naive, preserve timezone if already set."""
         if isinstance(v, str):
             # Parse ISO string
             from datetime import datetime as dt
-            parsed = dt.fromisoformat(v.replace('Z', '+00:00'))
+
+            parsed = dt.fromisoformat(v.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 # Treat naive datetime as IST (user's local time)
                 return parsed.replace(tzinfo=IST)
@@ -67,14 +72,15 @@ class ContestUpdate(BaseModel):
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
 
-    @field_validator('start_at', 'end_at', mode='before')
+    @field_validator("start_at", "end_at", mode="before")
     @classmethod
     def parse_as_ist(cls, v):
         """Parse datetime as IST if naive, preserve timezone if already set."""
         if isinstance(v, str):
             # Parse ISO string
             from datetime import datetime as dt
-            parsed = dt.fromisoformat(v.replace('Z', '+00:00'))
+
+            parsed = dt.fromisoformat(v.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 # Treat naive datetime as IST (user's local time)
                 return parsed.replace(tzinfo=IST)
@@ -114,7 +120,7 @@ class ContestResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_validator('start_at', 'end_at', 'created_at', 'updated_at', mode='before')
+    @field_validator("start_at", "end_at", "created_at", "updated_at", mode="before")
     @classmethod
     def ensure_ist(cls, v):
         """Ensure all datetime fields are in IST timezone"""

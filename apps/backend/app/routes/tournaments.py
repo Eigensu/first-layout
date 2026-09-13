@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
 from typing import List
 
-from app.models.tournament import Tournament
+from fastapi import APIRouter, HTTPException
+
 from app.common.enums.tournaments import TournamentStatus
+from app.models.tournament import Tournament
 from app.schemas.tournament import PublicTournamentResponse
 
 router = APIRouter(prefix="/api/tournaments", tags=["Tournaments"])

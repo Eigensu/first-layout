@@ -1,21 +1,23 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TeamCreate(BaseModel):
     """Schema for creating a new team"""
+
     team_name: str = Field(..., min_length=1, max_length=100)
     player_ids: List[str] = Field(..., description="List of player IDs")
     captain_id: str
     vice_captain_id: str
     contest_id: Optional[str] = None
 
-    @field_validator('player_ids')
+    @field_validator("player_ids")
     @classmethod
     def validate_player_ids(cls, v):
         if not v or len(v) < 1:
-            raise ValueError('At least 1 player is required')
+            raise ValueError("At least 1 player is required")
         return v
 
     class Config:
@@ -25,13 +27,14 @@ class TeamCreate(BaseModel):
                 "player_ids": ["player1", "player2", "player3", "player4"],
                 "captain_id": "player1",
                 "vice_captain_id": "player2",
-                "contest_id": "contest123"
+                "contest_id": "contest123",
             }
         }
 
 
 class TeamUpdate(BaseModel):
     """Schema for updating a team"""
+
     team_name: Optional[str] = None
     player_ids: Optional[List[str]] = None
     captain_id: Optional[str] = None
@@ -39,15 +42,13 @@ class TeamUpdate(BaseModel):
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "team_name": "Updated Team Name",
-                "captain_id": "player3"
-            }
+            "example": {"team_name": "Updated Team Name", "captain_id": "player3"}
         }
 
 
 class TeamResponse(BaseModel):
     """Schema for team response"""
+
     id: str
     user_id: str
     team_name: str
@@ -78,13 +79,14 @@ class TeamResponse(BaseModel):
                 "rank_change": 2,
                 "contest_id": "contest123",
                 "created_at": "2024-01-01T00:00:00",
-                "updated_at": "2024-01-01T00:00:00"
+                "updated_at": "2024-01-01T00:00:00",
             }
         }
 
 
 class TeamsListResponse(BaseModel):
     """Schema for list of teams response"""
+
     teams: List[TeamResponse]
     total: int
 
@@ -105,9 +107,9 @@ class TeamsListResponse(BaseModel):
                         "rank_change": 2,
                         "contest_id": "contest123",
                         "created_at": "2024-01-01T00:00:00",
-                        "updated_at": "2024-01-01T00:00:00"
+                        "updated_at": "2024-01-01T00:00:00",
                     }
                 ],
-                "total": 1
+                "total": 1,
             }
         }

@@ -1,7 +1,8 @@
-from beanie import Document, Indexed, PydanticObjectId
-from pydantic import Field
 from datetime import datetime, timedelta
 from typing import Optional
+
+from beanie import Document, Indexed, PydanticObjectId
+from pydantic import Field
 
 
 class PasswordResetSession(Document):
@@ -12,7 +13,9 @@ class PasswordResetSession(Document):
     status: str = "pending"
     attempts: int = 0
     max_attempts: int = 5
-    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + timedelta(minutes=10))
+    expires_at: datetime = Field(
+        default_factory=lambda: datetime.utcnow() + timedelta(minutes=10)
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
