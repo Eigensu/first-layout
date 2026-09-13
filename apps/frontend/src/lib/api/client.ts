@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, CONTENT_TYPES, AUTH, API, ROUTES, LS_KEYS } from '@/common/consts';
+import { extractErrorMessage } from '@/utils/errors';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -134,7 +135,11 @@ export const getErrorMessage = (error: unknown): string => {
         })
         .join('; ');
     } else if (detailRaw && typeof detailRaw === 'object') {
-      detail = JSON.stringify(detailRaw);
+      // Structured `detail` objects (per-slot violations, auction over_by, and
+      // anything added later) have one parser: extractErrorMessage. Stringifying
+      // here instead put raw JSON in front of the user on every auth route,
+      // because this is the helper AuthContext funnels login errors through.
+      detail = extractErrorMessage(detailRaw);
     }
     
     // Check for specific 401 errors

@@ -118,31 +118,6 @@ class TokenData(BaseModel):
     exp: Optional[datetime] = None
 
 
-class ResetPasswordByMobile(BaseModel):
-    mobile: str
-    new_password: str = Field(..., min_length=8)
-
-    @validator("mobile")
-    def mobile_basic_validation(cls, v):
-        v = v.strip()
-        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
-        if len(digits) < 10 or len(digits) > 15:
-            raise ValueError("Mobile must be 10-15 digits")
-        return v
-
-    @validator("new_password")
-    def password_strength(cls, v):
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not any(char.isdigit() for char in v):
-            raise ValueError("Password must contain at least one digit")
-        if not any(char.isupper() for char in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(char.islower() for char in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        return v
-
-
 class ChangePassword(BaseModel):
     """Schema for authenticated user password change"""
 
