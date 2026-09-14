@@ -69,6 +69,7 @@ _UNEMULATED_INDEXES = {
     "uniq_emails",
     "uniq_mobiles",
     "uniq_google_ids",
+    "uniq_apple_ids",
     "uniq_legacy_row",
 }
 
