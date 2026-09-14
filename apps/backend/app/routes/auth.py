@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
     ASCII_DIGITS,
+    AppleAuth,
     ChangePassword,
     ForgotPasswordRequest,
     ForgotPasswordReset,
@@ -20,6 +21,11 @@ from app.schemas.auth import (
     UserRegister,
 )
 from app.schemas.user import UserResponse
+from app.services.auth.apple import (
+    AppleTokenError,
+    find_or_create_apple_user,
+    verify_apple_identity_token,
+)
 from app.services.auth.google import (
     GoogleTokenError,
     find_or_create_google_user,
@@ -235,6 +241,41 @@ async def google_auth(payload: GoogleAuth):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
     user = await find_or_create_google_user(token_payload)
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
+        )
+
+    user.last_login = datetime.utcnow()
+    await user.save()
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    refresh_token_doc = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+    )
+    await refresh_token_doc.insert()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/apple", response_model=Token)
+async def apple_auth(payload: AppleAuth):
+    """Sign up or log in using an Apple identity token from expo-apple-authentication."""
+    try:
+        token_payload = await verify_apple_identity_token(payload.identity_token)
+    except AppleTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+    user = await find_or_create_apple_user(token_payload, payload.full_name)
 
     if not user.is_active:
         raise HTTPException(

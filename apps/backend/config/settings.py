@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Google OAuth (Sign in with Google)
     google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
 
+    # Apple Sign In — the native mobile identity token's `aud` claim is the
+    # app's iOS bundle identifier (not a web "Services ID"), so this must
+    # equal the mobile app's ios.bundleIdentifier.
+    apple_bundle_id: Optional[str] = Field(default=None, alias="APPLE_BUNDLE_ID")
+
     # MongoDB Database
     mongodb_url: str = Field(default="mongodb://localhost:27017", alias="MONGODB_URL")
     mongodb_db_name: str = Field(default="world-tower", alias="MONGODB_DB_NAME")

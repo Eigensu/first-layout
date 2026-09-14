@@ -103,6 +103,17 @@ class GoogleAuth(BaseModel):
     id_token: str
 
 
+class AppleAuth(BaseModel):
+    """Schema for Sign in with Apple (native expo-apple-authentication on iOS)"""
+
+    identity_token: str
+    # Apple only returns the user's name on the very first authorization, and
+    # never puts it in the identity token itself -- the client sends it
+    # (already joined from fullName.givenName/familyName) so it can be
+    # persisted on first sign-in. Absent on every subsequent sign-in.
+    full_name: Optional[str] = None
+
+
 class Token(BaseModel):
     """Schema for JWT token response"""
 
