@@ -62,11 +62,13 @@ class User(Document):
     emails: List[str] = Field(default_factory=list)
     mobiles: List[str] = Field(default_factory=list)
     google_ids: List[str] = Field(default_factory=list)
-    # Optional because Google-signup accounts have no password until the
+    apple_ids: List[str] = Field(default_factory=list)
+    # Optional because Google/Apple-signup accounts have no password until the
     # user sets one (see auth_provider).
     hashed_password: Optional[str] = None
-    auth_provider: str = "password"  # "password" | "google"
+    auth_provider: str = "password"  # "password" | "google" | "apple"
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     full_name: Optional[str] = None
     mobile: Optional[str] = None
     is_active: bool = True
@@ -98,6 +100,7 @@ class User(Document):
             "username",
             "email",
             "google_id",
+            "apple_id",
             [("created_at", -1)],
             # Database-level guarantee that one mobile belongs to one account.
             # The duplicate checks in the register and profile-update routes
@@ -144,6 +147,12 @@ class User(Document):
                 unique=True,
                 partialFilterExpression={"google_ids.0": {"$exists": True}},
                 name="uniq_google_ids",
+            ),
+            IndexModel(
+                [("apple_ids", 1)],
+                unique=True,
+                partialFilterExpression={"apple_ids.0": {"$exists": True}},
+                name="uniq_apple_ids",
             ),
             "merge_state",
         ]
