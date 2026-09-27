@@ -15,6 +15,8 @@ from app.utils.security import get_password_hash, verify_password
 # collision checks and the unique indexes.
 ASCII_DIGITS = "0123456789"
 
+INDIA_COUNTRY_CODE = "91"
+
 
 class AmbiguousIdentifier(Exception):
     """More than one account answers to this username.
@@ -44,17 +46,30 @@ def mobile_candidates(digits: str) -> List[str]:
     through one path may hold 9876543210 and another 919876543210 for the same
     phone. Someone typing "+91 98765 43210" should reach either.
 
-    The exact match is always tried first, so the suffix fallback only decides
-    cases the exact form could not, and the unique index means it can match at
-    most one account.
+    The fallback therefore has to work in both directions. Stripping a country
+    code handles a long input against a short stored value; adding one handles
+    a short input against a long stored value, which is the case a user hits
+    every time they update their number through the profile and then sign in
+    with the ten digits they have always typed.
+
+    The exact match is always tried first, so a fallback only decides cases the
+    exact form could not, and the unique index means each candidate can match
+    at most one account.
     """
     if not digits:
         return []
     candidates = [digits]
     if len(digits) > 10:
         suffix = digits[-10:]
-        if suffix != digits:
+        if suffix not in candidates:
             candidates.append(suffix)
+    elif len(digits) == 10:
+        # The only country code this product has ever issued numbers for. A
+        # general phone library would be overkill for one prefix, but leaving
+        # this direction out strands anyone whose stored number carries it.
+        prefixed = f"{INDIA_COUNTRY_CODE}{digits}"
+        if prefixed not in candidates:
+            candidates.append(prefixed)
     return candidates
 
 
@@ -70,16 +85,21 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
     if not value:
         return None
 
-    digits = digits_only(value)
-    for candidate in mobile_candidates(digits):
-        user = await User.find_one(User.mobiles == candidate)
-        if user:
-            return user
-
+    # An identifier holding "@" is an address, never a phone number, and it has
+    # to be treated as one *before* anything reduces it to its digits.
+    # "9876543210@example.com" is a perfectly ordinary address here -- a phone
+    # number as the local part is common -- and digit-reducing it first would
+    # resolve it to whichever unrelated account owns that mobile, then check
+    # this person's password against that stranger's hash.
     if "@" in value:
         user = await User.find_one(User.emails == value)
         if user:
             return user
+    else:
+        for candidate in mobile_candidates(digits_only(value)):
+            user = await User.find_one(User.mobiles == candidate)
+            if user:
+                return user
 
     # Transitional: someone typing the username they have always used. Once
     # usernames are no longer unique this can only be honoured when it is

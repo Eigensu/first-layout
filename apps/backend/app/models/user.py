@@ -47,7 +47,20 @@ class LegacyAccountRef(BaseModel):
 class User(Document):
     """User document model for MongoDB using Beanie ODM"""
 
-    username: Indexed(str, unique=True)  # type: ignore
+    # A display name, NOT a login key, and deliberately NOT unique: each source
+    # database enforced uniqueness only within itself, so two unrelated people
+    # who both picked "rahul" are both correct and both have to survive the
+    # merge. Resolution treats an ambiguous username as a 409 rather than a
+    # guess -- see app/services/auth/identity.py.
+    #
+    # This field previously read `Indexed(str, unique=True)`, which looked like
+    # an active constraint and is not one: `Settings.indexes` also declares
+    # "username", and beanie's merge_indexes keys candidates by their fields and
+    # lets the Settings entry win, so the resolved index has always been a plain
+    # non-unique `username_1`. Removing the wrapper changes no index -- it
+    # removes a declaration that contradicted both the spec and the behaviour,
+    # and that anyone reasoning about the merge would reasonably believe.
+    username: str
     email: Indexed(EmailStr, unique=True)  # type: ignore
 
     # --- identity, post-unification ----------------------------------------
