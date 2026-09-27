@@ -20,6 +20,7 @@ from app.models.user import MERGE_STATE_CLEAN, LegacyHash, User
 from app.services.auth.identity import (
     AmbiguousIdentifier,
     digits_only,
+    is_phone_shaped,
     mobile_candidates,
     promote_legacy_password,
     resolve_login_identity,
@@ -190,6 +191,72 @@ def test_mobile_candidates_fall_back_in_both_directions():
     assert mobile_candidates("") == []
     # The exact form is always first, so a fallback only decides what it could not.
     assert mobile_candidates("9876543210")[0] == "9876543210"
+
+
+@pytest.mark.asyncio
+async def test_an_all_digit_username_is_not_shadowed_by_an_inferred_number(db):
+    """Registration accepts an all-digit username, so the two overlap.
+
+    "9876543210" can be one person's username and, with a country code bolted
+    on, another person's stored number. The inferred form must lose to the exact
+    username, or the first person is permanently locked out and their password
+    is checked against the second person's hash.
+    """
+    named_in_digits = User(
+        username="9876543210",
+        email="digits@example.com",
+        emails=["digits@example.com"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await named_in_digits.insert()
+    owner_of_the_number = User(
+        username="numberowner",
+        email="owner@example.com",
+        mobile="919876543210",
+        mobiles=["919876543210"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await owner_of_the_number.insert()
+
+    found = await resolve_login_identity("9876543210")
+    assert found is not None and found.id == named_in_digits.id
+
+    # The number's owner is still reachable by what they actually typed.
+    found = await resolve_login_identity("919876543210")
+    assert found is not None and found.id == owner_of_the_number.id
+
+
+@pytest.mark.asyncio
+async def test_a_username_containing_digits_is_never_read_as_a_number(db):
+    """ "rahul123" must not be reduced to "123" and looked up as a mobile."""
+    owner_of_123 = User(
+        username="short",
+        email="short@example.com",
+        mobile="123",
+        mobiles=["123"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await owner_of_123.insert()
+    mixed = User(
+        username="rahul123",
+        email="rahul123@example.com",
+        emails=["rahul123@example.com"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await mixed.insert()
+
+    found = await resolve_login_identity("rahul123")
+    assert found is not None and found.id == mixed.id
+
+
+def test_is_phone_shaped_accepts_only_typed_number_punctuation():
+    assert is_phone_shaped("9876543210")
+    assert is_phone_shaped("+91 98765-43210")
+    assert is_phone_shaped("(098) 765 4321")
+    assert not is_phone_shaped("rahul123")
+    assert not is_phone_shaped("rahul")
+    assert not is_phone_shaped("")
+    assert not is_phone_shaped("+-()")  # punctuation with no digits at all
 
 
 # --------------------------------------------------------------------------

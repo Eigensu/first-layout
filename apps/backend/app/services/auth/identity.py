@@ -37,6 +37,20 @@ def digits_only(value: str) -> str:
     return "".join(ch for ch in value if ch in ASCII_DIGITS)
 
 
+# The punctuation a phone number gets typed with. Anything else means the
+# identifier is not a number at all, however many digits it happens to contain.
+PHONE_PUNCTUATION = frozenset(" +-().")
+
+
+def is_phone_shaped(value: str) -> bool:
+    """True when every character could belong to a typed phone number."""
+    return (
+        bool(value)
+        and any(ch in ASCII_DIGITS for ch in value)
+        and all(ch in ASCII_DIGITS or ch in PHONE_PUNCTUATION for ch in value)
+    )
+
+
 def mobile_candidates(digits: str) -> List[str]:
     """The forms a typed number might be stored as, most exact first.
 
@@ -76,6 +90,9 @@ def mobile_candidates(digits: str) -> List[str]:
 async def resolve_login_identity(identifier: str) -> Optional[User]:
     """Find the account signing in, by mobile, email, or (for now) username.
 
+    Order matters, and the ordering rule is: exact matches on a real login key
+    first, then an exact username, then the number forms that are only inferred.
+
     Every lookup here is an indexed equality match. The paths this replaces
     walked every user with a mobile set and compared digit by digit, which was
     already the slowest thing in the login route and would have become five
@@ -84,6 +101,8 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
     value = identifier.strip().lower()
     if not value:
         return None
+
+    derived: List[str] = []
 
     # An identifier holding "@" is an address, never a phone number, and it has
     # to be treated as one *before* anything reduces it to its digits.
@@ -95,9 +114,13 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
         user = await User.find_one(User.emails == value)
         if user:
             return user
-    else:
-        for candidate in mobile_candidates(digits_only(value)):
-            user = await User.find_one(User.mobiles == candidate)
+    elif is_phone_shaped(value):
+        # Phone-shaped only: a username like "rahul123" must not be reduced to
+        # "123" and looked up as somebody's number.
+        candidates = mobile_candidates(digits_only(value))
+        if candidates:
+            exact, derived = candidates[0], candidates[1:]
+            user = await User.find_one(User.mobiles == exact)
             if user:
                 return user
 
@@ -109,6 +132,15 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
         return matches[0]
     if len(matches) > 1:
         raise AmbiguousIdentifier(value)
+
+    # Last: the number forms nobody typed. Registration accepts an all-digit
+    # username, so "9876543210" may be one person's name and, with a country
+    # code bolted on, another person's number. An inferred form must never
+    # outrank the exact username someone actually holds.
+    for candidate in derived:
+        user = await User.find_one(User.mobiles == candidate)
+        if user:
+            return user
 
     return None
 
