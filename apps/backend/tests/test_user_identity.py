@@ -20,6 +20,7 @@ from app.models.user import MERGE_STATE_CLEAN, LegacyHash, User
 from app.services.auth.identity import (
     AmbiguousIdentifier,
     digits_only,
+    mobile_candidates,
     promote_legacy_password,
     resolve_login_identity,
     verify_user_password,
@@ -129,6 +130,68 @@ def test_digits_only_rejects_unicode_numerals():
     assert digits_only("٩٨٧٦٥") == ""
 
 
+@pytest.mark.asyncio
+async def test_an_address_whose_local_part_is_someone_elses_mobile(db):
+    """The identifier must be read as an address before it is read as digits.
+
+    Phone-number-as-local-part is ordinary here. Reducing the identifier to its
+    digits first resolved "9876543210@example.com" to whoever owns the mobile
+    9876543210, and then checked this person's password against that stranger's
+    hash -- a refused login for them, and the wrong account entirely if the two
+    passwords ever coincided.
+    """
+    owner_of_the_number = User(
+        username="numberowner",
+        email="owner@example.com",
+        mobile="9876543210",
+        mobiles=["9876543210"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await owner_of_the_number.insert()
+
+    owner_of_the_address = User(
+        username="addressowner",
+        email="9876543210@example.com",
+        emails=["9876543210@example.com"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await owner_of_the_address.insert()
+
+    found = await resolve_login_identity("9876543210@example.com")
+    assert found is not None
+    assert found.id == owner_of_the_address.id
+
+
+@pytest.mark.asyncio
+async def test_local_digits_reach_a_number_stored_with_its_country_code(db):
+    """PATCH /api/users/me accepts 10-15 digits, so both forms exist.
+
+    Stripping a country code was already handled; adding one was not, so an
+    account that had updated its number through the profile could no longer be
+    reached by the ten digits its owner has always typed.
+    """
+    user = User(
+        username="prefixed",
+        email="prefixed@example.com",
+        mobile="919876543210",
+        mobiles=["919876543210"],
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await user.insert()
+
+    for typed in ("9876543210", "919876543210", "+91 98765 43210"):
+        found = await resolve_login_identity(typed)
+        assert found is not None and found.id == user.id, typed
+
+
+def test_mobile_candidates_fall_back_in_both_directions():
+    assert mobile_candidates("9876543210") == ["9876543210", "919876543210"]
+    assert mobile_candidates("919876543210") == ["919876543210", "9876543210"]
+    assert mobile_candidates("") == []
+    # The exact form is always first, so a fallback only decides what it could not.
+    assert mobile_candidates("9876543210")[0] == "9876543210"
+
+
 # --------------------------------------------------------------------------
 # passwords
 # --------------------------------------------------------------------------
@@ -203,6 +266,28 @@ def test_is_admin_is_kept_alongside_is_platform_admin():
 
 def test_merge_state_defaults_to_clean():
     assert User.model_fields["merge_state"].default == MERGE_STATE_CLEAN
+
+
+def test_username_carries_no_unique_index():
+    """Two unrelated people may both be "rahul", and both must survive Phase 2.
+
+    Each source database enforced uniqueness only within itself. A unique index
+    here would abort the merge on the second such account, and would also make
+    the ambiguous-username 409 unreachable -- the state it exists to report
+    could never be created.
+    """
+    from beanie.odm.fields import IndexModelField
+
+    for entry in User.Settings.indexes:
+        document = getattr(entry, "document", None)
+        if document is None:
+            continue
+        keys = [k for k, _ in document.get("key", {}).items()]
+        if keys == ["username"]:
+            assert not document.get("unique", False)
+
+    annotation = User.model_fields["username"].annotation
+    assert annotation is str, f"username should be a plain str, got {annotation!r}"
 
 
 @pytest.mark.parametrize("name", ["uniq_emails", "uniq_mobiles", "uniq_google_ids"])
