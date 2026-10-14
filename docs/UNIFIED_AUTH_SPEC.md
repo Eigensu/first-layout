@@ -178,7 +178,7 @@ one database; the only distinction that matters is whether a collection is **glo
 or **tenant-scoped**.
 
 ```
-walle_fantasy/
+walle_arena/
 
   ── global: no tournament_id, shared by every tournament ──
   users                      one document per real person
@@ -200,6 +200,9 @@ walle_fantasy/
   ── singleton ──
   global_settings
 ```
+
+The name is `walle_arena` because `walle_fantasy` is already taken: it is the oldest
+tournament's database and one of the migration's sources (§7, Phase 0 results).
 
 **Three global tables carry the whole idea:**
 
@@ -1288,6 +1291,63 @@ The service↔tenant mapping is already known from the Railway hosts (§1.1); wh
 still has to establish is which **database name** each service points at, since
 `MONGODB_DB_NAME` values are redacted to a read-only integration.
 
+#### Results (run 2026-10-15)
+
+Run read-only against the production cluster, with a supplementary read-only pass for
+what the script does not yet report (dates, email counts, collections present; see
+below). Counts only; no identifiers were exported. **These numbers supersede the
+"five databases" assumption elsewhere in this document.**
+
+**The live services use `Dcpl` and `rspl`** (confirmed). They are also the only two
+databases with any activity since May 2026.
+
+| Database | Accounts | With mobile | First signup → last login | Notes |
+|---|---|---|---|---|
+| `rspl` | 75 | 75 | 2026-09-07 → 2026-10-14 | **live** |
+| `Dcpl` | 397 | 145 | 2026-07-17 → 2026-09-23 | **live**; `tournaments` registry: `dcpl`, `tests`, `rspl`; 260 Google-linked |
+| `epl` | 76 | 76 | 2026-04-09 → 2026-05-17 | |
+| `jpl` | 72 | 72 | 2026-04-18 → 2026-05-04 | |
+| `tyrant` | 178 | 172 | 2026-03-20 → 2026-04-24 | |
+| `jmcl` | 116 | 116 | 2026-03-20 → 2026-04-21 | |
+| `mjpl` | 118 | 114 | 2026-03-24 → 2026-04-20 | one later signup, 2026-08-20 |
+| `cccl` | 154 | 152 | 2026-03-14 → 2026-04-14 | |
+| `mwpl` | 123 | 116 | 2025-11-27 → 2026-03-20 | |
+| `jypl` | 222 | 220 | 2026-02-24 → 2026-03-11 | |
+| `world_tower` | 203 | 191 | 2025-10-05 → 2026-03-04 | |
+| `lodha-park` | 92 | 86 | 2025-11-27 → 2026-02-01 | |
+| `melangeindia11` | 149 | 148 | 2025-12-28 → 2026-01-12 | |
+| `mtc-intervillage` | 137 | 135 | 2026-01-02 → 2026-01-11 | |
+| `walle_fantasy` | 110 | 108 | 2025-10-05 → 2026-01-02 | the only `avatars` bucket (6 files) |
+| **Total** | **2,222** | **1,926** | | 15 source databases |
+
+What follows from it:
+
+- **The unified database is `walle_arena`, not `walle_fantasy`.** `walle_fantasy`
+  already exists as the oldest tournament's database and is one of the sources.
+  `walle_arena` does not exist in the cluster yet. Phases 2–6 write to whatever
+  `MONGODB_DB_NAME` is set to, so they run with `MONGODB_DB_NAME=walle_arena`.
+- **No other database holds accounts.** `walle-register`, `walle-regi-owner` and
+  `jmcl-register` contain only `players`, `payments` and `app_config`.
+  `tournament_aggregator` contains `tournaments` (10 rows) and `carousel_slides`; its
+  registry is a candidate seed for `walle_arena`'s, which Phase 2 needs to hold a row
+  for every source, retired ones included. There is no database named for
+  `walle-landing-backend` in this cluster.
+- **Overlap**, using Phase 1's own normaliser: 1,446 distinct mobiles and 1,850
+  distinct emails; 218 mobiles and 245 emails appear in two or more databases. A few
+  hundred accounts will merge.
+- **`MAX_ROWS_PER_KEY = 3` holds at fifteen sources.** It discards 6 mobiles (47
+  accounts), none carrying one consistent name, which looks right. It also discards
+  11 emails (55 accounts), of which 2 carry one consistent or blank name and may be
+  genuine regulars of four or more tournaments; those two people would stay split,
+  which is a manual link in review rather than a reason to raise the cut.
+- **No database holds the same mobile or email twice** (after normalisation), so R9
+  does not trigger on today's data. It remains a defect for rows created later.
+- **`Dcpl`'s registry includes a `tests` tournament**, which probably should not
+  migrate.
+- **The script reports less than this section promises.** `01_inventory.py` does not
+  report email counts, `created_at` ranges or collections present; the dates and
+  collections above came from the supplementary pass.
+
 ### Phase 0b — configuration audit (`00_env_audit.py`)
 
 Run **before** anything else, and again immediately before each flip. Railway returns
@@ -1660,10 +1720,13 @@ New test files:
 
 These block specific phases; everything else can be built without them.
 
-1. ~~Which service maps to which tournament?~~ **Answered** (§1.1). Still needed:
-   the five `MONGODB_DB_NAME` **values** — two for the live tournaments, three for the
-   retired databases being read for history. Names are redacted to the integration; a
-   30-second check in the Railway dashboard settles it. *Blocks Phase 1.*
+1. ~~Which databases are the sources?~~ **Answered** by Phase 0 (§7): fifteen source
+   databases; the live services use `Dcpl` and `rspl`; the unified database is
+   `walle_arena`.
+1b. **Which slug does each source database get?** Phase 2 takes `--map sourcedb=slug`
+   for all fifteen and needs a `walle_arena` registry row for each. Known so far:
+   `dcpl` and `rspl`. `tournament_aggregator`'s ten registry rows may supply most of the
+   rest. Also: does `Dcpl`'s `tests` tournament migrate? *Blocks Phase 2.*
 2. ~~Do all services run this repo's code?~~ **Closed.** Both live services run `main`
    from `Eigensu/first-layout`. The feature branches and the forked repo belong to
    retired tournaments and are archived rather than migrated.
@@ -1672,12 +1735,11 @@ These block specific phases; everything else can be built without them.
 3. **Who should be platform admins?** An explicit list of emails/mobiles. Everyone
    else with legacy `is_admin` becomes an admin of their own tournament only.
    *Blocks Phase 2.*
-4. **Are `walle-register` and `walle-landing-backend` (separate Railway projects) also
-   holding user accounts** that should fold in, or are they unrelated?
-   *Blocks scope of Phase 1.*
-5. **Roughly how many users per database?** Sizes the review queue and tells us
-   whether a 2-minute flip window is realistic. (Phase 0 answers this precisely; a
-   rough number now helps plan.)
+4. ~~Do `walle-register` and `walle-landing-backend` hold user accounts?~~ **Answered**
+   by Phase 0: no. The register databases hold `players`, `payments` and `app_config`
+   only, and no database in the cluster is named for `walle-landing-backend`.
+5. ~~Roughly how many users per database?~~ **Answered** by Phase 0: 2,222 accounts
+   across fifteen databases, the largest 397 (`Dcpl`); see the table in §7.
 6. **How long do the legacy `users` collections stay?** Suggested: keep them untouched
    for 90 days post-cutover, then rename to `users_pre_unification`, then drop after a
    full backup.
@@ -1762,13 +1824,13 @@ PR can say which items it closes.
   resolves it with `User.find_one(User.username == ...)` (`app/utils/dependencies.py:39`).
   Two migrated people who share a username can then each present their own valid token
   and be authenticated as whichever document Mongo returns first.
-  The dry run itself is safe before #42 lands: `walle_fantasy` is a new database and no
-  live service reads it. **Booting today's `main` against the dry-run database to click
-  around is not safe.** Smoke-test only with a build that includes #42.
+  The dry run itself is safe before #42 lands: `walle_arena` does not exist yet, and the
+  live services read `Dcpl` and `rspl`. **Booting today's `main` against the dry-run
+  database to click around is not safe.** Smoke-test only with a build that includes #42.
 - [ ] **G2 — Phase 1 always gets explicit sources.** `02_build_identity_graph.py:133`
   falls back to `list_candidate_databases()` (`loader.py:10`), which returns every
-  non-system database in the cluster, including `walle_fantasy` itself and unrelated
-  apps, and their users enter the identity graph. Until `--db` is made required, pass it
+  non-system database in the cluster, including `walle_arena` itself once it exists and
+  the register and aggregator databases, and their users would enter the identity graph. Until `--db` is made required, pass it
   for every source. Discovery is fine for the read-only `01_inventory.py`.
 
 ### 13.2 Identity: the wrong people merged, or dead credentials revived
