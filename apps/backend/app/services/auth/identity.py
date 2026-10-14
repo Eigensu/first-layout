@@ -122,10 +122,13 @@ async def _holder_of_symbol_number(digits: str) -> Optional[User]:
 
     Registration and PATCH /me both store digits-only, so only rows written
     before that normalisation can hold "+91 98765 43210", and only those are
-    read.
+    read. `$type: "string"` is what keeps it that narrow: `$not` on its own also
+    matches a null or missing field, which is every account with no mobile.
     """
     wanted = canonical_mobile(digits)
-    async for user in User.find({"mobile": {"$not": {"$regex": "^[0-9]+$"}}}):
+    async for user in User.find(
+        {"mobile": {"$type": "string", "$not": {"$regex": "^[0-9]+$"}}}
+    ):
         stored = digits_only(user.mobile or "")
         # Compared canonically on both sides: the stored value is the one with
         # the country code as often as the typed one is.
