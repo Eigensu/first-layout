@@ -1298,8 +1298,9 @@ what the script does not yet report (dates, email counts, collections present; s
 below). Counts only; no identifiers were exported. **These numbers supersede the
 "five databases" assumption elsewhere in this document.**
 
-**The live services use `Dcpl` and `rspl`** (confirmed). They are also the only two
-databases with any activity since May 2026.
+**The live services use `Dcpl` and `rspl`** (confirmed; which service serves which is
+under *Source mapping* below). They are also the only two databases with any
+activity since May 2026.
 
 | Database | Accounts | With mobile | First signup → last login | Notes |
 |---|---|---|---|---|
@@ -1342,11 +1343,61 @@ What follows from it:
   which is a manual link in review rather than a reason to raise the cut.
 - **No database holds the same mobile or email twice** (after normalisation), so R9
   does not trigger on today's data. It remains a defect for rows created later.
-- **`Dcpl`'s registry includes a `tests` tournament**, which probably should not
-  migrate.
+- **`Dcpl`'s registry includes a `tests` tournament.** It does not migrate (see
+  *Source mapping*).
 - **The script reports less than this section promises.** `01_inventory.py` does not
   report email counts, `created_at` ranges or collections present; the dates and
   collections above came from the supplementary pass.
+
+#### Source mapping (decided 2026-10-15)
+
+Ten sources match a row in `tournament_aggregator.tournaments` by name, dates and
+hosting backend; the other five were named from their contest names. The aggregator's
+`api_url` also shows which service serves the live databases: **second-layout
+(`api-lpcl`) serves `Dcpl` and fifth-layout (`fifth-api`) serves `rspl`.** The service
+hostnames were reused across seasons (`api-lpcl` hosted Lodha Park, then World Towers,
+then DCPL, each with its own database).
+
+| Source database | Tournament | When | Slug |
+|---|---|---|---|
+| `walle_fantasy` | TPL Season 11 | Oct–Nov 2025 | `tpl-s11` |
+| `mwpl` | MWPL | Dec 2025 – Mar 2026 | `mwpl` |
+| `lodha-park` | Lodha Park | Jan 2026 | `lpcl` |
+| `melangeindia11` | Melange Team11 | Jan 2026 | `m11` |
+| `mtc-intervillage` | MTC Marudha Cup | Jan 2026 | `mtc` |
+| `world_tower` | World Towers Premier League | Feb 2026 | `wtpl` |
+| `jypl` | JYPL Season 9 | Feb–Mar 2026 | `jypl-s9` |
+| `cccl` | Colaba Cricket Club | Mar–Apr 2026 | `cccl` |
+| `mjpl` | Mewad Jain Premier League | Mar 2026 | `mjpl` |
+| `tyrant` | Tyrant | Mar–Apr 2026 | `tyrant` |
+| `jmcl` | JMCL | Mar–Apr 2026 | `jmcl` |
+| `epl` | EPL | Apr–May 2026 | `epl` |
+| `jpl` | JPL | Apr–May 2026 | `jpl` |
+| `Dcpl` | DCPL | Aug–Sep 2026 (live) | `dcpl` |
+| `rspl` | Reliance Surface Sankriti Premier League | Sep 2026 (live) | `rspl` |
+
+Decisions that go with it:
+
+- **Numbered seasons carry the season in the slug** (`tpl-s11`, `jypl-s9`), so a later
+  season of either league gets its own slug in the same pattern (`tpl-s12`).
+- **`walle_arena`'s registry needs all fifteen rows before Phase 2 runs.** Copy `dcpl`
+  and `rspl` from `Dcpl.tournaments`, which already carry name, logo and colours; create
+  the other thirteen as archived rows with the name and dates above, using the
+  aggregator's `image_url` as the logo where it has one.
+- **`Dcpl`'s archived `tests` tournament does not migrate.** The contests named "test"
+  in `Dcpl` (2026-09-20 to 09-22) and "Test" in `jpl` (2026-05-05 to 05-06) **do**: they
+  import with the rest of their database and appear under `dcpl` and `jpl`.
+- **Copied accounts get a membership only where they played** (R23).
+
+Every slug passes `TOURNAMENT_SLUG_PATTERN` and avoids `RESERVED_SUBDOMAINS`. Phase 2's
+arguments:
+
+```
+--map Dcpl=dcpl --map rspl=rspl --map walle_fantasy=tpl-s11 --map mwpl=mwpl
+--map lodha-park=lpcl --map melangeindia11=m11 --map mtc-intervillage=mtc
+--map world_tower=wtpl --map jypl=jypl-s9 --map cccl=cccl --map mjpl=mjpl
+--map tyrant=tyrant --map jmcl=jmcl --map epl=epl --map jpl=jpl
+```
 
 ### Phase 0b — configuration audit (`00_env_audit.py`)
 
@@ -1723,10 +1774,9 @@ These block specific phases; everything else can be built without them.
 1. ~~Which databases are the sources?~~ **Answered** by Phase 0 (§7): fifteen source
    databases; the live services use `Dcpl` and `rspl`; the unified database is
    `walle_arena`.
-1b. **Which slug does each source database get?** Phase 2 takes `--map sourcedb=slug`
-   for all fifteen and needs a `walle_arena` registry row for each. Known so far:
-   `dcpl` and `rspl`. `tournament_aggregator`'s ten registry rows may supply most of the
-   rest. Also: does `Dcpl`'s `tests` tournament migrate? *Blocks Phase 2.*
+1b. ~~Which slug does each source database get?~~ **Decided** (§7, *Source mapping*):
+   all fifteen slugs, the registry rows `walle_arena` needs, and what happens to test
+   data.
 2. ~~Do all services run this repo's code?~~ **Closed.** Both live services run `main`
    from `Eigensu/first-layout`. The feature branches and the forked repo belong to
    retired tournaments and are archived rather than migrated.
@@ -1907,6 +1957,18 @@ PR can say which items it closes.
   membership for the same `(user_id, tournament_id)`, and the second violates
   `uniq_user_per_tournament`.
   *Fix:* one membership per tournament; keep every row's provenance in `user_id_map`.
+- [ ] **R23 — Accounts copied between databases get memberships they never earned.**
+  *Not raised in review; found in Phase 0.* `world_tower` was seeded with a copy of
+  `walle_fantasy`'s users: 102 user documents carry the same `_id` in both. Of those,
+  only 4 built a team in `world_tower` and 5 logged in there after TPL ended; 98 never
+  used it. Phase 2 writes one membership per source row (`merge_apply.py:220-240`), so
+  those 98 would see World Towers on their profile. Identity is unaffected: rows are
+  keyed by `(source_db, legacy_user_id)` (`identity_graph.py:65-66`), so copies stay
+  separate rows and merge only through a shared mobile or email, as intended.
+  *Decided:* when the same `_id` exists in more than one source, the earliest is the
+  original, and each later copy gets a membership only if it built a team in that
+  database or its `last_login` there is later than the original's. Every row is still
+  mapped in `user_id_map`.
 
 ### 13.4 Phase 3: tenant data
 
