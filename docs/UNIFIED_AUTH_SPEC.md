@@ -1709,16 +1709,19 @@ These block specific phases; everything else can be built without them.
 | C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests | B |
-| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B |
+| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B, R21 (§13.8) |
 | F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
-| H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5 |
+| H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13** |
 | I | Cut over — stand up the one backend, backfill, repoint both frontends, archive the five services (§7, Phase 6) | C, C2b, C3, D, E, F, H |
 | J | Remove the legacy-username branch; sweep `legacy_hashes`; archive old collections | I + 8 days / 180 days |
 
 Stages A–G are ordinary development and can proceed now. **H must run against a
 restored snapshot, never the live cluster** — the merge report is the artefact you
 review before anything irreversible happens.
+
+**G's scripts exist (#40, #41) but are not dry-run ready.** §13 lists what review
+found in them; H waits until that list is cleared or each item is explicitly waived.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -1735,3 +1738,218 @@ Resend channel from §5.4.
 Note the dependency change: **C3 no longer depends on C2.** If Resend lands before
 2Factor credentials are sorted, the email channel *is* C2a for `fifth` — and it is
 what every future tournament inherits for free under the one-backend end state.
+
+---
+
+## 13. Before the dry run: review findings
+
+Stage H does not start until every box below is ticked or deliberately waived. Each
+item was raised in code review on #40/#41, or turned up while checking those reviews,
+and **each was checked against the code** rather than taken from the reviewer. The
+review threads on #41 were later marked resolved on GitHub without any code change, so
+this section is the only record of them.
+
+**Status at the time of writing (2026-10-14): nothing below is fixed.** Line numbers for
+paths under `apps/backend/scripts/unified_auth/` are at `8ee1a8d`, the tip of #41 (which
+contains #40's files). App paths are on `main` unless a commit is given. IDs exist so a
+PR can say which items it closes.
+
+### 13.1 Ordering rules
+
+- [ ] **G1 — No backend older than #42 may serve a database that Phase 2 has written to.**
+  Phase 2 keeps every source username, and usernames stop being unique with #39. Until
+  #42, tokens carry `sub = username` (`app/routes/auth.py`) and `get_current_user`
+  resolves it with `User.find_one(User.username == ...)` (`app/utils/dependencies.py:39`).
+  Two migrated people who share a username can then each present their own valid token
+  and be authenticated as whichever document Mongo returns first.
+  The dry run itself is safe before #42 lands: `walle_fantasy` is a new database and no
+  live service reads it. **Booting today's `main` against the dry-run database to click
+  around is not safe.** Smoke-test only with a build that includes #42.
+- [ ] **G2 — Phase 1 always gets explicit sources.** `02_build_identity_graph.py:133`
+  falls back to `list_candidate_databases()` (`loader.py:10`), which returns every
+  non-system database in the cluster, including `walle_fantasy` itself and unrelated
+  apps, and their users enter the identity graph. Until `--db` is made required, pass it
+  for every source. Discovery is fine for the read-only `01_inventory.py`.
+
+### 13.2 Identity: the wrong people merged, or dead credentials revived
+
+- [ ] **R1 — A deleted account's password works again.** *Security.*
+  `build_unified_account` takes the primary hash from the recency winner
+  (`merge_apply.py:110`, `:158`) and sets `is_active=any(...)` (`:167`). A soft delete
+  stamps `updated_at` (`app/routes/users.py:209-213`), so a just-deleted row *wins*
+  recency, and its password becomes the primary on an account that another row keeps
+  active. `legacy_hashes` (`:119`) also carries every other row's hash regardless of
+  `is_active`. Beyond security, this reverses a deletion someone asked for.
+  *Fix:* an inactive row contributes no credential, neither the primary nor a legacy
+  hash, and never wins recency for credential purposes. An account whose rows are all
+  inactive stays inactive. Whether a deleted row should merge at all is a separate
+  decision; this is the minimum.
+- [ ] **R2 — Plus-addressing is collapsed on every domain** (`normalise.py:137-138`). The
+  comment justifies stripping `+tag` for Gmail, then the `else` branch strips it for
+  every domain. `user+one@company.com` and `user+two@company.com` become one key and
+  auto-merge as one person.
+  *Fix:* strip `+tag` only for `gmail.com` / `googlemail.com`.
+- [ ] **R3 — A matching name overrides the recycled-number check.** *Decision needed.*
+  `corroborated = len(vias) > 1 or agree is True` (`identity_graph.py:217`), and
+  `_names_agree` is a fuzzy match at ratio >= 0.80 (`:147-154`, threshold at `:30`).
+  Two people with a common name who held the same recycled number years apart
+  auto-merge with no flag. The code implements §7's table ("Mobile edge alone,
+  `full_name` compatible → auto-merge"); the review argues a fuzzy name is too weak to
+  count as corroboration on a mobile-only edge, and for common Indian names it is right.
+  *Recommended:* on a mobile-only edge, only an exact normalised name corroborates, and
+  above `RECYCLE_GAP_DAYS` even that goes to review. If accepted, update §7's table too.
+- [ ] **R4 — Foreign numbers are truncated into Indian ones** (`normalise.py:96-97`). Any
+  11-15 digit number is cut to its last ten digits without checking for a `91` prefix.
+  *Narrower than the review says:* the `digits[0] in "012345"` guard discards most
+  results, but UK `447911123456` → `7911123456` survives and can join a real Indian
+  number's component. `mobile_candidates` in `app/services/auth/identity.py` (#39) has
+  the same shape for login (any input over ten digits also tries its last ten).
+  *Fix (both places):* strip only a leading `91` from 12 digits or `0` from 11; keep
+  anything else whole so it cannot match an Indian number.
+
+### 13.3 Phase 2: failures, and state it cannot repair
+
+- [ ] **R5 — Rows that join an existing person are duplicated or dropped**
+  (`03_apply_merges.py:100-108`). Only `source_rows[0]` is looked up in `user_id_map`.
+  If a signup made during the backfill joins an imported person and wins recency, it
+  has no mapping, so a second user is created with the same email or mobile and the
+  insert hits `uniq_emails` / `uniq_mobiles`. If it does not win recency, the winner's
+  mapping exists, the whole account is skipped, and the new row is never mapped.
+  *Fix:* look up every row, and attach unmapped rows (and their memberships) to the
+  existing user instead of creating one.
+- [ ] **R6 — Revoked credentials survive the delta.** *Security.* The same `continue`
+  (`03_apply_merges.py:108`) means an imported account is never refreshed. A password
+  reset or deletion during the backfill window is detected by Phase 6 and then skipped:
+  the new password is refused, the old one still works, and a deleted account stays
+  usable.
+  *Fix:* recompute every component touched since `--since` and update the existing
+  user's credentials and `is_active` (subject to R1).
+- [ ] **R7 — A crash in the middle of an account cannot be resumed**
+  (`03_apply_merges.py:118-162`). The user is inserted, then one `user_id_map` row per
+  source row, then the avatar plan, then memberships, with no transaction, and a rerun
+  decides to skip on the first row's mapping alone. Interrupted after that mapping, the
+  rest is never written; interrupted before it, the rerun inserts the identity again.
+  *Fix:* one transaction per account (requires a replica set; confirm the cluster is
+  one), or make every write an upsert keyed on its source row.
+- [ ] **R8 — Splitting a flagged component gives every half the contested key**
+  (`merge_apply.py:194-217`). Flagged components become one account per row, each built
+  from its own row, so both halves of a `shared_mobile_diff_names` pair carry the same
+  normalised mobile in `mobile` and `mobiles`. The second insert violates `uniq_mobile`
+  and `uniq_mobiles`, both real unique indexes.
+  *Fix:* give the contested value to neither account and record it on the review item,
+  or to one account by an explicit rule.
+- [ ] **R9 — Two rows from one tournament become duplicate memberships**
+  (`merge_apply.py:220-240`). Phase 2 writes one membership per source row. When two
+  rows from the same database merge (the normaliser's own docstring says `9876543210`
+  and `919876543210` both exist in live data, and see R22 on emails), both get a
+  membership for the same `(user_id, tournament_id)`, and the second violates
+  `uniq_user_per_tournament`.
+  *Fix:* one membership per tournament; keep every row's provenance in `user_id_map`.
+
+### 13.4 Phase 3: tenant data
+
+- [ ] **R10 — Phase 3 cannot run twice** (`04_import_tenant_data.py:71-75`,
+  `tenant_import.py:62-87`). The preflight treats any `_id` present in both the source
+  and the destination as a collision. Phase 3 preserves `_id`, so after the first apply
+  every copied document is in both, and every rerun aborts, including the one Phase 6
+  makes.
+  *Fix:* a destination document copied from this same source is expected, not a clash.
+  That needs provenance on copied documents (a `source_db` field or an import ledger),
+  which R11 needs too.
+- [ ] **R11 — Deletions in a source never reach the destination**
+  (`04_import_tenant_data.py:101-104`). The import only upserts. A contest copied
+  during the backfill and deleted before cutover survives it.
+  *Fix:* after each import, delete destination documents from this source whose `_id`
+  is no longer in the source.
+- [ ] **R12 — Per-tournament settings are not migrated** (`tenant_import.py:20-31`).
+  `global_settings` is not in the import list, so each tournament's squad limits and
+  `default_contest_logo_file_id` fall back to platform defaults. #37 made settings
+  per-tournament (`GlobalSettings.get_for_tournament`), so there is now a place for them.
+  *Fix:* turn each source's `"global"` document into that tournament's settings row with
+  a new `_id`. §2.1 still lists `global_settings` as a singleton; update it too.
+- [ ] **R13 — Contest, sponsor and carousel images are left behind.** Phase 4 copies
+  only the `avatars` bucket. `contest_logos`, `sponsor_logos` and `carousel_images` are
+  referenced by `Contest.logo_file_id`, `Sponsor.logo_file_id`,
+  `CarouselImage.image_file_id` and `GlobalSettings.default_contest_logo_file_id`, and
+  would return 404 after cutover.
+  *Fix:* copy the three buckets preserving file `_id`, so no reference needs rewriting.
+  §2.1 lists only `fs.avatars.*`; update it too.
+- [ ] **R14 — Remove the `dropIndex("code_1")` instruction**
+  (`04_import_tenant_data.py:10-13`). The review item *"Sponsor names still collide
+  globally"* is **not a defect**, for the same reason this instruction is unnecessary:
+  `sponsors.name` and `contests.code` are not unique indexes at all (R22). Per-tournament
+  contest-code uniqueness comes from `uniq_contest_code_per_tournament`. Dropping
+  `code_1` is harmless (Beanie rebuilds it), but the docstring teaches something false.
+
+### 13.5 Phase 4: avatars
+
+- [ ] **R15 — Every avatar is relabelled as JPEG** (`05_copy_avatars.py:57-61`). Uploads
+  store the real type (`app/utils/gridfs.py:46`) and PNG, WebP and SVG are accepted; the
+  copy writes `image/jpeg`, and the serving route trusts that metadata.
+  *Fix:* copy the source file's `metadata.content_type`.
+- [ ] **R16 — Every rerun copies every avatar again** (`05_copy_avatars.py:40-70`). No
+  plan is ever marked done, so a retry uploads a new file per plan and orphans the
+  previous one.
+  *Fix:* upload with the source file's `_id` (`upload_from_stream_with_id`) and skip
+  ids already present, or record the destination id on the plan and skip completed ones.
+
+### 13.6 Phase 6: the delta cannot currently complete
+
+- [ ] **R17 — Change detection only looks at users and teams**
+  (`07_resync_delta.py:79-80`). Changes confined to contests, enrolments, players or
+  `player_contest_points` (a scoring update during the window, say) print "Nothing to
+  re-sync" and are lost.
+  *Fix:* check every imported collection, or skip detection and always run.
+- [ ] **R18 — The delta never copies avatars** (`07_resync_delta.py:87-98`). It reruns
+  Phases 2 and 3 only, so a signup with an avatar during the window keeps a source-bucket
+  id that the unified database cannot serve.
+  *Fix:* include Phase 4.
+- [ ] **R19 — Even with R17 and R18 fixed, Phase 6 fails.** *Not raised in review.* It
+  reruns Phase 3 with `check=True` (`07_resync_delta.py:98`), which aborts on R10, and
+  it reruns Phase 2, which skips every existing account (R5, R6). Step 5 of §7 Phase 6,
+  the delta inside the read-only window, cannot succeed until R5, R6 and R10 are fixed,
+  and that is the step where users are waiting.
+
+### 13.7 Phase 5: verification
+
+- [ ] **R20 — Verification passes an incomplete migration** (`verify.py:44-154`). Every
+  check looks for something *wrong* among records that exist: duplicates, orphans,
+  missing `tournament_id`. None checks that what should exist does. Run it after Phase 2
+  but before Phase 3 and it passes with empty game collections; interrupt Phase 2 after
+  the maps but before the memberships and it passes.
+  *Fix:* reconcile document counts per collection against each source, and require a
+  membership for every mapped row.
+
+### 13.8 Found while checking, outside the scripts
+
+- [ ] **R21 — `uniq_legacy_row` does not exclude app-created memberships.** *Not raised
+  in review; blocks stage E.* (#39, `app/models/tournament_membership.py:94-99` at
+  `f7dcd43`.) The partial filter is `{"legacy_user_id": {"$exists": true}}`, meant to
+  leave out memberships with no legacy row. But `$exists: true` also matches `null`, and
+  Beanie writes `None` fields as `null` (`keep_nulls` defaults to true). Every membership
+  the app creates has `source_db: null, legacy_user_id: null`, so the **second** one
+  fails with a duplicate key. Phase 2 is unaffected because it always sets both. The
+  existing test checks only the index definition, and mongomock ignores partial filters,
+  so the suite cannot catch this.
+  *Fix:* `{"legacy_user_id": {"$type": "objectId"}}`, and require `source_db` whenever
+  `legacy_user_id` is set (the open review comment on #39).
+- [ ] **R22 — Several `unique=True` declarations do nothing.** When a field is declared
+  `Indexed(..., unique=True)` *and* listed in `Settings.indexes`, Beanie's
+  `merge_indexes` keys both by field and keeps the plain `Settings` entry, dropping the
+  unique flag. Checked by replaying Beanie's merge against the models:
+
+  | Field | Declared | Index actually built |
+  |---|---|---|
+  | `users.username` | unique (wrapper removed in #39) | non-unique, as intended |
+  | `users.email` | unique | **non-unique** |
+  | `sponsors.name` | unique | **non-unique** |
+  | `contests.code` | unique | **non-unique**; `uniq_contest_code_per_tournament` is real |
+
+  `users.email` is the one that matters here. In the live databases, duplicate emails
+  are prevented only by the register route's read-then-write check, which races, so
+  Phase 1 should expect duplicate emails inside a single source (they merge, which is
+  one way R9 happens). After cutover, every account has `emails` populated and
+  `uniq_emails` covers it. `contest.py`'s comment about a "legacy global unique index
+  on `code`" describes an index that is not built.
+  *Decide:* add a real index where uniqueness is intended, or remove the misleading
+  wrapper where it is not.
