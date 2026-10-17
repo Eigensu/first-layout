@@ -28,6 +28,7 @@ sys.path.insert(
 
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 
+from scripts.unified_auth.destination import refuse_source_as_destination  # noqa: E402
 from scripts.unified_auth.tenant_import import (  # noqa: E402
     TENANT_BUCKETS,
     USER_REFERENCE_FIELDS,
@@ -41,6 +42,7 @@ from scripts.unified_auth.tenant_import import (  # noqa: E402
 
 
 async def import_tenant(client, dest, source_db: str, slug: str, apply: bool):
+    refuse_source_as_destination(dest.name, [source_db])
     report = ImportReport(source_db=source_db, tournament_slug=slug)
     src = client[source_db]
 

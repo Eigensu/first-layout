@@ -32,6 +32,7 @@ sys.path.insert(
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 
 from scripts.unified_auth.apply_accounts import apply_accounts  # noqa: E402
+from scripts.unified_auth.destination import refuse_source_as_destination  # noqa: E402
 from scripts.unified_auth.identity_graph import build_components  # noqa: E402
 from scripts.unified_auth.loader import load_rows, load_team_owners  # noqa: E402
 from scripts.unified_auth.merge_apply import (  # noqa: E402
@@ -108,6 +109,7 @@ async def main() -> None:
     from config.settings import get_settings
 
     settings = get_settings()
+    refuse_source_as_destination(settings.mongodb_db_name, slug_by_db)
     client = AsyncIOMotorClient(settings.mongodb_url)
     dest = client[settings.mongodb_db_name]
 

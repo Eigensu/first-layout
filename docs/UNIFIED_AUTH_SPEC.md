@@ -1331,6 +1331,9 @@ What follows from it:
   already exists as the oldest tournament's database and is one of the sources.
   `walle_arena` does not exist in the cluster yet. Phases 2–6 write to whatever
   `MONGODB_DB_NAME` is set to, so they run with `MONGODB_DB_NAME=walle_arena`.
+  The root `.env` sets it to `Dcpl` for the app, so every writing script refuses a
+  source database as its destination; run unchanged, Phase 2 would have written the
+  merged accounts into live `Dcpl`.
 - **No other database holds accounts.** `walle-register`, `walle-regi-owner` and
   `jmcl-register` contain only `players`, `payments` and `app_config`.
   `tournament_aggregator` contains `tournaments` (10 rows) and `carousel_slides`; its
@@ -1367,11 +1370,11 @@ then DCPL, each with its own database).
 | Source database | Tournament | When | Slug |
 |---|---|---|---|
 | `walle_fantasy` | TPL Season 11 | Oct–Nov 2025 | `tpl-s11` |
-| `mwpl` | MWPL | Dec 2025 – Mar 2026 | `mwpl` |
+| `mwpl` | MWPL | Dec 2025 (a "Test" contest in Mar 2026) | `mwpl` |
 | `lodha-park` | Lodha Park | Jan 2026 | `lpcl` |
 | `melangeindia11` | Melange Team11 | Jan 2026 | `m11` |
 | `mtc-intervillage` | MTC Marudha Cup | Jan 2026 | `mtc` |
-| `world_tower` | World Towers Premier League | Feb 2026 | `wtpl` |
+| `world_tower` | World Towers Premier League | Nov 2025 (season 7), Feb–Mar 2026 (season 8) | `wtpl` |
 | `jypl` | JYPL Season 9 | Feb–Mar 2026 | `jypl-s9` |
 | `cccl` | Colaba Cricket Club | Mar–Apr 2026 | `cccl` |
 | `mjpl` | Mewad Jain Premier League | Mar 2026 | `mjpl` |
@@ -1380,16 +1383,22 @@ then DCPL, each with its own database).
 | `epl` | EPL | Apr–May 2026 | `epl` |
 | `jpl` | JPL | Apr–May 2026 | `jpl` |
 | `Dcpl` | DCPL | Aug–Sep 2026 (live) | `dcpl` |
-| `rspl` | Reliance Surface Sankriti Premier League | Sep 2026 (live) | `rspl` |
+| `rspl` | Reliance Surfaces Sanskriti Premier League | Sep 2026 (live) | `rspl` |
 
 Decisions that go with it:
 
 - **Numbered seasons carry the season in the slug** (`tpl-s11`, `jypl-s9`), so a later
   season of either league gets its own slug in the same pattern (`tpl-s12`).
-- **`walle_arena`'s registry needs all fifteen rows before Phase 2 runs.** Copy `dcpl`
-  and `rspl` from `Dcpl.tournaments`, which already carry name, logo and colours; create
-  the other thirteen as archived rows with the name and dates above, using the
-  aggregator's `image_url` as the logo where it has one.
+- **`walle_arena`'s registry needs all fifteen rows before Phase 2 runs.**
+  `seed_registry.py` writes them (decided 2026-10-17). It copies `dcpl` and `rspl` from
+  `Dcpl.tournaments` under their own `_id`s; those rows carry no logo, colours or
+  dates, and their names read "DPCL" and "Reliance Surface Sankriti", so the copies are
+  named as their contests spell them. The other thirteen are archived rows with the
+  names above, dated from the first real contest's start to the last one's end
+  (contests named "test" left out). None gets a logo: no aggregator `image_url` is one;
+  they are page links, and one stock photo.
+- **`world_tower` holds two WTPL seasons**, 7 and 8. It stays one tournament, `wtpl`,
+  dated across both (decided 2026-10-17): Phase 3 imports one database under one slug.
 - **`Dcpl`'s archived `tests` tournament does not migrate.** The contests named "test"
   in `Dcpl` (2026-09-20 to 09-22) and "Test" in `jpl` (2026-05-05 to 05-06) **do**: they
   import with the rest of their database and appear under `dcpl` and `jpl`.
@@ -1913,9 +1922,8 @@ Stages A–G are ordinary development and can proceed now. **H must run against 
 restored snapshot, never the live cluster** — the merge report is the artefact you
 review before anything irreversible happens.
 
-**G's scripts are dry-run ready once #46 merges.** Every §13 item
-is fixed (2026-10-17); H waits only on §13.10: #45 merged, the platform-admin list, and
-the registry seeded.
+**G's scripts are dry-run ready: #45 and #46 merged on 2026-10-17.** Every §13 item
+is fixed; what H still needs is in §13.10.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -2248,10 +2256,18 @@ credential. 197 groups merge automatically and 52 go to review.
 
 ### 13.10 Before the dry run
 
-- **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
-  `uniq_legacy_row` from the start.
-- **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
+- [x] **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
+  `uniq_legacy_row` from the start. *Merged 2026-10-17 (`f76c24b`); both live services
+  dropped the flawed index at startup and rebuilt it with the `$type` filter.*
+- [ ] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
   administer the whole platform. Without it no one is a platform admin after cutover.
-- **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source mapping*).
-- Then the dry run itself, stage H: Phases 1–5 into `walle_arena` from a restored
-  snapshot, with the arguments in §7.
+  *Decided 2026-10-17: the first dry run goes without it; it is needed before cutover.*
+- [x] **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source
+  mapping*). *`seed_registry.py`, run before Phase 2. Seeded into the dry run's copy
+  (2026-10-17; a second run changes nothing). The real `walle_arena` is seeded the same
+  way at cutover, before its Phase 2.*
+- [ ] Then the dry run itself, stage H: Phases 1–5 into `walle_arena` from a restored
+  snapshot, with the arguments in §7. *Decided 2026-10-17: the snapshot is a local
+  `mongod` restored from a `mongodump` of the fifteen sources, so nothing is written to
+  the Atlas cluster. Build `walle_arena`'s indexes first by running the app's
+  `connect_to_mongo` against it, as the unified backend would on first boot.*
