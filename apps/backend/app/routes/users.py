@@ -11,6 +11,7 @@ from app.schemas.user import (
     UserResponse,
     UserUpdateRequest,
 )
+from app.services.auth.apple import AppleTokenError, verify_apple_identity_token
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
 from app.services.auth.identity import set_profile_mobile
 from app.utils.dependencies import get_current_active_user
@@ -164,12 +165,62 @@ async def patch_current_user(
     return _user_response(current_user)
 
 
+def _linked(ids: list, scalar) -> set:
+    return set(ids) | ({scalar} if scalar else set())
+
+
+async def _reauthenticate_passwordless(user: User, request: DeleteAccountRequest):
+    """Require a fresh sign-in with a provider this account is linked to.
+
+    A bearer token alone must not be enough to delete a passwordless account,
+    or a stolen or unattended session could lock its owner out with nothing to
+    fall back on. Apple counts as well as Google: an account created by Sign in
+    with Apple has neither a password nor a Google identity, so without it the
+    account could not be deleted at all -- which the App Store requires of any
+    app that lets people create one.
+    """
+    apple_ids = _linked(user.apple_ids, user.apple_id)
+    google_ids = _linked(user.google_ids, user.google_id)
+
+    if request.apple_identity_token and apple_ids:
+        try:
+            token_payload = await verify_apple_identity_token(
+                request.apple_identity_token
+            )
+        except AppleTokenError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        if token_payload.get("sub") not in apple_ids:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Apple account does not match this user",
+            )
+        return
+
+    if request.google_id_token and google_ids:
+        try:
+            token_payload = verify_google_id_token(request.google_id_token)
+        except GoogleTokenError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        if token_payload.get("sub") not in google_ids:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google account does not match this user",
+            )
+        return
+
+    provider = "Apple" if apple_ids and not google_ids else "Google"
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=f"Re-authenticate with {provider} to delete this account",
+    )
+
+
 @router.delete("/me")
 async def delete_current_user(
     request: DeleteAccountRequest, current_user: User = Depends(get_current_active_user)
 ):
     """Soft delete current user account, reauthenticating by whatever
-    credential the account actually has (password, or a fresh Google
+    credential the account actually has (password, or a fresh Google or Apple
     sign-in for passwordless accounts)."""
 
     if current_user.hashed_password:
@@ -186,25 +237,7 @@ async def delete_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password"
             )
     else:
-        # Google-only account: a bearer token alone must not be enough to
-        # delete it, or a stolen/unattended session could lock the user out
-        # with no password to fall back on. Require a fresh Google ID token
-        # for the same Google account instead.
-        if not request.google_id_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Re-authenticate with Google to delete this account",
-            )
-        try:
-            token_payload = verify_google_id_token(request.google_id_token)
-        except GoogleTokenError as e:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-
-        if token_payload.get("sub") != current_user.google_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google account does not match this user",
-            )
+        await _reauthenticate_passwordless(current_user, request)
 
     # Soft delete by deactivating and recording timestamp
     current_user.is_active = False

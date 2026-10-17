@@ -68,6 +68,13 @@ class DeleteAccountRequest(BaseModel):
             "password for passwordless (Google) accounts"
         ),
     )
+    apple_identity_token: Optional[str] = Field(
+        None,
+        description=(
+            "Fresh Sign in with Apple identity token, required in place of "
+            "password for passwordless (Apple) accounts"
+        ),
+    )
     reason: Optional[str] = Field(
         None, max_length=500, description="Optional deletion reason"
     )
