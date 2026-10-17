@@ -1946,7 +1946,7 @@ this section is the only record of them.
 **Status (2026-10-17): every item below is fixed** — in #45 (app) or #46 (scripts) — or, for G1, satisfied. Each says where, and
 records the decisions taken on the way. Line numbers in the item text are as originally
 written: paths under `apps/backend/scripts/unified_auth/` at `8ee1a8d`, the tip of #41.
-Fixing them turned up eight more, R24–R31 (§13.9), all fixed too. **What is left before
+Fixing them turned up more, R24–R37 (§13.9), all fixed too. **What is left before
 the dry run** is §13.10.
 
 ### 13.1 Ordering rules
@@ -2223,6 +2223,24 @@ Each was found by running the scripts' own planning against the fifteen live sou
   copy. *Fixed in #45: tokens carry a random `jti`, and revocation updates every copy.*
 - [x] **R31 — Accounts split by a junk key never reached review.** They are singletons,
   so `merge_review.csv` never shows them. *Phase 1 writes `junk_keys.csv`.*
+
+Review of #46 found six more in the fixes themselves, all fixed there with a test that
+fails without the fix:
+
+- [x] **R32 — A split rewrote the saved account before it was detected.** Phase 2 now
+  resolves every account's user id before writing any, and leaves every account in a
+  conflict untouched.
+- [x] **R33 — A shared phone could not change hands between runs.** The new keeper was
+  written while the old one still held it, and the unique index stopped Phase 6. Keys
+  an account is giving up are now released, across all accounts, before any is written.
+- [x] **R34 — An import stopped between its two writes refused to resume.** The ledger
+  claim is now written before the document.
+- [x] **R35 — Verification compared counts.** A deletion and an addition since the last
+  run kept them equal. It now compares ids, for user rows and every collection.
+- [x] **R36 — A mapping to a user that does not exist passed.** Phase 2 writes the map
+  first, so a stopped run leaves one. Verification now requires every mapping's user.
+- [x] **R37 — A phone taken from an account in a split group still made it a platform
+  admin.** Only keys the account keeps count.
 
 With all of the above, planning against the live sources gives 1,946 accounts and 2,127
 memberships, with no identity value on two accounts and no live account without a

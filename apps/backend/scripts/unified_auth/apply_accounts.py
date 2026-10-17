@@ -13,14 +13,17 @@ and a crash halfway through has to be finished, not cleaned up:
   same user id instead of being inserted twice (R7).
 
 What it will not do is merge or split accounts that a previous run already
-wrote. Those cases are reported as conflicts for a person to resolve.
+wrote. Those cases are reported as conflicts for a person to resolve, and every
+account involved is left exactly as it was.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Sequence, Set, Tuple
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from .merge_apply import AccountPlan, UnifiedAccount, plan_memberships
 
@@ -159,46 +162,78 @@ async def apply_accounts(
     without_membership: Set[Tuple[str, str]],
     apply: bool,
 ) -> ApplyReport:
-    """Write every planned account; with `apply` False, only count what would be."""
+    """Write every planned account; with `apply` False, only count what would be.
+
+    Three passes, so that nothing is written on a guess:
+
+    1. Resolve every account's user id, and find the conflicts, before writing
+       anything. An earlier run's account that would now be split is claimed
+       by several planned accounts, and *all* of them are left out -- writing
+       the first would rewrite the saved account with half its rows before the
+       second revealed the split.
+    2. Release every key an existing account is about to give up. A key can
+       move between accounts from one run to the next -- in a split group the
+       most recently active row keeps a shared phone, and that can change --
+       and the unique indexes would refuse the new holder while the old one
+       still had it.
+    3. Write.
+    """
     report = ApplyReport()
     if apply:
         await ensure_indexes(dest)
 
-    claimed: Dict[ObjectId, str] = {}
+    resolved = []
+    claims: Dict[ObjectId, List[str]] = defaultdict(list)
     for group_id, plan in planned:
         for account in plan.accounts:
             ids, seen_before = await _resolve_user_id(dest, account)
-            keys = [list(r.key) for r in account.source_rows]
             if len(ids) > 1:
                 report.conflicts.append(
-                    {
-                        "group": group_id,
-                        "problem": "rows written as separate accounts now form one",
-                        "rows": keys,
-                        "user_ids": sorted(str(i) for i in ids),
-                    }
+                    _conflict(
+                        group_id,
+                        account,
+                        "rows written as separate accounts now form one",
+                        ids,
+                    )
                 )
                 continue
             user_id = ids.pop() if ids else ObjectId()
-            if user_id in claimed:
-                report.conflicts.append(
-                    {
-                        "group": group_id,
-                        "problem": "rows written as one account now form several",
-                        "rows": keys,
-                        "user_ids": [str(user_id)],
-                        "also_claimed_by": claimed[user_id],
-                    }
+            claims[user_id].append(group_id)
+            resolved.append((group_id, account, user_id, seen_before))
+
+    writable = []
+    for group_id, account, user_id, seen_before in resolved:
+        if len(claims[user_id]) > 1:
+            report.conflicts.append(
+                _conflict(
+                    group_id,
+                    account,
+                    "rows written as one account now form several",
+                    {user_id},
                 )
-                continue
-            claimed[user_id] = group_id
+            )
+            continue
+        writable.append((group_id, account, user_id, seen_before))
 
+    if apply:
+        for _, account, user_id, seen_before in writable:
             if seen_before:
-                report.accounts_updated += 1
-            else:
-                report.accounts_created += 1
+                await _release(
+                    dest,
+                    account,
+                    user_id,
+                    slug_by_db,
+                    tournament_ids,
+                    without_membership,
+                )
 
-            if apply:
+    for group_id, account, user_id, seen_before in writable:
+        if not apply:
+            report.memberships += len(
+                plan_memberships(account, slug_by_db, without_membership)
+            )
+        else:
+            try:
                 report.memberships += await _write_account(
                     dest,
                     account,
@@ -207,17 +242,80 @@ async def apply_accounts(
                     tournament_ids,
                     without_membership,
                 )
-            else:
-                report.memberships += len(
-                    plan_memberships(account, slug_by_db, without_membership)
+            except DuplicateKeyError as exc:
+                # Only possible when an account left alone by a conflict still
+                # holds a key this one is now planned to have.
+                report.conflicts.append(
+                    _conflict(
+                        group_id,
+                        account,
+                        f"a key it needs is held by an account left unchanged: {exc}",
+                        {user_id},
+                    )
                 )
+                continue
+        if seen_before:
+            report.accounts_updated += 1
+        else:
+            report.accounts_created += 1
 
+    for group_id, plan in planned:
         if plan.flags:
             report.review_groups += 1
             if apply:
                 await _write_review_item(dest, group_id, plan)
 
     return report
+
+
+def _conflict(group_id: str, account: UnifiedAccount, problem: str, ids) -> dict:
+    return {
+        "group": group_id,
+        "problem": problem,
+        "rows": [list(r.key) for r in account.source_rows],
+        "user_ids": sorted(str(i) for i in ids),
+    }
+
+
+async def _release(
+    dest,
+    account: UnifiedAccount,
+    user_id: ObjectId,
+    slug_by_db: Dict[str, str],
+    tournament_ids: Dict[str, ObjectId],
+    without_membership: Set[Tuple[str, str]],
+) -> None:
+    """Drop the keys and memberships this saved account is about to give up."""
+    current = await dest["users"].find_one(
+        {"_id": user_id},
+        {"emails": 1, "mobiles": 1, "google_ids": 1, "apple_ids": 1, "mobile": 1},
+    )
+    if current:
+        changes = {}
+        for field_name in ("emails", "mobiles", "google_ids", "apple_ids"):
+            held = current.get(field_name) or []
+            kept = [v for v in held if v in getattr(account, field_name)]
+            if kept != held:
+                changes[field_name] = kept
+        if current.get("mobile") and current["mobile"] not in account.mobiles:
+            changes["mobile"] = None  # uniq_mobile covers the scalar too
+        if changes:
+            await dest["users"].update_one({"_id": user_id}, {"$set": changes})
+
+    # uniq_legacy_row is unique on the legacy row, which can move to another
+    # account between runs; its old membership has to go first.
+    planned = {
+        (tournament_ids[p.tournament_slug], ObjectId(p.legacy_user_id))
+        for p in plan_memberships(account, slug_by_db, without_membership)
+    }
+    async for membership in dest["tournament_memberships"].find(
+        {"user_id": user_id, "source_db": {"$type": "string"}}
+    ):
+        if (
+            membership["tournament_id"],
+            membership.get("legacy_user_id"),
+        ) not in planned:
+            await dest["tournament_memberships"].delete_one({"_id": membership["_id"]})
 
 
 async def _write_review_item(dest, group_id: str, plan: AccountPlan) -> None:

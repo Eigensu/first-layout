@@ -648,3 +648,18 @@ def test_a_deleted_rows_apple_id_is_not_carried():
     live = row("rspl", "1", hashed_password="hash")
 
     assert build_unified_account(component(deleted, live)).apple_ids == []
+
+
+def test_a_phone_taken_from_an_account_does_not_make_it_an_admin():
+    """Two people on one listed phone: only the one who keeps it is listed."""
+    recent = row("walle_fifth", "2", mobile="9876543210", last_login=RECENT)
+    older = row("walle_lpcl", "1", mobile="9876543210")
+
+    plan = plan_accounts(
+        component(recent, older, flags=["shared_mobile_diff_names"]),
+        "walle_fifth:2",
+        platform_admin_keys={"9876543210"},
+    )
+
+    admins = {a.source_rows[0].key: a.is_platform_admin for a in plan.accounts}
+    assert admins == {("walle_fifth", "2"): True, ("walle_lpcl", "1"): False}

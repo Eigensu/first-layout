@@ -218,3 +218,57 @@ async def test_avatar_url_points_at_the_unified_account(dest):
     assert user["avatar_url"] == f"/api/users/{user['_id']}/avatar"
     plan = await dest["avatar_migration"].find_one({})
     assert (plan["source_db"], plan["file_id"]) == ("walle_lpcl", file_id)
+
+
+@pytest.mark.asyncio
+async def test_a_split_leaves_the_saved_account_exactly_as_it_was(dest):
+    """Both halves claim the saved account, so neither may write it.
+
+    Writing the first half and only then noticing the second would rewrite the
+    saved account with half its rows and drop the other tournament.
+    """
+    a = row("walle_lpcl", UID_A, mobile="9876543210", full_name="Rahul Patel")
+    b = row("walle_fifth", UID_B, mobile="9876543210", full_name="Rahul Patel")
+    await run(dest, [a, b])
+    before = await dest["users"].find_one({})
+
+    renamed = row("walle_fifth", UID_B, mobile="9876543210", full_name="Priya Sharma")
+    report = await run(dest, [a, renamed])
+
+    assert len(report.conflicts) == 2
+    assert await dest["users"].find_one({}) == before
+    assert await dest["tournament_memberships"].count_documents({}) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_shared_phone_can_change_hands_between_runs(dest):
+    """In a split group the most recently active row keeps a shared phone, and
+    which row that is can change. The old holder must give it up first, or
+    the unique index refuses the new one and phase 6 stops."""
+    await dest["users"].create_index(
+        "mobiles",
+        unique=True,
+        partialFilterExpression={"mobiles.0": {"$exists": True}},
+    )
+    older = row("walle_lpcl", UID_A, mobile="9876543210", full_name="Rahul Patel")
+    newer = row(
+        "walle_fifth",
+        UID_B,
+        mobile="9876543210",
+        full_name="Priya Sharma",
+        last_login=RECENT,
+    )
+    await run(dest, [older, newer])
+
+    returned = row(
+        "walle_lpcl",
+        UID_A,
+        mobile="9876543210",
+        full_name="Rahul Patel",
+        last_login=datetime(2026, 9, 1),
+    )
+    report = await run(dest, [returned, newer])
+
+    assert report.conflicts == []
+    holder = await dest["users"].find_one({"mobiles": "9876543210"})
+    assert holder["username"] == f"user{UID_A}"

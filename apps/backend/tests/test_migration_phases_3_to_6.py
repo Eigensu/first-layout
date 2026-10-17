@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pytest
 from bson import ObjectId
-from mongomock_motor import AsyncMongoMockClient
+from mongomock_motor import AsyncMongoMockClient, AsyncMongoMockCollection
 
 from scripts.unified_auth.apply_accounts import apply_accounts
 from scripts.unified_auth.identity_graph import build_components
@@ -365,5 +365,88 @@ async def test_an_apple_only_account_is_not_reported_as_locked_out(world):
     user = await dest["users"].find_one({"apple_ids": "apple-sub-9"})
     assert user is not None
     assert "every live account has a usable credential" not in failed(
+        await check(client, dest, tournaments)
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_import_stopped_between_its_two_writes_resumes(world, monkeypatch):
+    """Each copy is two writes: its claim in the ledger and the document.
+
+    Stopped in between, the next run has to recognise the work as its own --
+    a document without a claim is indistinguishable from another source's.
+    """
+    client, dest, tournaments, _ = world
+    rows = await load_rows(client, list(SLUGS))
+    components, junk = build_components(rows)
+    planned = [
+        (f"g{i}", plan_accounts(c, f"g{i}", None, junk))
+        for i, c in enumerate(components)
+    ]
+    await apply_accounts(dest, planned, SLUGS, tournaments, set(), apply=True)
+
+    writes = []
+    real_update, real_replace = (
+        AsyncMongoMockCollection.update_one,
+        AsyncMongoMockCollection.replace_one,
+    )
+
+    def crash_on_second(real):
+        async def write(self, *args, **kwargs):
+            if self.name in ("contests", LEDGER):
+                writes.append(self.name)
+                if len(writes) == 2:
+                    raise ConnectionError("stopped mid-import")
+            return await real(self, *args, **kwargs)
+
+        return write
+
+    monkeypatch.setattr(
+        AsyncMongoMockCollection, "update_one", crash_on_second(real_update)
+    )
+    monkeypatch.setattr(
+        AsyncMongoMockCollection, "replace_one", crash_on_second(real_replace)
+    )
+    with pytest.raises(ConnectionError):
+        await phase3.import_tenant(client, dest, "lpcl_db", "lpcl", apply=True)
+    monkeypatch.undo()
+
+    report = await phase3.import_tenant(client, dest, "lpcl_db", "lpcl", apply=True)
+
+    assert report.copied["contests"] == 1
+
+
+@pytest.mark.asyncio
+async def test_verification_compares_identities_not_counts(world):
+    """A deletion and an addition since the last run leave every count equal."""
+    client, dest, tournaments, ids = world
+    await migrate(client, dest, tournaments)
+    src = client["lpcl_db"]
+    await src["contests"].delete_one({"_id": ids["lpcl_db"]["contest"]})
+    await src["contests"].insert_one({"code": "SEMI"})
+    await src["users"].insert_one({"username": "late", "is_active": True})
+    await src["users"].delete_one({"_id": ids["lpcl_db"]["user"]})
+
+    failures = failed(await check(client, dest, tournaments))
+
+    assert "every source document was copied" in failures
+    assert "every legacy row maps exactly once" in failures
+
+
+@pytest.mark.asyncio
+async def test_verification_fails_on_a_mapping_to_nobody(world):
+    """What phase 2 leaves if it stops between the map and the account."""
+    client, dest, tournaments, _ = world
+    await migrate(client, dest, tournaments)
+    await dest["user_id_map"].insert_one(
+        {
+            "source_db": "lpcl_db",
+            "legacy_user_id": str(ObjectId()),
+            "user_id": ObjectId(),
+            "earns_membership": False,
+        }
+    )
+
+    assert "every mapping points at an account" in failed(
         await check(client, dest, tournaments)
     )

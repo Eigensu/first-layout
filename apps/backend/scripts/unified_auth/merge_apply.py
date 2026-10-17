@@ -216,10 +216,14 @@ def build_unified_account(
     created = [r.created_at for r in ranked if r.created_at]
     logins = [r.last_login for r in ranked if r.last_login]
 
+    # Only through a key this account keeps. In a split group, a phone shared
+    # by two people goes to one of them; the other must not become a platform
+    # admin through the row that phone was taken from.
     is_platform_admin = any(
-        (_email_key(r) or "") in platform_admin_keys
-        or (_mobile_key(r) or "") in platform_admin_keys
+        key in platform_admin_keys
         for r in ranked
+        for key in (_email_key(r), _mobile_key(r))
+        if key and key not in withheld
     )
 
     return UnifiedAccount(

@@ -149,9 +149,9 @@ async def import_collection(
             remapped["removed_at"] = remapped.get("removed_at")
             remapped["removal_reason"] = "superseded by merge (see migration report)"
         if apply:
-            await dest[collection].replace_one(
-                {"_id": remapped["_id"]}, remapped, upsert=True
-            )
+            # The claim first, then the copy. Stopped in between, the next run
+            # finds its own claim and writes the copy; the other way round it
+            # would find a document nobody claimed and refuse to touch it.
             await dest[LEDGER].update_one(
                 {"_id": ledger_id(collection, doc["_id"])},
                 {
@@ -162,6 +162,9 @@ async def import_collection(
                     }
                 },
                 upsert=True,
+            )
+            await dest[collection].replace_one(
+                {"_id": remapped["_id"]}, remapped, upsert=True
             )
         seen.append(doc["_id"])
         copied += 1

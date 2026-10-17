@@ -79,16 +79,42 @@ async def verify(
 
     # --- what should exist, does ------------------------------------------
 
+    # Identities, not counts: a row deleted and another added since the last
+    # run leave the count unchanged while the new row is missing.
     unmapped = []
     for name, src in sources.items():
-        expected = await src["users"].count_documents({})
-        mapped = await id_map.count_documents({"source_db": name})
+        expected = {str(d["_id"]) async for d in src["users"].find({}, {"_id": 1})}
+        mapped = {
+            d["legacy_user_id"]
+            async for d in id_map.find({"source_db": name}, {"legacy_user_id": 1})
+        }
         if mapped != expected:
-            unmapped.append(f"{name}: {mapped} mapped of {expected}")
+            unmapped.append(
+                f"{name}: {len(expected - mapped)} unmapped, "
+                f"{len(mapped - expected)} mapped but gone from the source"
+            )
     result.add(
         "every legacy row maps exactly once",
         not unmapped,
         "; ".join(unmapped),
+    )
+
+    # Phase 2 writes the map before the account, so a run that stopped in
+    # between leaves a mapping to nobody -- invisible to every other check when
+    # the row earns no membership and has no team.
+    known_users = {d["_id"] async for d in users.find({}, {"_id": 1})}
+    nowhere = [
+        f"{d['source_db']}:{d['legacy_user_id']}"
+        async for d in id_map.find(
+            {}, {"source_db": 1, "legacy_user_id": 1, "user_id": 1}
+        )
+        if d["user_id"] not in known_users
+    ]
+    result.add(
+        "every mapping points at an account",
+        not nowhere,
+        f"{len(nowhere)} rows map to a user that does not exist",
+        nowhere,
     )
 
     have = {
@@ -111,18 +137,24 @@ async def verify(
     short = []
     for name, src in sources.items():
         for collection in USER_REFERENCE_FIELDS:
-            expected = await src[collection].count_documents({})
-            ledger = [
+            expected = {d["_id"] async for d in src[collection].find({}, {"_id": 1})}
+            recorded = {
                 d["doc_id"]
                 async for d in dest[LEDGER].find(
                     {"source_db": name, "collection": collection}, {"doc_id": 1}
                 )
-            ]
-            copied = await dest[collection].count_documents({"_id": {"$in": ledger}})
-            if not expected == len(ledger) == copied:
+            }
+            present = {
+                d["_id"]
+                async for d in dest[collection].find(
+                    {"_id": {"$in": list(recorded)}}, {"_id": 1}
+                )
+            }
+            if not expected == recorded == present:
                 short.append(
-                    f"{name}.{collection}: {expected} in source, "
-                    f"{len(ledger)} recorded, {copied} present"
+                    f"{name}.{collection}: {len(expected - recorded)} not copied, "
+                    f"{len(recorded - expected)} copied but gone from the source, "
+                    f"{len(recorded - present)} recorded but absent"
                 )
         if await src["global_settings"].find_one({"_id": "global"}, {"_id": 1}):
             row_id = f"tournament:{tournament_ids[name]}"
@@ -212,7 +244,7 @@ async def verify(
         f"{len(dupe_membership)} duplicated pairs",
     )
 
-    known_ids = {d["_id"] async for d in users.find({}, {"_id": 1})}
+    known_ids = known_users
     for collection, field_name in (
         ("teams", "user_id"),
         ("team_contest_enrollments", "user_id"),
