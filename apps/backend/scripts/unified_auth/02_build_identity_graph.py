@@ -3,11 +3,15 @@
 Read-only. Writes a plan for a human to review; merges nothing.
 
     python scripts/unified_auth/02_build_identity_graph.py --out out/ \
-        --db Dcpl --db rspl --db walle_fantasy ...
+        --db Dcpl --db rspl --db walle_fantasy ... \
+        --copy-of world_tower=walle_fantasy
 
 Every source is named with --db. There is deliberately no default: discovering
 "every database in the cluster" would also read the unified database itself,
 and the register and aggregator databases, into the identity graph.
+
+Pass phase 2's --copy-of too: it joins each copied account to its original,
+and without it this plan would not be the one phase 2 applies.
 
 Produces:
     merge_plan.json    every component, its rows, its edges and its flags
@@ -141,7 +145,17 @@ async def main() -> None:
         default=365,
         help="mobile-only matches further apart than this are flagged for review",
     )
+    parser.add_argument(
+        "--copy-of",
+        action="append",
+        default=[],
+        help="copydb=originaldb, for a database seeded from another's users",
+    )
     args = parser.parse_args()
+    copy_of = dict(pair.split("=", 1) for pair in args.copy_of)
+    for copy, original in copy_of.items():
+        if copy not in args.db or original not in args.db:
+            raise SystemExit(f"--copy-of {copy}={original}: both must be --db'd")
 
     # Imported here, not at module scope: config.settings builds a Settings()
     # on import and requires the real secrets, which would make even --help
@@ -155,7 +169,7 @@ async def main() -> None:
         client.close()
 
     components, junk = build_components(
-        rows, recycle_gap=timedelta(days=args.recycle_gap_days)
+        rows, recycle_gap=timedelta(days=args.recycle_gap_days), copy_of=copy_of
     )
     write_plan(components, junk, args.out)
     write_junk(rows, junk, args.out)

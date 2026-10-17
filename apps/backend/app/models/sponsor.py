@@ -56,10 +56,15 @@ class Sponsor(Document):
             [("created_at", -1)],
             # Enforce uniqueness of priority per group (featured vs non-featured)
             # Partial index so it only applies when priority > 0 (before migration many docs have 0)
+            # Per tournament: in one database, two tournaments' sponsors may
+            # both be priority 3. The tournament-blind first version stopped
+            # the migration at the second tournament (spec §13.11, R38);
+            # config/database.py drops it where it was built.
             IndexModel(
-                [("featured", 1), ("priority", 1)],
+                [("tournament_id", 1), ("featured", 1), ("priority", 1)],
                 unique=True,
                 partialFilterExpression={"priority": {"$gt": 0}},
+                name="uniq_sponsor_priority_per_tournament",
             ),
         ]
 

@@ -38,6 +38,7 @@ from scripts.unified_auth.loader import load_rows, load_team_owners  # noqa: E40
 from scripts.unified_auth.merge_apply import (  # noqa: E402
     copies_without_activity,
     plan_accounts,
+    point_copied_avatars_at_originals,
     undeclared_copies,
 )
 from scripts.unified_auth.normalise import (  # noqa: E402
@@ -125,7 +126,7 @@ async def main() -> None:
         played = await load_team_owners(client, list(copy_of))
         without_membership = copies_without_activity(rows, copy_of, played)
 
-        components, junk = build_components(rows)
+        components, junk = build_components(rows, copy_of=copy_of)
 
         tournament_ids = {
             t["slug"]: t["_id"] async for t in dest["tournaments"].find({}, {"slug": 1})
@@ -142,6 +143,9 @@ async def main() -> None:
             (group_id(c), plan_accounts(c, group_id(c), admin_keys, junk))
             for c in components
         ]
+        point_copied_avatars_at_originals(
+            (a for _, plan in planned for a in plan.accounts), rows, copy_of
+        )
         report = await apply_accounts(
             dest, planned, slug_by_db, tournament_ids, without_membership, args.apply
         )
