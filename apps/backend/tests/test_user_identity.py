@@ -263,6 +263,45 @@ def test_is_phone_shaped_is_digits_without_letters():
 
 
 @pytest.mark.asyncio
+async def test_a_punctuated_username_beats_the_number_its_digits_spell(db):
+    """Usernames may hold digits, "_" and "-", so this one is entirely valid."""
+    named = User(
+        username="98_765_432_10",
+        email="named@example.com",
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await named.insert()
+    await User(
+        username="holder",
+        email="holder@example.com",
+        mobile="9876543210",
+        hashed_password=get_password_hash(CURRENT),
+    ).insert()
+
+    found = await resolve_login_identity("98_765_432_10")
+    assert found is not None and found.id == named.id
+
+
+@pytest.mark.asyncio
+async def test_bare_digits_still_reach_the_number_before_a_username(db):
+    holder = User(
+        username="holder",
+        email="holder@example.com",
+        mobile="9876543210",
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await holder.insert()
+    await User(
+        username="9876543210",
+        email="named@example.com",
+        hashed_password=get_password_hash(CURRENT),
+    ).insert()
+
+    found = await resolve_login_identity("9876543210")
+    assert found is not None and found.id == holder.id
+
+
+@pytest.mark.asyncio
 async def test_a_number_typed_with_a_slash_signs_in(db):
     user = User(
         username="slash",

@@ -177,7 +177,14 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
         # "123" and looked up as somebody's number.
         digits = digits_only(value)
         candidates = mobile_candidates(digits)
-        if candidates:
+        if value != digits:
+            # Only bare digits are an exact number. Digits recovered from
+            # punctuation are inferred, like the country-code forms, and rank
+            # below the exact username: "98_765_432_10" is a valid username,
+            # and its holder must not lose their login to whoever owns
+            # 9876543210.
+            derived = candidates
+        elif candidates:
             exact, derived = candidates[0], candidates[1:]
             user = await _holder_of([exact])
             if user:
