@@ -1913,7 +1913,7 @@ Stages A–G are ordinary development and can proceed now. **H must run against 
 restored snapshot, never the live cluster** — the merge report is the artefact you
 review before anything irreversible happens.
 
-**G's scripts are dry-run ready once `fix/migration-checklist` merges.** Every §13 item
+**G's scripts are dry-run ready once #46 merges.** Every §13 item
 is fixed (2026-10-17); H waits only on §13.10: #45 merged, the platform-admin list, and
 the registry seeded.
 
@@ -1943,8 +1943,7 @@ and **each was checked against the code** rather than taken from the reviewer. T
 review threads on #41 were later marked resolved on GitHub without any code change, so
 this section is the only record of them.
 
-**Status (2026-10-17): every item below is fixed** — in #45 (app) or on the
-`fix/migration-checklist` branch (scripts) — or, for G1, satisfied. Each says where, and
+**Status (2026-10-17): every item below is fixed** — in #45 (app) or #46 (scripts) — or, for G1, satisfied. Each says where, and
 records the decisions taken on the way. Line numbers in the item text are as originally
 written: paths under `apps/backend/scripts/unified_auth/` at `8ee1a8d`, the tip of #41.
 Fixing them turned up eight more, R24–R31 (§13.9), all fixed too. **What is left before
@@ -1967,7 +1966,7 @@ the dry run** is §13.10.
   non-system database in the cluster, including `walle_arena` itself once it exists and
   the register and aggregator databases, and their users would enter the identity graph. Until `--db` is made required, pass it
   for every source. Discovery is fine for the read-only `01_inventory.py`.
-  *Fixed in `fix/migration-checklist`: `--db` is required.*
+  *Fixed in #46: `--db` is required.*
 
 ### 13.2 Identity: the wrong people merged, or dead credentials revived
 
@@ -1982,13 +1981,13 @@ the dry run** is §13.10.
   hash, and never wins recency for credential purposes. An account whose rows are all
   inactive stays inactive. Whether a deleted row should merge at all is a separate
   decision; this is the minimum.
-  *Fixed in `fix/migration-checklist`: rows rank live-first; deleted rows contribute no password and no Google or Apple id; an account deleted everywhere carries no credential. Decided 2026-10-17: deleted rows still bring their history (memberships).*
+  *Fixed in #46: rows rank live-first; deleted rows contribute no password and no Google or Apple id; an account deleted everywhere carries no credential. Decided 2026-10-17: deleted rows still bring their history (memberships).*
 - [x] **R2 — Plus-addressing is collapsed on every domain** (`normalise.py:137-138`). The
   comment justifies stripping `+tag` for Gmail, then the `else` branch strips it for
   every domain. `user+one@company.com` and `user+two@company.com` become one key and
   auto-merge as one person.
   *Fix:* strip `+tag` only for `gmail.com` / `googlemail.com`.
-  *Fixed in `fix/migration-checklist`.*
+  *Fixed in #46.*
 - [x] **R3 — A matching name overrides the recycled-number check.** *Decision needed.*
   `corroborated = len(vias) > 1 or agree is True` (`identity_graph.py:217`), and
   `_names_agree` is a fuzzy match at ratio >= 0.80 (`:147-154`, threshold at `:30`).
@@ -1998,7 +1997,7 @@ the dry run** is §13.10.
   count as corroboration on a mobile-only edge, and for common Indian names it is right.
   *Recommended:* on a mobile-only edge, only an exact normalised name corroborates, and
   above `RECYCLE_GAP_DAYS` even that goes to review. If accepted, update §7's table too.
-  *Fixed in `fix/migration-checklist`, as recommended (decided 2026-10-17): new flag `mobile_only_name_unconfirmed`; §7's table updated. On the live data this moves 4 pairs to review.*
+  *Fixed in #46, as recommended (decided 2026-10-17): new flag `mobile_only_name_unconfirmed`; §7's table updated. On the live data this moves 4 pairs to review.*
 - [x] **R4 — Foreign numbers are truncated into Indian ones** (`normalise.py:96-97`). Any
   11-15 digit number is cut to its last ten digits without checking for a `91` prefix.
   *Narrower than the review says:* the `digits[0] in "012345"` guard discards most
@@ -2007,7 +2006,7 @@ the dry run** is §13.10.
   the same shape for login (any input over ten digits also tries its last ten).
   *Fix (both places):* strip only a leading `91` from 12 digits or `0` from 11; keep
   anything else whole so it cannot match an Indian number.
-  *Fixed in both places: scripts in `fix/migration-checklist`, login in #45.*
+  *Fixed in both places: scripts in #46, login in #45.*
 
 ### 13.3 Phase 2: failures, and state it cannot repair
 
@@ -2019,7 +2018,7 @@ the dry run** is §13.10.
   mapping exists, the whole account is skipped, and the new row is never mapped.
   *Fix:* look up every row, and attach unmapped rows (and their memberships) to the
   existing user instead of creating one.
-  *Fixed in `fix/migration-checklist` (`apply_accounts.py`).*
+  *Fixed in #46 (`apply_accounts.py`).*
 - [x] **R6 — Revoked credentials survive the delta.** *Security.* The same `continue`
   (`03_apply_merges.py:108`) means an imported account is never refreshed. A password
   reset or deletion during the backfill window is detected by Phase 6 and then skipped:
@@ -2027,7 +2026,7 @@ the dry run** is §13.10.
   usable.
   *Fix:* recompute every component touched since `--since` and update the existing
   user's credentials and `is_active` (subject to R1).
-  *Fixed in `fix/migration-checklist`: every run rewrites each account from its sources.*
+  *Fixed in #46: every run rewrites each account from its sources.*
 - [x] **R7 — A crash in the middle of an account cannot be resumed**
   (`03_apply_merges.py:118-162`). The user is inserted, then one `user_id_map` row per
   source row, then the avatar plan, then memberships, with no transaction, and a rerun
@@ -2035,7 +2034,7 @@ the dry run** is §13.10.
   rest is never written; interrupted before it, the rerun inserts the identity again.
   *Fix:* one transaction per account (requires a replica set; confirm the cluster is
   one), or make every write an upsert keyed on its source row.
-  *Fixed in `fix/migration-checklist` with upserts, map first; no transaction needed.*
+  *Fixed in #46 with upserts, map first; no transaction needed.*
 - [x] **R8 — Splitting a flagged component gives every half the contested key**
   (`merge_apply.py:194-217`). Flagged components become one account per row, each built
   from its own row, so both halves of a `shared_mobile_diff_names` pair carry the same
@@ -2043,7 +2042,7 @@ the dry run** is §13.10.
   and `uniq_mobiles`, both real unique indexes.
   *Fix:* give the contested value to neither account and record it on the review item,
   or to one account by an explicit rule.
-  *Fixed in `fix/migration-checklist`. Decided 2026-10-17: the most recently active live row keeps a shared key; an account left without an email gets `<id>@unclaimed.wallearena.com`; `merge_review` records who kept what.*
+  *Fixed in #46. Decided 2026-10-17: the most recently active live row keeps a shared key; an account left without an email gets `<id>@unclaimed.wallearena.com`; `merge_review` records who kept what.*
 - [x] **R9 — Two rows from one tournament become duplicate memberships**
   (`merge_apply.py:220-240`). Phase 2 writes one membership per source row. When two
   rows from the same database merge (the normaliser's own docstring says `9876543210`
@@ -2051,7 +2050,7 @@ the dry run** is §13.10.
   membership for the same `(user_id, tournament_id)`, and the second violates
   `uniq_user_per_tournament`.
   *Fix:* one membership per tournament; keep every row's provenance in `user_id_map`.
-  *Fixed in `fix/migration-checklist`.*
+  *Fixed in #46.*
 - [x] **R23 — Accounts copied between databases get memberships they never earned.**
   *Not raised in review; found in Phase 0.* `world_tower` was seeded with a copy of
   `walle_fantasy`'s users: 102 user documents carry the same `_id` in both. Of those,
@@ -2064,7 +2063,7 @@ the dry run** is §13.10.
   original, and each later copy gets a membership only if it built a team in that
   database or its `last_login` there is later than the original's. Every row is still
   mapped in `user_id_map`.
-  *Fixed in `fix/migration-checklist`, with the original declared by `--copy-of world_tower=walle_fantasy` rather than inferred (the two databases' first signups are six hours apart). 95 copies earn no membership on the live data.*
+  *Fixed in #46, with the original declared by `--copy-of world_tower=walle_fantasy` rather than inferred (the two databases' first signups are six hours apart). 95 copies earn no membership on the live data.*
 
 ### 13.4 Phase 3: tenant data
 
@@ -2076,20 +2075,20 @@ the dry run** is §13.10.
   *Fix:* a destination document copied from this same source is expected, not a clash.
   That needs provenance on copied documents (a `source_db` field or an import ledger),
   which R11 needs too.
-  *Fixed in `fix/migration-checklist` with `import_ledger`.*
+  *Fixed in #46 with `import_ledger`.*
 - [x] **R11 — Deletions in a source never reach the destination**
   (`04_import_tenant_data.py:101-104`). The import only upserts. A contest copied
   during the backfill and deleted before cutover survives it.
   *Fix:* after each import, delete destination documents from this source whose `_id`
   is no longer in the source.
-  *Fixed in `fix/migration-checklist`, including collections since emptied or dropped.*
+  *Fixed in #46, including collections since emptied or dropped.*
 - [x] **R12 — Per-tournament settings are not migrated** (`tenant_import.py:20-31`).
   `global_settings` is not in the import list, so each tournament's squad limits and
   `default_contest_logo_file_id` fall back to platform defaults. #37 made settings
   per-tournament (`GlobalSettings.get_for_tournament`), so there is now a place for them.
   *Fix:* turn each source's `"global"` document into that tournament's settings row with
   a new `_id`. §2.1 still lists `global_settings` as a singleton; update it too.
-  *Fixed in `fix/migration-checklist`: `_id` `tournament:<id>`. §2.1 updated.*
+  *Fixed in #46: `_id` `tournament:<id>`. §2.1 updated.*
 - [x] **R13 — Contest, sponsor and carousel images are left behind.** Phase 4 copies
   only the `avatars` bucket. `contest_logos`, `sponsor_logos` and `carousel_images` are
   referenced by `Contest.logo_file_id`, `Sponsor.logo_file_id`,
@@ -2097,14 +2096,14 @@ the dry run** is §13.10.
   would return 404 after cutover.
   *Fix:* copy the three buckets preserving file `_id`, so no reference needs rewriting.
   §2.1 lists only `fs.avatars.*`; update it too.
-  *Fixed in `fix/migration-checklist`. §2.1 updated.*
+  *Fixed in #46. §2.1 updated.*
 - [x] **R14 — Remove the `dropIndex("code_1")` instruction**
   (`04_import_tenant_data.py:10-13`). The review item *"Sponsor names still collide
   globally"* is **not a defect**, for the same reason this instruction is unnecessary:
   `sponsors.name` and `contests.code` are not unique indexes at all (R22). Per-tournament
   contest-code uniqueness comes from `uniq_contest_code_per_tournament`. Dropping
   `code_1` is harmless (Beanie rebuilds it), but the docstring teaches something false.
-  *Fixed in `fix/migration-checklist`.*
+  *Fixed in #46.*
 
 ### 13.5 Phase 4: avatars
 
@@ -2112,13 +2111,13 @@ the dry run** is §13.10.
   store the real type (`app/utils/gridfs.py:46`) and PNG, WebP and SVG are accepted; the
   copy writes `image/jpeg`, and the serving route trusts that metadata.
   *Fix:* copy the source file's `metadata.content_type`.
-  *Fixed in `fix/migration-checklist`: files are copied as GridFS's own documents, metadata intact.*
+  *Fixed in #46: files are copied as GridFS's own documents, metadata intact.*
 - [x] **R16 — Every rerun copies every avatar again** (`05_copy_avatars.py:40-70`). No
   plan is ever marked done, so a retry uploads a new file per plan and orphans the
   previous one.
   *Fix:* upload with the source file's `_id` (`upload_from_stream_with_id`) and skip
   ids already present, or record the destination id on the plan and skip completed ones.
-  *Fixed in `fix/migration-checklist`: files keep their `_id`; present ones are skipped.*
+  *Fixed in #46: files keep their `_id`; present ones are skipped.*
 
 ### 13.6 Phase 6: the delta cannot currently complete
 
@@ -2127,12 +2126,12 @@ the dry run** is §13.10.
   `player_contest_points` (a scoring update during the window, say) print "Nothing to
   re-sync" and are lost.
   *Fix:* check every imported collection, or skip detection and always run.
-  *Fixed in `fix/migration-checklist`: the delta re-runs everything; there is no detection to miss things.*
+  *Fixed in #46: the delta re-runs everything; there is no detection to miss things.*
 - [x] **R18 — The delta never copies avatars** (`07_resync_delta.py:87-98`). It reruns
   Phases 2 and 3 only, so a signup with an avatar during the window keeps a source-bucket
   id that the unified database cannot serve.
   *Fix:* include Phase 4.
-  *Fixed in `fix/migration-checklist`.*
+  *Fixed in #46.*
 - [x] **R19 — Even with R17 and R18 fixed, Phase 6 fails.** *Not raised in review.* It
   reruns Phase 3 with `check=True` (`07_resync_delta.py:98`), which aborts on R10, and
   it reruns Phase 2, which skips every existing account (R5, R6). Step 5 of §7 Phase 6,
@@ -2149,7 +2148,7 @@ the dry run** is §13.10.
   the maps but before the memberships and it passes.
   *Fix:* reconcile document counts per collection against each source, and require a
   membership for every mapped row.
-  *Fixed in `fix/migration-checklist`.* A correction to the item: one existence check
+  *Fixed in #46.* A correction to the item: one existence check
   did exist — the legacy-row count against `user_id_map` — but nothing beyond it. And
   R23 made "a membership for every mapped row" wrong; the check uses `earns_membership`
   instead.
