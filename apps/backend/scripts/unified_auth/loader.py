@@ -38,6 +38,9 @@ async def load_rows(
                 "created_at": 1,
                 "updated_at": 1,
                 "last_login": 1,
+                "hashed_password": 1,
+                "is_verified": 1,
+                "avatar_file_id": 1,
             },
         )
         async for doc in cursor:
@@ -55,6 +58,9 @@ async def load_rows(
                     created_at=doc.get("created_at"),
                     updated_at=doc.get("updated_at"),
                     last_login=doc.get("last_login"),
+                    hashed_password=doc.get("hashed_password"),
+                    is_verified=bool(doc.get("is_verified", False)),
+                    avatar_file_id=doc.get("avatar_file_id"),
                 )
             )
     return rows
