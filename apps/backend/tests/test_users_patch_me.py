@@ -196,3 +196,60 @@ async def test_register_maps_duplicate_key_race_to_400(anon_client, monkeypatch)
 
     assert resp.status_code == 400
     assert "already registered" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_changing_mobile_retires_the_old_number_everywhere(
+    user_client, google_user
+):
+    """Login and reset read `mobiles` first, so the old number must leave it."""
+    await user_client.patch("/api/users/me", json={"mobile": "9876543210"})
+    resp = await user_client.patch("/api/users/me", json={"mobile": "9123400000"})
+    assert resp.status_code == 200
+
+    stored = await User.get(google_user.id)
+    assert stored.mobile == "9123400000"
+    assert stored.mobiles == ["9123400000"]
+
+
+@pytest.mark.asyncio
+async def test_changing_mobile_keeps_numbers_merged_from_other_tournaments(
+    user_client, google_user
+):
+    google_user.mobile = "9876543210"
+    google_user.mobiles = ["9876543210", "9555000111"]
+    await google_user.save()
+
+    await user_client.patch("/api/users/me", json={"mobile": "9123400000"})
+
+    stored = await User.get(google_user.id)
+    assert stored.mobiles == ["9123400000", "9555000111"]
+
+
+@pytest.mark.asyncio
+async def test_put_keeps_mobiles_in_step_too(user_client, google_user):
+    await user_client.put("/api/users/me", params={"mobile": "9876543210"})
+    resp = await user_client.put("/api/users/me", params={"mobile": "9123400000"})
+    assert resp.status_code == 200
+
+    stored = await User.get(google_user.id)
+    assert stored.mobiles == ["9123400000"]
+
+
+@pytest.mark.asyncio
+async def test_a_number_held_only_in_another_accounts_mobiles_is_taken(
+    user_client,
+):
+    """A merged account's second number is as much theirs as its first."""
+    await User(
+        username="merged",
+        email="merged@example.com",
+        mobile="9123456789",
+        mobiles=["9123456789", "9555000111"],
+    ).insert()
+
+    patch = await user_client.patch("/api/users/me", json={"mobile": "9555000111"})
+    put = await user_client.put("/api/users/me", params={"mobile": "9555000111"})
+
+    assert patch.status_code == 409
+    assert put.status_code == 400

@@ -34,6 +34,7 @@ from app.services.auth.identity import (
     AmbiguousIdentifier,
     promote_legacy_password,
     resolve_login_identity,
+    set_new_password,
     verify_user_password,
 )
 from app.services.auth.password_reset import reset_password as pr_reset_password
@@ -41,7 +42,7 @@ from app.services.auth.password_reset import start_session as pr_start_session
 from app.services.auth.password_reset import (
     verify_otp_and_issue_token as pr_verify_and_issue,
 )
-from app.utils.dependencies import get_current_active_user, resolve_token_subject
+from app.utils.dependencies import get_current_active_user, subject_claims
 from app.utils.gridfs import upload_avatar_to_gridfs
 from app.utils.security import (
     create_access_token,
@@ -146,8 +147,8 @@ async def register(
         await new_user.save()
 
     # Generate tokens
-    access_token = create_access_token(data={"sub": str(new_user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(new_user.id)})
+    access_token = create_access_token(data=subject_claims(new_user))
+    refresh_token = create_refresh_token(data=subject_claims(new_user))
 
     # Store refresh token in database
     refresh_token_doc = RefreshToken(
@@ -213,8 +214,8 @@ async def login(user_data: UserLogin):
     user.last_login = datetime.utcnow()
     await user.save()
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
 
     # Store refresh token
     refresh_token_doc = RefreshToken(
@@ -249,8 +250,8 @@ async def google_auth(payload: GoogleAuth):
     user.last_login = datetime.utcnow()
     await user.save()
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
 
     refresh_token_doc = RefreshToken(
         user_id=user.id,
@@ -329,7 +330,10 @@ async def refresh_token(refresh_token: str):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
         )
 
-    user = await resolve_token_subject(payload.get("sub") or "")
+    # Whose token this is comes from its stored record, not from `sub`: a
+    # token minted before SUBJECT_KIND_CLAIM existed cannot say whether its
+    # subject is an id or a username, and the record never had that ambiguity.
+    user = await User.get(token_doc.user_id)
 
     if not user:
         raise HTTPException(
@@ -341,8 +345,8 @@ async def refresh_token(refresh_token: str):
     await token_doc.save()
 
     # Generate new tokens
-    new_access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    new_access_token = create_access_token(data=subject_claims(user))
+    new_refresh_token = create_refresh_token(data=subject_claims(user))
 
     # Store new refresh token
     new_token_doc = RefreshToken(
@@ -461,7 +465,7 @@ async def change_password(
         )
 
     # Update password
-    current_user.hashed_password = get_password_hash(payload.new_password)
+    set_new_password(current_user, payload.new_password)
     current_user.updated_at = datetime.utcnow()
     await current_user.save()
 

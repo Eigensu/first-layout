@@ -1,8 +1,8 @@
 """Resolving who is signing in, and whether their password is one of theirs.
 
-Used by the login and refresh routes. Every lookup falls back from the
-identity arrays to the scalar fields, so this works on accounts the backfill
-has not reached yet. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
+Used by the login, password-reset and profile routes. Every lookup falls back
+from the identity arrays to the scalar fields, so this works on accounts the
+backfill has not reached yet. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
 """
 
 from typing import List, Optional, Tuple
@@ -37,17 +37,17 @@ def digits_only(value: str) -> str:
     return "".join(ch for ch in value if ch in ASCII_DIGITS)
 
 
-# The punctuation a phone number gets typed with. Anything else means the
-# identifier is not a number at all, however many digits it happens to contain.
-PHONE_PUNCTUATION = frozenset(" +-().")
-
-
 def is_phone_shaped(value: str) -> bool:
-    """True when every character could belong to a typed phone number."""
-    return (
-        bool(value)
-        and any(ch in ASCII_DIGITS for ch in value)
-        and all(ch in ASCII_DIGITS or ch in PHONE_PUNCTUATION for ch in value)
+    """True when the identifier reads as a typed number: digits, no letters.
+
+    Letters are what rule a number out -- "rahul123" must not be reduced to
+    "123" and looked up as somebody's mobile. Punctuation is not: the signup
+    and profile validators keep the digits of whatever was typed, so a number
+    entered as "98765/43210" was stored as 9876543210, and refusing the same
+    input at sign-in would lock its owner out.
+    """
+    return any(ch in ASCII_DIGITS for ch in value) and not any(
+        ch.isalpha() for ch in value
     )
 
 
@@ -205,6 +205,49 @@ async def resolve_login_identity(identifier: str) -> Optional[User]:
     return None
 
 
+async def resolve_phone_holder(phone: str) -> Optional[User]:
+    """The account holding this number -- by number alone, never by username.
+
+    For flows where the number itself is the credential: password reset texts
+    its code to the number typed, so the account it resets has to be the one
+    holding that number. resolve_login_identity cannot be used there. It falls
+    back to usernames, and an all-digit username would bind one person's reset
+    to whoever owns the phone their name happens to spell.
+
+    Same order as login: the exact form, then the inferred ones.
+    """
+    value = phone.strip()
+    if not is_phone_shaped(value):
+        return None
+    digits = digits_only(value)
+    candidates = mobile_candidates(digits)
+    if not candidates:
+        return None
+    exact, derived = candidates[0], candidates[1:]
+    user = await _holder_of([exact])
+    if user:
+        return user
+    user = await _holder_of(derived)
+    if user:
+        return user
+    return await _holder_of_symbol_number(digits)
+
+
+def set_profile_mobile(user: User, number: str) -> None:
+    """Replace the number on a profile, in both fields login reads it from.
+
+    The old number has to leave `mobiles` as well as `mobile`. Login and
+    password reset both consult `mobiles` first, so a number left behind there
+    keeps unlocking the account after its owner has given it up -- and once it
+    is reissued or claimed by someone else, that someone receives this
+    account's reset code. Other numbers a merged account carries from its
+    other tournaments are not the one being replaced, and stay.
+    """
+    replaced = user.mobile
+    user.mobiles = [number] + [m for m in user.mobiles if m not in (number, replaced)]
+    user.mobile = number
+
+
 def verify_user_password(user: User, plaintext: str) -> Tuple[bool, bool]:
     """Check a password against the primary hash and any carried-over ones.
 
@@ -233,6 +276,17 @@ async def promote_legacy_password(user: User, plaintext: str) -> None:
     user.hashed_password = get_password_hash(plaintext)
     user.legacy_hashes = []
     await user.save()
+
+
+def set_new_password(user: User, plaintext: str) -> None:
+    """Make `plaintext` the account's only valid password.
+
+    Clears the carried-over hashes too. Login accepts those, so a change or a
+    reset that replaced only the primary hash would leave every old password
+    working -- and the next login with one would promote it over the new one.
+    """
+    user.hashed_password = get_password_hash(plaintext)
+    user.legacy_hashes = []
 
 
 def primary_identity(values: List[str]) -> Optional[str]:

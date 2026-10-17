@@ -12,6 +12,7 @@ from app.schemas.user import (
     UserUpdateRequest,
 )
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
+from app.services.auth.identity import set_profile_mobile
 from app.utils.dependencies import get_current_active_user
 from app.utils.gridfs import open_avatar_stream
 from app.utils.security import verify_password
@@ -55,10 +56,13 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
         return False
 
     # Every write path normalizes to digits, so an indexed equality lookup
-    # settles the common case without reading the collection.
-    existing = await User.find_one(User.mobile == target)
-    if existing is not None and str(existing.id) != str(current_user.id):
-        return True
+    # settles the common case without reading the collection. `mobiles` too:
+    # login and password reset read it first, so a number held only there is
+    # as much another account's as one in `mobile`.
+    for query in (User.mobile == target, User.mobiles == target):
+        existing = await User.find_one(query)
+        if existing is not None and str(existing.id) != str(current_user.id):
+            return True
 
     # Rows written before normalization may hold the same number with symbols,
     # which the lookup above cannot match. Scan only those, not every user.
@@ -96,16 +100,13 @@ async def update_current_user(
                 detail="Mobile must be exactly 10 digits",
             )
 
-        existing_mobile_owner = await User.find_one(User.mobile == normalized_mobile)
-        if existing_mobile_owner and str(existing_mobile_owner.id) != str(
-            current_user.id
-        ):
+        if await _mobile_taken_by_other(normalized_mobile, current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Mobile already registered",
             )
 
-        current_user.mobile = normalized_mobile
+        set_profile_mobile(current_user, normalized_mobile)
 
     if avatar_url:
         current_user.avatar_url = avatar_url
@@ -146,7 +147,7 @@ async def patch_current_user(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This mobile number is already linked to another account",
             )
-        current_user.mobile = payload.mobile
+        set_profile_mobile(current_user, payload.mobile)
 
     current_user.updated_at = datetime.now(timezone.utc)
     try:

@@ -80,6 +80,14 @@ async def _find_existing(google_id: str, email: str) -> Optional[User]:
     return None
 
 
+async def _email_held_by_other(email: str, user: User) -> bool:
+    for query in (User.emails == email.lower(), User.email == email):
+        holder = await User.find_one(query)
+        if holder is not None and holder.id != user.id:
+            return True
+    return False
+
+
 async def find_or_create_google_user(payload: dict) -> User:
     """Find an existing user by Google sub/email, linking or creating as needed."""
     google_id = payload["sub"]
@@ -97,7 +105,13 @@ async def find_or_create_google_user(payload: dict) -> User:
             user.google_ids.append(google_id)
         if not user.google_id:
             user.google_id = user.google_ids[0]
-        if email.lower() not in user.emails:
+        if email.lower() not in user.emails and not await _email_held_by_other(
+            email, user
+        ):
+            # Skipped when another account holds the address: a Google account
+            # can change its email to one already registered here, and
+            # uniq_emails would then fail the save -- refusing a returning
+            # user's sign-in by the Google id that identifies them exactly.
             user.emails.append(email.lower())
         user.is_verified = True
         await user.save()
