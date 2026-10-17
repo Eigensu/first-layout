@@ -1,0 +1,180 @@
+"""Resolving who is signing in, and whether their password is one of theirs.
+
+Neither of these is wired into a route yet. They cannot be until the backfill
+populates `emails`/`mobiles` -- resolving against empty arrays would fail every
+login. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
+"""
+
+from typing import List, Optional, Tuple
+
+from app.models.user import User
+from app.utils.security import get_password_hash, verify_password
+
+# ASCII only: str.isdigit() also accepts Unicode numerals, which would be stored
+# verbatim and never compare equal to their ASCII form -- slipping past both the
+# collision checks and the unique indexes.
+ASCII_DIGITS = "0123456789"
+
+INDIA_COUNTRY_CODE = "91"
+
+
+class AmbiguousIdentifier(Exception):
+    """More than one account answers to this username.
+
+    Raised rather than resolved, because guessing is the one thing that must
+    not happen here: usernames stop being unique when five databases become
+    one, so picking the first match would sign someone into a stranger's
+    account. The route turns this into a 409 telling them to use their mobile
+    or email instead.
+    """
+
+    def __init__(self, identifier: str):
+        self.identifier = identifier
+        super().__init__(f"{identifier!r} matches more than one account")
+
+
+def digits_only(value: str) -> str:
+    return "".join(ch for ch in value if ch in ASCII_DIGITS)
+
+
+# The punctuation a phone number gets typed with. Anything else means the
+# identifier is not a number at all, however many digits it happens to contain.
+PHONE_PUNCTUATION = frozenset(" +-().")
+
+
+def is_phone_shaped(value: str) -> bool:
+    """True when every character could belong to a typed phone number."""
+    return (
+        bool(value)
+        and any(ch in ASCII_DIGITS for ch in value)
+        and all(ch in ASCII_DIGITS or ch in PHONE_PUNCTUATION for ch in value)
+    )
+
+
+def mobile_candidates(digits: str) -> List[str]:
+    """The forms a typed number might be stored as, most exact first.
+
+    Numbers are stored digits-only, but nothing has ever forced them to be
+    stored the *same* way: registration writes the ten digits a user typed,
+    while PATCH /api/users/me accepts ten to fifteen, so an account created
+    through one path may hold 9876543210 and another 919876543210 for the same
+    phone. Someone typing "+91 98765 43210" should reach either.
+
+    The fallback therefore has to work in both directions. Stripping a country
+    code handles a long input against a short stored value; adding one handles
+    a short input against a long stored value, which is the case a user hits
+    every time they update their number through the profile and then sign in
+    with the ten digits they have always typed.
+
+    The exact match is always tried first, so a fallback only decides cases the
+    exact form could not, and the unique index means each candidate can match
+    at most one account.
+    """
+    if not digits:
+        return []
+    candidates = [digits]
+    if len(digits) > 10:
+        suffix = digits[-10:]
+        if suffix not in candidates:
+            candidates.append(suffix)
+    elif len(digits) == 10:
+        # The only country code this product has ever issued numbers for. A
+        # general phone library would be overkill for one prefix, but leaving
+        # this direction out strands anyone whose stored number carries it.
+        prefixed = f"{INDIA_COUNTRY_CODE}{digits}"
+        if prefixed not in candidates:
+            candidates.append(prefixed)
+    return candidates
+
+
+async def resolve_login_identity(identifier: str) -> Optional[User]:
+    """Find the account signing in, by mobile, email, or (for now) username.
+
+    Order matters, and the ordering rule is: exact matches on a real login key
+    first, then an exact username, then the number forms that are only inferred.
+
+    Every lookup here is an indexed equality match. The paths this replaces
+    walked every user with a mobile set and compared digit by digit, which was
+    already the slowest thing in the login route and would have become five
+    times slower with five user collections merged into one.
+    """
+    value = identifier.strip().lower()
+    if not value:
+        return None
+
+    derived: List[str] = []
+
+    # An identifier holding "@" is an address, never a phone number, and it has
+    # to be treated as one *before* anything reduces it to its digits.
+    # "9876543210@example.com" is a perfectly ordinary address here -- a phone
+    # number as the local part is common -- and digit-reducing it first would
+    # resolve it to whichever unrelated account owns that mobile, then check
+    # this person's password against that stranger's hash.
+    if "@" in value:
+        user = await User.find_one(User.emails == value)
+        if user:
+            return user
+    elif is_phone_shaped(value):
+        # Phone-shaped only: a username like "rahul123" must not be reduced to
+        # "123" and looked up as somebody's number.
+        candidates = mobile_candidates(digits_only(value))
+        if candidates:
+            exact, derived = candidates[0], candidates[1:]
+            user = await User.find_one(User.mobiles == exact)
+            if user:
+                return user
+
+    # Transitional: someone typing the username they have always used. Once
+    # usernames are no longer unique this can only be honoured when it is
+    # unambiguous, and the ambiguous case has to be refused rather than guessed.
+    matches = await User.find(User.username == value).limit(2).to_list()
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AmbiguousIdentifier(value)
+
+    # Last: the number forms nobody typed. Registration accepts an all-digit
+    # username, so "9876543210" may be one person's name and, with a country
+    # code bolted on, another person's number. An inferred form must never
+    # outrank the exact username someone actually holds.
+    for candidate in derived:
+        user = await User.find_one(User.mobiles == candidate)
+        if user:
+            return user
+
+    return None
+
+
+def verify_user_password(user: User, plaintext: str) -> Tuple[bool, bool]:
+    """Check a password against the primary hash and any carried-over ones.
+
+    Returns (ok, used_legacy). A merged account has more than one valid
+    password -- one per account it was merged from -- and the person remembers
+    whichever they last used.
+    """
+    if user.hashed_password and verify_password(plaintext, user.hashed_password):
+        return True, False
+
+    for legacy in user.legacy_hashes:
+        if verify_password(plaintext, legacy.hashed_password):
+            return True, True
+
+    return False, False
+
+
+async def promote_legacy_password(user: User, plaintext: str) -> None:
+    """Make the password they just used the only one that works.
+
+    Called after a successful login via a legacy hash. Rehashes rather than
+    copying the matched hash across, so the account also picks up the current
+    hashing parameters. The extra valid secrets therefore exist only until each
+    person next signs in, instead of for as long as the account does.
+    """
+    user.hashed_password = get_password_hash(plaintext)
+    user.legacy_hashes = []
+    await user.save()
+
+
+def primary_identity(values: List[str]) -> Optional[str]:
+    """The scalar `email`/`mobile`/`google_id` kept in step with its array."""
+    return values[0] if values else None

@@ -17,6 +17,7 @@ from app.models.sponsor import Sponsor
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
+from app.models.tournament_membership import TournamentMembership
 from app.models.user import RefreshToken, User, UserProfile
 from config.settings import get_settings
 
@@ -61,6 +62,7 @@ async def connect_to_mongo():
                 PasswordResetToken,
                 GlobalSettings,
                 Tournament,
+                TournamentMembership,
             ],
         )
         print(f"[OK] Initialized Beanie ODM with database: {settings.mongodb_db_name}")
