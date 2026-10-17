@@ -97,3 +97,69 @@ async def test_rejects_disabled_user(anon_client, monkeypatch):
     resp = await anon_client.post("/api/auth/google", json={"id_token": "fake"})
 
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_google_email_now_held_by_another_account_does_not_block_sign_in(
+    anon_client, monkeypatch
+):
+    """Recognised by Google id, so the changed email is not needed to sign in.
+
+    Appending it would collide with the account that holds it -- uniq_emails
+    fails the save -- and turn a returning user's sign-in into a server error.
+    """
+    returning = User(
+        username="returning",
+        email="old@example.com",
+        emails=["old@example.com"],
+        google_id="google-sub-789",
+        google_ids=["google-sub-789"],
+        hashed_password=None,
+        auth_provider="google",
+    )
+    await returning.insert()
+    await User(
+        username="holder",
+        email="taken@example.com",
+        emails=["taken@example.com"],
+        hashed_password="some-real-hash",
+    ).insert()
+
+    monkeypatch.setattr(
+        "app.routes.auth.verify_google_id_token",
+        lambda token: _fake_payload(sub="google-sub-789", email="taken@example.com"),
+    )
+
+    resp = await anon_client.post("/api/auth/google", json={"id_token": "fake"})
+
+    assert resp.status_code == 200
+    assert (await User.get(returning.id)).emails == ["old@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_a_returning_google_users_new_email_is_still_recorded(
+    anon_client, monkeypatch
+):
+    returning = User(
+        username="returning",
+        email="old@example.com",
+        emails=["old@example.com"],
+        google_id="google-sub-789",
+        google_ids=["google-sub-789"],
+        hashed_password=None,
+        auth_provider="google",
+    )
+    await returning.insert()
+
+    monkeypatch.setattr(
+        "app.routes.auth.verify_google_id_token",
+        lambda token: _fake_payload(sub="google-sub-789", email="fresh@example.com"),
+    )
+
+    resp = await anon_client.post("/api/auth/google", json={"id_token": "fake"})
+
+    assert resp.status_code == 200
+    assert (await User.get(returning.id)).emails == [
+        "old@example.com",
+        "fresh@example.com",
+    ]

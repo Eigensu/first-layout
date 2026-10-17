@@ -8,10 +8,9 @@ from beanie.operators import In
 
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.user import RefreshToken, User
-from app.services.auth.identity import resolve_login_identity
+from app.services.auth.identity import resolve_phone_holder, set_new_password
 from app.services.auth.twofactor import send_otp_autogen
 from app.services.auth.twofactor import verify_otp as provider_verify_otp
-from app.utils.security import get_password_hash
 from config.settings import get_settings
 
 settings = get_settings()
@@ -26,9 +25,10 @@ def _hash_token(token: str) -> str:
 
 
 async def start_session(phone: str) -> None:
-    # Same resolution the login route uses, rather than a second walk of the
-    # users collection that has to be kept in step with it by hand.
-    user: Optional[User] = await resolve_login_identity(phone)
+    # By number only. The code goes to the number typed, so the account reset
+    # must be the one holding it; login's resolver would fall back to an
+    # all-digit username and hand someone else's account to this phone.
+    user: Optional[User] = await resolve_phone_holder(phone)
     if not user:
         return
     await PasswordResetSession.find(
@@ -107,7 +107,7 @@ async def reset_password(reset_token: str, new_password: str) -> None:
     user = await User.get(token_doc.user_id)
     if not user:
         raise ValueError("User not found")
-    user.hashed_password = get_password_hash(new_password)
+    set_new_password(user, new_password)
     user.updated_at = _now()
     await user.save()
     # Revoke all refresh tokens for this user
