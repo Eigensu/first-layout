@@ -2,7 +2,12 @@
 
 Read-only. Writes a plan for a human to review; merges nothing.
 
-    python scripts/unified_auth/02_build_identity_graph.py --out out/
+    python scripts/unified_auth/02_build_identity_graph.py --out out/ \
+        --db Dcpl --db rspl --db walle_fantasy ...
+
+Every source is named with --db. There is deliberately no default: discovering
+"every database in the cluster" would also read the unified database itself,
+and the register and aggregator databases, into the identity graph.
 
 Produces:
     merge_plan.json    every component, its rows, its edges and its flags
@@ -31,10 +36,7 @@ from scripts.unified_auth.identity_graph import (  # noqa: E402
     build_components,
     summarise,
 )
-from scripts.unified_auth.loader import (  # noqa: E402
-    list_candidate_databases,
-    load_rows,
-)
+from scripts.unified_auth.loader import load_rows  # noqa: E402
 
 
 def write_plan(components, junk, out_dir: Path) -> None:
@@ -113,7 +115,12 @@ def write_plan(components, junk, out_dir: Path) -> None:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", action="append", help="limit to these databases")
+    parser.add_argument(
+        "--db",
+        action="append",
+        required=True,
+        help="a source database; repeat for each one",
+    )
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument(
         "--recycle-gap-days",
@@ -130,8 +137,7 @@ async def main() -> None:
 
     client = AsyncIOMotorClient(get_settings().mongodb_url)
     try:
-        names = args.db or await list_candidate_databases(client)
-        rows = await load_rows(client, names)
+        rows = await load_rows(client, args.db)
     finally:
         client.close()
 

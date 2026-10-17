@@ -78,6 +78,34 @@ def test_junk_mobiles_identify_nobody(raw):
     assert normalise_mobile(raw) is None
 
 
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("+44 7911 123456", "447911123456"),
+        ("447911123456", "447911123456"),
+        ("+1 415 555 0123", "14155550123"),
+        ("09876543210", "9876543210"),
+    ],
+)
+def test_only_real_indian_prefixes_are_stripped(raw, expected):
+    """UK 447911123456 is not the Indian 7911123456 (R4).
+
+    Cutting every long number to its last ten digits handed foreign numbers
+    an Indian one, and with it the account of whoever holds that.
+    """
+    assert normalise_mobile(raw) == expected
+
+
+def test_a_foreign_number_does_not_join_an_indian_one():
+    rows = [
+        row(db="walle_lpcl", uid="1", mobile="+44 7911 123456", full_name="A B"),
+        row(db="walle_fifth", uid="2", mobile="7911123456", full_name="A B"),
+    ]
+    components, _ = build_components(rows)
+
+    assert len(components) == 2
+
+
 def test_gmail_aliases_are_one_inbox_and_one_person():
     """Otherwise a migration meant to give this person one account gives three."""
     assert (
@@ -85,6 +113,14 @@ def test_gmail_aliases_are_one_inbox_and_one_person():
         == normalise_email("rahulpatel@gmail.com")
         == normalise_email("rahul.patel+lpcl@gmail.com")
         == "rahulpatel@gmail.com"
+    )
+
+
+def test_plus_tags_are_significant_outside_gmail():
+    """Elsewhere a +tag may be its own mailbox (R2)."""
+    assert normalise_email("user+one@company.com") == "user+one@company.com"
+    assert normalise_email("user+one@company.com") != normalise_email(
+        "user+two@company.com"
     )
 
 
@@ -191,6 +227,24 @@ def test_unrelated_people_stay_separate():
 # --------------------------------------------------------------------------
 
 
+def test_three_accounts_on_one_phone_are_one_person():
+    """Every pair directly linked is not a chain, however many there are.
+
+    Someone who played three tournaments on one number is the player the
+    unified profile exists for. Holding size >= 3 back split 80 such people in
+    the live data.
+    """
+    rows = [
+        row(db=db, uid=str(i), mobile="9876543210", full_name="Rahul Patel")
+        for i, db in enumerate(("walle_m11", "walle_lpcl", "walle_fifth"))
+    ]
+    components, _ = build_components(rows)
+
+    assert components[0].size == 3
+    assert "chained" not in components[0].flags
+    assert components[0].should_merge
+
+
 def test_chained_components_are_held_back():
     """A shares a number with B, B shares an address with C, A and C are strangers."""
     rows = [
@@ -203,6 +257,38 @@ def test_chained_components_are_held_back():
     assert components[0].size == 3
     assert "chained" in components[0].flags
     assert not components[0].should_merge
+
+
+@pytest.mark.parametrize(
+    "first,second",
+    [
+        ("Rahul Patel", "Rahul Patil"),  # similar, but not the same name
+        ("Rahul Patel", None),  # nothing to compare
+    ],
+)
+def test_a_phone_alone_needs_an_exact_name_to_merge(first, second):
+    """Two different people with a common name pass a fuzzy match (R3).
+
+    On a mobile-only edge -- no shared email -- only an exact name merges.
+    """
+    rows = [
+        row(db="walle_lpcl", uid="1", mobile="9876543210", full_name=first),
+        row(db="walle_fifth", uid="2", mobile="9876543210", full_name=second),
+    ]
+    components, _ = build_components(rows)
+
+    assert "mobile_only_name_unconfirmed" in flags_of(components)
+    assert not components[0].should_merge
+
+
+def test_a_shared_email_needs_no_name_at_all():
+    rows = [
+        row(db="walle_lpcl", uid="1", email="r@corp.com", full_name=None),
+        row(db="walle_fifth", uid="2", email="r@corp.com", full_name=None),
+    ]
+    components, _ = build_components(rows)
+
+    assert components[0].should_merge
 
 
 def test_shared_mobile_with_different_names_is_held_back():
@@ -368,13 +454,41 @@ def test_missing_dates_are_not_treated_as_evidence():
     assert "possible_recycled_mobile" not in flags_of(components)
 
 
+def test_an_exact_name_does_not_outweigh_a_wide_gap():
+    """Matching names are common; two years apart, the number may be someone
+    else's now (R3)."""
+    rows = [
+        row(
+            db="walle_m11",
+            uid="1",
+            mobile="9876543210",
+            full_name="Rahul Patel",
+            created_at=JAN_2024,
+            updated_at=MAR_2024,
+            last_login=MAR_2024,
+        ),
+        row(
+            db="walle_lpcl",
+            uid="2",
+            mobile="9876543210",
+            full_name="Rahul Patel",
+            created_at=JAN_2026,
+            updated_at=MAR_2026,
+            last_login=MAR_2026,
+        ),
+    ]
+    components, _ = build_components(rows)
+
+    assert flags_of(components) == ["possible_recycled_mobile"]
+
+
 def test_recycle_gap_is_configurable():
     rows = [
         row(
             db="walle_lpcl",
             uid="1",
             mobile="9876543210",
-            full_name=None,
+            full_name="Rahul Patel",
             created_at=JAN_2024,
             updated_at=MAR_2024,
             last_login=MAR_2024,
@@ -383,7 +497,7 @@ def test_recycle_gap_is_configurable():
             db="walle_fifth",
             uid="2",
             mobile="9876543210",
-            full_name=None,
+            full_name="Rahul Patel",
             created_at=JUN_2024,
             updated_at=JUN_2024,
             last_login=JUN_2024,

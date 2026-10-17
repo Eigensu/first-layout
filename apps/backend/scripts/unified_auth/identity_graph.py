@@ -26,7 +26,9 @@ from .normalise import (
 )
 
 # Below this, two full_name values are treated as different people rather than
-# as spelling variants.
+# as spelling variants, and the pair is flagged. At or above it they are not
+# called different -- but on a mobile-only edge that is still not enough to
+# merge; there only an exact match is (see _flag_component).
 NAME_SIMILARITY_THRESHOLD = 0.80
 
 # A mobile edge whose two accounts were never active within this of each other
@@ -154,6 +156,12 @@ def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
     return SequenceMatcher(None, na, nb).ratio() >= NAME_SIMILARITY_THRESHOLD
 
 
+def _names_match_exactly(a: LegacyRow, b: LegacyRow) -> bool:
+    """Both have a name, and they are identical once normalised."""
+    na, nb = normalise_name(a.full_name), normalise_name(b.full_name)
+    return bool(na) and na == nb
+
+
 def _windows_are_disjoint_by(a: LegacyRow, b: LegacyRow, gap: timedelta) -> bool:
     """True when the two accounts were never active anywhere near each other."""
     if not (a.active_from and a.active_until and b.active_from and b.active_until):
@@ -185,19 +193,24 @@ def _flag_component(
 
     by_key = {r.key: r for r in component_rows}
 
-    if len(component_rows) > 2:
-        # Three or more accounts joined transitively: A shares a number with B,
-        # B shares an address with C, and nothing links A to C at all.
+    # Which pairs are corroborated by more than one channel.
+    channels: Dict[frozenset, Set[str]] = defaultdict(set)
+    for edge in component_edges:
+        channels[frozenset((edge.a, edge.b))].add(edge.via)
+
+    keys = [r.key for r in component_rows]
+    every_pair = {frozenset((a, b)) for i, a in enumerate(keys) for b in keys[i + 1 :]}
+    if not every_pair <= set(channels):
+        # Joined transitively: A shares a number with B, B shares an address
+        # with C, and nothing links A to C at all. Size alone is not this --
+        # someone who played three tournaments on one phone is three directly
+        # linked accounts, and holding those back would split exactly the
+        # players the unified profile is for.
         flags.append("chained")
 
     google_ids = {r.google_id for r in component_rows if r.google_id}
     if len(google_ids) > 1:
         flags.append("multi_google")
-
-    # Which pairs are corroborated by more than one channel.
-    channels: Dict[frozenset, Set[str]] = defaultdict(set)
-    for edge in component_edges:
-        channels[frozenset((edge.a, edge.b))].add(edge.via)
 
     for pair, vias in channels.items():
         a, b = (by_key[k] for k in pair)
@@ -210,12 +223,17 @@ def _flag_component(
                 flags.append("name_mismatch")
             continue
 
-        # A mobile edge on its own, across activity windows that never came
-        # near each other, is as consistent with a reallocated number as with
-        # one person returning next season. Corroboration settles it: a second
-        # channel agreeing, or matching names, and the gap stops mattering.
-        corroborated = len(vias) > 1 or agree is True
-        if not corroborated and vias == {"mobile"}:
+        # A mobile on its own is the weakest edge there is: numbers get
+        # reallocated, and families share one. So with no second channel
+        # agreeing, only an exactly matching name lets it merge -- a fuzzy
+        # match is too easy for two different people with a common name to
+        # pass (spec §13.2, R3).
+        if vias == {"mobile"}:
+            if not _names_match_exactly(a, b):
+                flags.append("mobile_only_name_unconfirmed")
+            # Even with matching names, activity windows that never came near
+            # each other are as consistent with a reallocated number as with
+            # one person returning next season.
             if _windows_are_disjoint_by(a, b, recycle_gap):
                 flags.append("possible_recycled_mobile")
 
