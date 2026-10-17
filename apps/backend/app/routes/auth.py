@@ -285,8 +285,8 @@ async def apple_auth(payload: AppleAuth):
     user.last_login = datetime.utcnow()
     await user.save()
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
 
     refresh_token_doc = RefreshToken(
         user_id=user.id,

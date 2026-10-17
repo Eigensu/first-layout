@@ -6,7 +6,7 @@ import httpx
 from jose import JWTError, jwt
 
 from app.models.user import User
-from app.services.auth.google import _generate_unique_username
+from app.services.auth.google import _email_held_by_other, _generate_unique_username
 from config.settings import get_settings
 
 settings = get_settings()
@@ -111,7 +111,14 @@ async def find_or_create_apple_user(
             user.apple_ids.append(apple_id)
         if not user.apple_id:
             user.apple_id = user.apple_ids[0]
-        if email and email.lower() not in user.emails:
+        if (
+            email
+            and email.lower() not in user.emails
+            and not await _email_held_by_other(email, user)
+        ):
+            # Skipped when another account holds the address, as for Google:
+            # uniq_emails would otherwise fail the save and turn a sign-in by
+            # the Apple id that identifies them exactly into a server error.
             user.emails.append(email.lower())
         user.is_verified = True
         await user.save()
