@@ -1,7 +1,8 @@
 """Deciding which legacy accounts belong to the same person.
 
-Accounts are joined when they share a mobile or an email, and each connected
-component becomes one unified account. That is the whole idea, and the whole
+Accounts are joined when they share a mobile, an email, or the Google or Apple
+account they signed in with, and each connected component becomes one unified
+account. That is the whole idea, and the whole
 risk: every edge is a claim that two logins are one human, and a wrong claim
 hands someone a stranger's account.
 
@@ -52,6 +53,7 @@ class LegacyRow:
     email: Optional[str] = None
     mobile: Optional[str] = None
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     full_name: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True
@@ -81,7 +83,7 @@ class LegacyRow:
 class Edge:
     a: Tuple[str, str]
     b: Tuple[str, str]
-    via: str  # "mobile" | "email"
+    via: str  # "mobile" | "email" | "google" | "apple"
     value: str
 
 
@@ -144,6 +146,33 @@ def _index_by_key(
                 del bucket[value]
 
     return by_mobile, by_email, junk
+
+
+def _index_by_sign_in(
+    rows: Sequence[LegacyRow],
+) -> Dict[str, Dict[str, List[LegacyRow]]]:
+    """Group rows by the Google or Apple account they signed in with.
+
+    A provider id is proof of one login, stronger than a shared address: Google
+    and Apple say who signed in. Two accounts with the same one are the same
+    person, and could not both keep it anyway -- uniq_google_ids and
+    uniq_apple_ids allow one account each.
+
+    No MAX_ROWS_PER_KEY cap. That cap exists because a phone or an address can
+    be shared by strangers; a provider id cannot. Someone who signed in with
+    Google in five tournaments has five rows with one id, and capping it would
+    both split them and take Google sign-in away from all five.
+    """
+    buckets: Dict[str, Dict[str, List[LegacyRow]]] = {
+        "google": defaultdict(list),
+        "apple": defaultdict(list),
+    }
+    for row in rows:
+        if row.google_id:
+            buckets["google"][row.google_id].append(row)
+        if row.apple_id:
+            buckets["apple"][row.apple_id].append(row)
+    return buckets
 
 
 def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
@@ -252,9 +281,14 @@ def build_components(
         uf.add(row.key)
 
     by_mobile, by_email, junk = _index_by_key(rows)
+    by_provider = _index_by_sign_in(rows)
 
     edges: List[Edge] = []
-    for via, bucket in (("mobile", by_mobile), ("email", by_email)):
+    for via, bucket in (
+        ("mobile", by_mobile),
+        ("email", by_email),
+        *by_provider.items(),
+    ):
         for value, holders in bucket.items():
             for other in holders[1:]:
                 uf.union(holders[0].key, other.key)

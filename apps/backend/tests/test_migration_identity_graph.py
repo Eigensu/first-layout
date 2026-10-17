@@ -303,6 +303,54 @@ def test_shared_mobile_with_different_names_is_held_back():
     assert not components[0].should_merge
 
 
+def test_one_google_sign_in_is_one_person_whatever_else_differs():
+    """Google says who signed in. In the live data two accounts share one
+    Google login but nothing usable besides: their address is on five
+    accounts and discarded as junk."""
+    rows = [
+        row(db="Dcpl", uid="1", google_id="g-1", full_name="Rahul Patel"),
+        row(db="rspl", uid="2", google_id="g-1", full_name="Rahul Patel"),
+    ]
+    components, _ = build_components(rows)
+
+    assert len(components) == 1
+    assert components[0].should_merge
+
+
+def test_a_sign_in_id_is_never_junk_however_many_rows_hold_it():
+    """A phone on eight accounts is a call centre; a Google login on eight is
+    one person who played eight tournaments."""
+    rows = [
+        row(db=f"db{i}", uid=str(i), google_id="g-1", full_name="Rahul Patel")
+        for i in range(5)
+    ]
+    components, junk = build_components(rows)
+
+    assert len(components) == 1
+    assert components[0].should_merge
+    assert "g-1" not in junk
+
+
+def test_one_apple_sign_in_is_one_person():
+    rows = [
+        row(db="Dcpl", uid="1", apple_id="a-1", full_name="Rahul Patel"),
+        row(db="rspl", uid="2", apple_id="a-1", full_name="Rahul Patel"),
+    ]
+    components, _ = build_components(rows)
+
+    assert len(components) == 1
+
+
+def test_a_shared_sign_in_with_different_names_is_still_reviewed():
+    rows = [
+        row(db="Dcpl", uid="1", google_id="g-1", full_name="Rahul Patel"),
+        row(db="rspl", uid="2", google_id="g-1", full_name="Priya Sharma"),
+    ]
+    components, _ = build_components(rows)
+
+    assert "name_mismatch" in flags_of(components)
+
+
 def test_two_google_accounts_in_one_component_is_held_back():
     rows = [
         row(db="walle_lpcl", uid="1", mobile="9876543210", google_id="google-a"),

@@ -35,12 +35,14 @@ class UnifiedAccount:
     emails: List[str]
     mobiles: List[str]
     google_ids: List[str]
+    apple_ids: List[str]
     hashed_password: Optional[str]
     legacy_hashes: List[dict]
     legacy_accounts: List[dict]
     full_name: Optional[str] = None
     mobile: Optional[str] = None
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     auth_provider: str = "password"
     is_active: bool = True
     is_verified: bool = False
@@ -76,7 +78,7 @@ class MembershipPlan:
 class Withheld:
     """A login key no account in a flagged group was given, or only one was."""
 
-    kind: str  # "email" | "mobile" | "google_id"
+    kind: str  # "email" | "mobile" | "google_id" | "apple_id"
     value: str
     kept_by: Optional[Tuple[str, str]]  # the row that kept it, or None
     held_by: List[Tuple[str, str]]
@@ -160,7 +162,7 @@ def build_unified_account(
     would otherwise inherit every tournament, including ones they have never
     been near.
 
-    `withheld` holds normalised emails and mobiles, and Google ids, that this
+    `withheld` holds normalised emails and mobiles, and Google and Apple ids, that this
     account must not carry: junk keys shared too widely to identify anyone, and
     in a split group the values another account kept.
     """
@@ -170,7 +172,7 @@ def build_unified_account(
     winner = ranked[0]
 
     # A deleted row contributes no credential: no password, legacy or primary,
-    # and no Google sign-in. Its owner asked for that account to stop working,
+    # and no Google or Apple sign-in. Its owner asked for that account to stop working,
     # and merging must not quietly reopen it through the account it joins.
     live = [r for r in ranked if r.is_active]
 
@@ -183,6 +185,7 @@ def build_unified_account(
     google_ids = _ordered_unique(
         r.google_id for r in live if r.google_id not in withheld
     )
+    apple_ids = _ordered_unique(r.apple_id for r in live if r.apple_id not in withheld)
 
     # Every live row's password stays valid. A merged account has more than one,
     # and the person remembers whichever they last used -- picking one and
@@ -225,12 +228,18 @@ def build_unified_account(
         emails=emails,
         mobiles=mobiles,
         google_ids=google_ids,
+        apple_ids=apple_ids,
         mobile=mobiles[0] if mobiles else None,
         google_id=google_ids[0] if google_ids else None,
+        apple_id=apple_ids[0] if apple_ids else None,
         hashed_password=hashed_password,
         legacy_hashes=legacy_hashes,
         full_name=full_name,
-        auth_provider="google" if google_ids and not hashed_password else "password",
+        auth_provider=(
+            "password"
+            if hashed_password
+            else "google" if google_ids else "apple" if apple_ids else "password"
+        ),
         # Deactivated in one tournament and active in another means the person
         # is still around. Only an account that was disabled everywhere stays
         # disabled -- and, having no live row, it carries no credential either.
@@ -291,6 +300,7 @@ def _contested(rows: Sequence[LegacyRow]) -> List[Withheld]:
             ("email", _email_key(r)),
             ("mobile", _mobile_key(r)),
             ("google_id", r.google_id),
+            ("apple_id", r.apple_id),
         ):
             if value:
                 holders[(kind, value)].append(r)

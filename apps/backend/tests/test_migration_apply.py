@@ -620,3 +620,31 @@ def test_an_admin_list_entry_that_is_neither_is_refused(tmp_path):
 
     with pytest.raises(SystemExit):
         phase2.load_admin_keys(listed)
+
+
+# --------------------------------------------------------------------------
+# Sign in with Apple
+# --------------------------------------------------------------------------
+
+
+def test_an_apple_only_account_keeps_its_way_in():
+    """No password and no Google id: drop the Apple id and it is locked out.
+
+    Two such accounts exist on Dcpl, created since Apple sign-in shipped.
+    """
+    account = build_unified_account(
+        component(row("Dcpl", "1", hashed_password=None, apple_id="apple-sub-1"))
+    )
+
+    assert account.apple_ids == ["apple-sub-1"]
+    assert account.apple_id == "apple-sub-1"
+    assert account.auth_provider == "apple"
+
+
+def test_a_deleted_rows_apple_id_is_not_carried():
+    deleted = row(
+        "Dcpl", "2", is_active=False, apple_id="apple-gone", updated_at=RECENT
+    )
+    live = row("rspl", "1", hashed_password="hash")
+
+    assert build_unified_account(component(deleted, live)).apple_ids == []

@@ -1,9 +1,9 @@
 """Phase 5 -- the checks that gate the cutover.
 
-    python scripts/unified_auth/06_verify.py --source walle_lpcl --source walle_fifth
+    python scripts/unified_auth/06_verify.py --map Dcpl=dcpl --map rspl=rspl ...
 
-Exits non-zero if anything fails. Nothing is repointed at the unified database
-until this is clean.
+The same --map as phase 2. Exits non-zero if anything fails. Nothing is
+repointed at the unified database until this is clean.
 """
 
 import argparse
@@ -22,20 +22,28 @@ from scripts.unified_auth.verify import render, verify  # noqa: E402
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", action="append", required=True)
+    parser.add_argument("--map", action="append", required=True, help="sourcedb=slug")
     args = parser.parse_args()
+    slug_by_db = dict(pair.split("=", 1) for pair in args.map)
 
     from config.settings import get_settings
 
     settings = get_settings()
     client = AsyncIOMotorClient(settings.mongodb_url)
-    db = client[settings.mongodb_db_name]
+    dest = client[settings.mongodb_db_name]
 
     try:
-        expected = 0
-        for name in args.source:
-            expected += await client[name]["users"].count_documents({})
-        result = await verify(db, db, args.source, expected)
+        by_slug = {
+            t["slug"]: t["_id"] async for t in dest["tournaments"].find({}, {"slug": 1})
+        }
+        missing = sorted(set(slug_by_db.values()) - set(by_slug))
+        if missing:
+            raise SystemExit(f"no registry row for {missing}")
+        result = await verify(
+            dest,
+            {name: client[name] for name in slug_by_db},
+            {name: by_slug[slug] for name, slug in slug_by_db.items()},
+        )
     finally:
         client.close()
 
