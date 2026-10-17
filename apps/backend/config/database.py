@@ -26,6 +26,34 @@ settings = get_settings()
 # MongoDB client
 client: Optional[AsyncIOMotorClient] = None
 
+# Indexes that shipped with a wrong definition, as (collection, name, the
+# partial filter they were wrongly built with). init_beanie never drops an
+# index, and MongoDB refuses to redefine one under the same name, so a corrected
+# definition would stop the service from starting. Each is dropped here -- only
+# while it still has the wrong filter -- and init_beanie then builds the
+# corrected one. Once dropped, the check finds nothing and does nothing.
+FLAWED_INDEXES = [
+    # $exists matches null, so this took in every membership the app creates
+    # and refused the second (docs/UNIFIED_AUTH_SPEC.md §13.8, R21). Built on
+    # Dcpl and rspl while their collections were still empty.
+    (
+        "tournament_memberships",
+        "uniq_legacy_row",
+        {"legacy_user_id": {"$exists": True}},
+    ),
+]
+
+
+async def drop_flawed_indexes(database) -> list:
+    """Drop each FLAWED_INDEXES entry still built with its wrong filter."""
+    dropped = []
+    for collection, name, wrong_filter in FLAWED_INDEXES:
+        existing = (await database[collection].index_information()).get(name)
+        if existing and existing.get("partialFilterExpression") == wrong_filter:
+            await database[collection].drop_index(name)
+            dropped.append(f"{collection}.{name}")
+    return dropped
+
 
 async def connect_to_mongo():
     """Connect to MongoDB and initialize Beanie ODM"""
@@ -40,9 +68,13 @@ async def connect_to_mongo():
         await mongo_client.admin.command("ping")
         print(f"[OK] Connected to MongoDB at {settings.mongodb_url}")
 
+        database = mongo_client.get_database(settings.mongodb_db_name)
+        for index in await drop_flawed_indexes(database):
+            print(f"[OK] Dropped {index}, built with a wrong definition")
+
         # Initialize Beanie with document models
         await init_beanie(
-            database=mongo_client.get_database(settings.mongodb_db_name),
+            database=database,
             document_models=[
                 User,
                 RefreshToken,

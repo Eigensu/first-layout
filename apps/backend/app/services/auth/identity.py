@@ -51,6 +51,23 @@ def is_phone_shaped(value: str) -> bool:
     )
 
 
+def indian_local_number(digits: str) -> Optional[str]:
+    """The ten-digit Indian number these digits spell, or None.
+
+    Only two prefixes are stripped: 91 from twelve digits and the trunk 0 from
+    eleven. Anything else longer than ten digits is another country's number,
+    and cutting it to its last ten would hand it an Indian one -- UK
+    447911123456 would become 7911123456 and reach whoever holds that.
+    """
+    if len(digits) == 10:
+        return digits
+    if len(digits) == 12 and digits.startswith(INDIA_COUNTRY_CODE):
+        return digits[2:]
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[1:]
+    return None
+
+
 def mobile_candidates(digits: str) -> List[str]:
     """The forms a typed number might be stored as, most exact first.
 
@@ -60,11 +77,11 @@ def mobile_candidates(digits: str) -> List[str]:
     through one path may hold 9876543210 and another 919876543210 for the same
     phone. Someone typing "+91 98765 43210" should reach either.
 
-    The fallback therefore has to work in both directions. Stripping a country
-    code handles a long input against a short stored value; adding one handles
-    a short input against a long stored value, which is the case a user hits
-    every time they update their number through the profile and then sign in
-    with the ten digits they have always typed.
+    So an Indian number is tried as typed, as its ten local digits, and with
+    the country code -- the last being the case a user hits every time they
+    update their number through the profile and then sign in with the ten
+    digits they have always typed. Any other number is tried only as typed
+    (see indian_local_number).
 
     The exact match is always tried first, so a fallback only decides cases the
     exact form could not, and the unique index means each candidate can match
@@ -72,29 +89,27 @@ def mobile_candidates(digits: str) -> List[str]:
     """
     if not digits:
         return []
-    candidates = [digits]
-    if len(digits) > 10:
-        suffix = digits[-10:]
-        if suffix not in candidates:
-            candidates.append(suffix)
-    elif len(digits) == 10:
-        # The only country code this product has ever issued numbers for. A
-        # general phone library would be overkill for one prefix, but leaving
-        # this direction out strands anyone whose stored number carries it.
-        prefixed = f"{INDIA_COUNTRY_CODE}{digits}"
-        if prefixed not in candidates:
-            candidates.append(prefixed)
+    local = indian_local_number(digits)
+    if local is None:
+        return [digits]
+    candidates = []
+    # The only country code this product has ever issued numbers for. A general
+    # phone library would be overkill for one prefix.
+    for form in (digits, local, f"{INDIA_COUNTRY_CODE}{local}"):
+        if form not in candidates:
+            candidates.append(form)
     return candidates
 
 
 def canonical_mobile(digits: str) -> str:
     """The comparable form of a number, whichever way it was stored.
 
-    Reduces to the last ten digits, so "+91 98765 43210", "919876543210" and
-    "9876543210" -- all three of which the live data holds, written by
-    different code paths over the years -- compare equal.
+    An Indian number reduces to its ten local digits, so "+91 98765 43210",
+    "919876543210" and "9876543210" -- all three of which the live data holds,
+    written by different code paths over the years -- compare equal. Any other
+    number stays whole, so it can never equal an Indian one.
     """
-    return digits[-10:] if len(digits) > 10 else digits
+    return indian_local_number(digits) or digits
 
 
 async def _holder_of(forms: List[str]) -> Optional[User]:

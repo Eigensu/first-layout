@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from beanie import Document, Indexed, PydanticObjectId
+from beanie import Document, PydanticObjectId
 from pydantic import ConfigDict, Field, HttpUrl
 from pymongo import IndexModel
 
@@ -19,7 +19,10 @@ class SponsorTier(str, Enum):
 class Sponsor(Document):
     """Sponsor document model for MongoDB using Beanie ODM"""
 
-    name: Indexed(str, unique=True)  # type: ignore
+    # Not unique: the field-level unique was shadowed by the "name" entry in
+    # Settings.indexes and never built (spec §13.8, R22). Two tournaments may well
+    # share a sponsor.
+    name: str
     tier: SponsorTier
     # Public URL to logo served via API; will be '/api/v1/sponsors/{id}/logo'
     logo: Optional[str] = None

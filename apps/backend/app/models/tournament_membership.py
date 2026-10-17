@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from beanie import Document, PydanticObjectId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pymongo import IndexModel
 
 from app.utils.timezone import now_ist
@@ -59,6 +59,15 @@ class TournamentMembership(Document):
     source_db: Optional[str] = None
     legacy_user_id: Optional[PydanticObjectId] = None
 
+    @model_validator(mode="after")
+    def _legacy_row_names_its_database(self):
+        # A legacy id means nothing without the database it came from: the
+        # same _id exists in more than one source (world_tower was seeded from
+        # walle_fantasy), and uniq_legacy_row keys on the pair.
+        if self.legacy_user_id is not None and not self.source_db:
+            raise ValueError("legacy_user_id requires source_db")
+        return self
+
     # The username this person used in this tournament. Usernames stop being
     # globally unique, so the name someone played under here is theirs alone
     # and does not have to match what they are called anywhere else.
@@ -88,13 +97,17 @@ class TournamentMembership(Document):
             ),
             # Makes the migration idempotent: re-running it cannot create a
             # second membership for a legacy row it already imported. Partial
-            # because memberships created by the app after cutover have no
-            # legacy row, and every one of those would otherwise collide on the
-            # same missing key.
+            # because memberships created by the app have no legacy row, and
+            # every one of those would otherwise collide on the same empty key.
+            #
+            # `$type`, not `$exists`: Beanie writes None as null, and `$exists`
+            # matches null, so the first version of this filter took in every
+            # app-created membership and refused the second one (spec §13.8,
+            # R21). config/database.py drops that version where it was built.
             IndexModel(
                 [("source_db", 1), ("legacy_user_id", 1)],
                 unique=True,
-                partialFilterExpression={"legacy_user_id": {"$exists": True}},
+                partialFilterExpression={"legacy_user_id": {"$type": "objectId"}},
                 name="uniq_legacy_row",
             ),
         ]

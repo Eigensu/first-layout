@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from beanie import Document, Indexed
+from beanie import Document
 from pydantic import Field
 
 from app.common.enums.tournaments import TournamentStatus
@@ -14,8 +14,10 @@ class Tournament(Document):
     subdomain to resolve — no per-tournament infrastructure changes.
     """
 
-    # subdomain label, e.g. "dpcl" -> dpcl.wallearena.com
-    slug: Indexed(str, unique=True)  # type: ignore
+    # subdomain label, e.g. "dpcl" -> dpcl.wallearena.com. Unique by the admin
+    # route's check, not by the database: the field-level unique was shadowed
+    # by the "slug" entry in Settings.indexes and never built (spec §13.8, R22).
+    slug: str
 
     name: str
     description: Optional[str] = None

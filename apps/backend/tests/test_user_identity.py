@@ -19,6 +19,7 @@ from app.models.tournament_membership import (
 from app.models.user import MERGE_STATE_CLEAN, LegacyHash, User
 from app.services.auth.identity import (
     AmbiguousIdentifier,
+    canonical_mobile,
     digits_only,
     is_phone_shaped,
     mobile_candidates,
@@ -247,6 +248,37 @@ async def test_a_username_containing_digits_is_never_read_as_a_number(db):
 
     found = await resolve_login_identity("rahul123")
     assert found is not None and found.id == mixed.id
+
+
+def test_foreign_numbers_are_never_cut_down_to_an_indian_one():
+    """UK 447911123456 is not 7911123456, whoever holds that."""
+    assert mobile_candidates("447911123456") == ["447911123456"]
+    assert canonical_mobile("447911123456") == "447911123456"
+    assert mobile_candidates("14155550123") == ["14155550123"]
+
+
+def test_only_real_indian_prefixes_are_stripped():
+    assert mobile_candidates("09876543210") == [
+        "09876543210",
+        "9876543210",
+        "919876543210",
+    ]
+    assert canonical_mobile("919876543210") == "9876543210"
+    assert canonical_mobile("09876543210") == "9876543210"
+
+
+@pytest.mark.asyncio
+async def test_a_foreign_number_does_not_reach_an_indian_one(db):
+    for username, mobile in (("plain", "7911123456"), ("symbols", "+91 79111 23457")):
+        await User(
+            username=username,
+            email=f"{username}@example.com",
+            mobile=mobile,
+            hashed_password=get_password_hash(CURRENT),
+        ).insert()
+
+    assert await resolve_login_identity("+44 7911 123456") is None
+    assert await resolve_login_identity("+44 7911 123457") is None
 
 
 def test_is_phone_shaped_is_digits_without_letters():
@@ -512,7 +544,10 @@ def test_membership_uniqueness_is_per_user_per_tournament():
 
 def test_legacy_row_index_is_partial_so_new_memberships_do_not_collide():
     """Post-cutover memberships have no legacy row; without the filter they
-    would all share the same missing key and only one could ever exist."""
+    would all share the same missing key and only one could ever exist.
+
+    `$type`, not `$exists`: Beanie stores the missing key as null, which
+    `$exists` matches (R21; behaviour in tests/test_index_definitions.py)."""
     named = {
         idx.document.get("name"): idx
         for idx in TournamentMembership.Settings.indexes
@@ -521,5 +556,5 @@ def test_legacy_row_index_is_partial_so_new_memberships_do_not_collide():
     index = named["uniq_legacy_row"]
     assert index.document["unique"] is True
     assert index.document["partialFilterExpression"] == {
-        "legacy_user_id": {"$exists": True}
+        "legacy_user_id": {"$type": "objectId"}
     }

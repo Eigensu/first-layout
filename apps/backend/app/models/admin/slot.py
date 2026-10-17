@@ -1,15 +1,18 @@
 from datetime import datetime
 from typing import Optional
 
-from beanie import Document, Indexed, PydanticObjectId
+from beanie import Document, PydanticObjectId
 from pydantic import Field
 
 
 class Slot(Document):
     """Slot document model for MongoDB using Beanie ODM"""
 
-    code: Indexed(str, unique=True)  # type: ignore - immutable machine identifier (A-Z0-9_-)
-    name: Indexed(str, unique=True)  # type: ignore - human-friendly label
+    # Unique by the admin routes' checks, not by the database: the field-level
+    # uniques were shadowed by the "code" and "name" entries in
+    # Settings.indexes and never built (spec §13.8, R22).
+    code: str  # immutable machine identifier (A-Z0-9_-)
+    name: str  # human-friendly label
     min_select: int = 4
     max_select: int = 4
     description: Optional[str] = None
