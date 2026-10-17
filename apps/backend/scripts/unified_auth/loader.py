@@ -1,6 +1,6 @@
 """Reading legacy user rows out of the per-tournament databases."""
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -32,6 +32,8 @@ async def load_rows(
                 "email": 1,
                 "mobile": 1,
                 "google_id": 1,
+                "apple_id": 1,
+                "apple_ids": 1,
                 "full_name": 1,
                 "is_admin": 1,
                 "is_active": 1,
@@ -52,6 +54,10 @@ async def load_rows(
                     email=doc.get("email"),
                     mobile=doc.get("mobile"),
                     google_id=doc.get("google_id"),
+                    # Sign in with Apple accounts have no password and no
+                    # Google id; without this they could not sign in at all.
+                    apple_id=doc.get("apple_id")
+                    or next(iter(doc.get("apple_ids") or []), None),
                     full_name=doc.get("full_name"),
                     is_admin=bool(doc.get("is_admin", False)),
                     is_active=bool(doc.get("is_active", True)),
@@ -64,6 +70,17 @@ async def load_rows(
                 )
             )
     return rows
+
+
+async def load_team_owners(
+    client: AsyncIOMotorClient, db_names: Sequence[str]
+) -> Set[Tuple[str, str]]:
+    """(source_db, legacy_user_id) of every account that built a team there."""
+    owners: Set[Tuple[str, str]] = set()
+    for db_name in db_names:
+        for user_id in await client[db_name]["teams"].distinct("user_id"):
+            owners.add((db_name, str(user_id)))
+    return owners
 
 
 async def inventory(

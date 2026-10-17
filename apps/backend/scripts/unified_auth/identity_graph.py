@@ -1,7 +1,8 @@
 """Deciding which legacy accounts belong to the same person.
 
-Accounts are joined when they share a mobile or an email, and each connected
-component becomes one unified account. That is the whole idea, and the whole
+Accounts are joined when they share a mobile, an email, or the Google or Apple
+account they signed in with, and each connected component becomes one unified
+account. That is the whole idea, and the whole
 risk: every edge is a claim that two logins are one human, and a wrong claim
 hands someone a stranger's account.
 
@@ -26,7 +27,9 @@ from .normalise import (
 )
 
 # Below this, two full_name values are treated as different people rather than
-# as spelling variants.
+# as spelling variants, and the pair is flagged. At or above it they are not
+# called different -- but on a mobile-only edge that is still not enough to
+# merge; there only an exact match is (see _flag_component).
 NAME_SIMILARITY_THRESHOLD = 0.80
 
 # A mobile edge whose two accounts were never active within this of each other
@@ -50,6 +53,7 @@ class LegacyRow:
     email: Optional[str] = None
     mobile: Optional[str] = None
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     full_name: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True
@@ -79,7 +83,7 @@ class LegacyRow:
 class Edge:
     a: Tuple[str, str]
     b: Tuple[str, str]
-    via: str  # "mobile" | "email"
+    via: str  # "mobile" | "email" | "google" | "apple"
     value: str
 
 
@@ -144,6 +148,33 @@ def _index_by_key(
     return by_mobile, by_email, junk
 
 
+def _index_by_sign_in(
+    rows: Sequence[LegacyRow],
+) -> Dict[str, Dict[str, List[LegacyRow]]]:
+    """Group rows by the Google or Apple account they signed in with.
+
+    A provider id is proof of one login, stronger than a shared address: Google
+    and Apple say who signed in. Two accounts with the same one are the same
+    person, and could not both keep it anyway -- uniq_google_ids and
+    uniq_apple_ids allow one account each.
+
+    No MAX_ROWS_PER_KEY cap. That cap exists because a phone or an address can
+    be shared by strangers; a provider id cannot. Someone who signed in with
+    Google in five tournaments has five rows with one id, and capping it would
+    both split them and take Google sign-in away from all five.
+    """
+    buckets: Dict[str, Dict[str, List[LegacyRow]]] = {
+        "google": defaultdict(list),
+        "apple": defaultdict(list),
+    }
+    for row in rows:
+        if row.google_id:
+            buckets["google"][row.google_id].append(row)
+        if row.apple_id:
+            buckets["apple"][row.apple_id].append(row)
+    return buckets
+
+
 def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
     """True/False when both have a name, None when at least one does not."""
     na, nb = normalise_name(a.full_name), normalise_name(b.full_name)
@@ -152,6 +183,12 @@ def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
     if na == nb:
         return True
     return SequenceMatcher(None, na, nb).ratio() >= NAME_SIMILARITY_THRESHOLD
+
+
+def _names_match_exactly(a: LegacyRow, b: LegacyRow) -> bool:
+    """Both have a name, and they are identical once normalised."""
+    na, nb = normalise_name(a.full_name), normalise_name(b.full_name)
+    return bool(na) and na == nb
 
 
 def _windows_are_disjoint_by(a: LegacyRow, b: LegacyRow, gap: timedelta) -> bool:
@@ -185,19 +222,24 @@ def _flag_component(
 
     by_key = {r.key: r for r in component_rows}
 
-    if len(component_rows) > 2:
-        # Three or more accounts joined transitively: A shares a number with B,
-        # B shares an address with C, and nothing links A to C at all.
+    # Which pairs are corroborated by more than one channel.
+    channels: Dict[frozenset, Set[str]] = defaultdict(set)
+    for edge in component_edges:
+        channels[frozenset((edge.a, edge.b))].add(edge.via)
+
+    keys = [r.key for r in component_rows]
+    every_pair = {frozenset((a, b)) for i, a in enumerate(keys) for b in keys[i + 1 :]}
+    if not every_pair <= set(channels):
+        # Joined transitively: A shares a number with B, B shares an address
+        # with C, and nothing links A to C at all. Size alone is not this --
+        # someone who played three tournaments on one phone is three directly
+        # linked accounts, and holding those back would split exactly the
+        # players the unified profile is for.
         flags.append("chained")
 
     google_ids = {r.google_id for r in component_rows if r.google_id}
     if len(google_ids) > 1:
         flags.append("multi_google")
-
-    # Which pairs are corroborated by more than one channel.
-    channels: Dict[frozenset, Set[str]] = defaultdict(set)
-    for edge in component_edges:
-        channels[frozenset((edge.a, edge.b))].add(edge.via)
 
     for pair, vias in channels.items():
         a, b = (by_key[k] for k in pair)
@@ -210,12 +252,17 @@ def _flag_component(
                 flags.append("name_mismatch")
             continue
 
-        # A mobile edge on its own, across activity windows that never came
-        # near each other, is as consistent with a reallocated number as with
-        # one person returning next season. Corroboration settles it: a second
-        # channel agreeing, or matching names, and the gap stops mattering.
-        corroborated = len(vias) > 1 or agree is True
-        if not corroborated and vias == {"mobile"}:
+        # A mobile on its own is the weakest edge there is: numbers get
+        # reallocated, and families share one. So with no second channel
+        # agreeing, only an exactly matching name lets it merge -- a fuzzy
+        # match is too easy for two different people with a common name to
+        # pass (spec §13.2, R3).
+        if vias == {"mobile"}:
+            if not _names_match_exactly(a, b):
+                flags.append("mobile_only_name_unconfirmed")
+            # Even with matching names, activity windows that never came near
+            # each other are as consistent with a reallocated number as with
+            # one person returning next season.
             if _windows_are_disjoint_by(a, b, recycle_gap):
                 flags.append("possible_recycled_mobile")
 
@@ -234,9 +281,14 @@ def build_components(
         uf.add(row.key)
 
     by_mobile, by_email, junk = _index_by_key(rows)
+    by_provider = _index_by_sign_in(rows)
 
     edges: List[Edge] = []
-    for via, bucket in (("mobile", by_mobile), ("email", by_email)):
+    for via, bucket in (
+        ("mobile", by_mobile),
+        ("email", by_email),
+        *by_provider.items(),
+    ):
         for value, holders in bucket.items():
             for other in holders[1:]:
                 uf.union(holders[0].key, other.key)
@@ -267,6 +319,24 @@ def build_components(
 
     components.sort(key=lambda c: (-c.size, c.rows[0].key))
     return components, junk
+
+
+def rows_holding_junk(
+    rows: Sequence[LegacyRow], junk: Set[str]
+) -> Dict[str, List[LegacyRow]]:
+    """Each discarded key and the rows that hold it.
+
+    Rows split apart by a junk key are singletons, so they never appear in the
+    review queue. This is how a reviewer finds them -- most are strangers on a
+    shared office number, but a regular of four or more tournaments looks the
+    same, and only a person can tell them apart.
+    """
+    holding: Dict[str, List[LegacyRow]] = defaultdict(list)
+    for row in rows:
+        for key in (normalise_mobile(row.mobile), normalise_email(row.email)):
+            if key in junk:
+                holding[key].append(row)
+    return dict(holding)
 
 
 def gap_histogram(

@@ -12,10 +12,13 @@ from bson import ObjectId
 
 from scripts.unified_auth.identity_graph import Component, LegacyRow
 from scripts.unified_auth.merge_apply import (
+    UNCLAIMED_EMAIL_DOMAIN,
     build_unified_account,
+    copies_without_activity,
     plan_accounts,
     plan_memberships,
     rows_by_recency,
+    undeclared_copies,
 )
 from scripts.unified_auth.tenant_import import (
     REMOVED,
@@ -197,7 +200,7 @@ def test_earliest_signup_is_kept_as_created_at():
 def test_a_flagged_component_becomes_separate_accounts():
     rows = [row("walle_lpcl", "1"), row("walle_fifth", "2")]
 
-    accounts = plan_accounts(component(*rows, flags=["chained"]), "c000001")
+    accounts = plan_accounts(component(*rows, flags=["chained"]), "c000001").accounts
 
     assert len(accounts) == 2
     assert all(a.merge_state == "needs_review" for a in accounts)
@@ -208,7 +211,7 @@ def test_a_flagged_component_becomes_separate_accounts():
 def test_a_clean_component_becomes_one_account():
     accounts = plan_accounts(
         component(row("walle_lpcl", "1"), row("walle_fifth", "2")), "c000002"
-    )
+    ).accounts
 
     assert len(accounts) == 1
     assert accounts[0].merge_state == "clean"
@@ -246,6 +249,204 @@ def test_admin_role_lands_only_on_the_tournament_they_administered():
     roles = {m.tournament_slug: m.role for m in plan_memberships(account, SLUGS)}
 
     assert roles == {"lpcl": "admin", "fifth": "player"}
+
+
+def test_two_rows_from_one_tournament_are_one_membership():
+    """The same phone stored two ways in one database merges (R9)."""
+    account = build_unified_account(
+        component(
+            row("walle_lpcl", "1", username="rahul", created_at=OLD, is_admin=True),
+            row("walle_lpcl", "2", username="rahul_new", last_login=RECENT),
+        )
+    )
+
+    memberships = plan_memberships(account, SLUGS)
+
+    assert len(memberships) == 1
+    assert memberships[0].display_name == "rahul_new"
+    assert memberships[0].role == "admin"
+    assert memberships[0].joined_at == OLD
+
+
+# --------------------------------------------------------------------------
+# a deleted account opens nothing (R1)
+# --------------------------------------------------------------------------
+
+
+def test_a_deleted_rows_password_never_works_again():
+    """A soft delete stamps updated_at, so by recency the deleted row wins."""
+    deleted = row(
+        "walle_fifth",
+        "2",
+        is_active=False,
+        updated_at=RECENT,
+        last_login=RECENT,
+        hashed_password="hash-deleted",
+        google_id="g-deleted",
+    )
+    live = row("walle_lpcl", "1", hashed_password="hash-live")
+
+    account = build_unified_account(component(deleted, live))
+
+    assert account.hashed_password == "hash-live"
+    assert account.legacy_hashes == []
+    assert account.google_ids == []
+    assert account.is_active
+
+
+def test_a_deleted_row_does_not_win_the_name():
+    deleted = row(
+        "walle_fifth", "2", is_active=False, username="gone", updated_at=RECENT
+    )
+    live = row("walle_lpcl", "1", username="here")
+
+    assert build_unified_account(component(deleted, live)).username == "here"
+
+
+def test_deleted_everywhere_carries_no_credential():
+    rows = [
+        row("walle_lpcl", "1", is_active=False, hashed_password="a", google_id="g"),
+        row("walle_fifth", "2", is_active=False, hashed_password="b"),
+    ]
+    account = build_unified_account(component(*rows))
+
+    assert not account.is_active
+    assert account.hashed_password is None
+    assert account.legacy_hashes == []
+    assert account.google_ids == []
+
+
+def test_a_deleted_rows_history_still_joins_the_profile():
+    deleted = row("walle_fifth", "2", is_active=False)
+    live = row("walle_lpcl", "1")
+
+    account = build_unified_account(component(deleted, live))
+
+    assert {m.tournament_slug for m in plan_memberships(account, SLUGS)} == {
+        "lpcl",
+        "fifth",
+    }
+
+
+# --------------------------------------------------------------------------
+# keys that cannot go to everyone
+# --------------------------------------------------------------------------
+
+
+def test_a_split_groups_shared_phone_stays_with_the_most_recently_active():
+    """Two family members on one phone become two accounts; one keeps it (R8)."""
+    recent = row("walle_fifth", "2", mobile="9876543210", last_login=RECENT)
+    older = row("walle_lpcl", "1", mobile="9876543210", email="older@corp.com")
+
+    plan = plan_accounts(
+        component(recent, older, flags=["shared_mobile_diff_names"]),
+        "walle_fifth:2",
+    )
+
+    by_row = {a.source_rows[0].key: a for a in plan.accounts}
+    assert by_row[("walle_fifth", "2")].mobiles == ["9876543210"]
+    assert by_row[("walle_lpcl", "1")].mobiles == []
+    assert by_row[("walle_lpcl", "1")].mobile is None
+    assert [(w.kind, w.value, w.kept_by) for w in plan.withheld] == [
+        ("mobile", "9876543210", ("walle_fifth", "2"))
+    ]
+
+
+def test_an_account_denied_its_only_email_gets_a_placeholder():
+    recent = row("walle_fifth", "2", email="family@corp.com", last_login=RECENT)
+    older = row("walle_lpcl", "1", email="family@corp.com")
+
+    plan = plan_accounts(
+        component(recent, older, flags=["name_mismatch"]), "walle_fifth:2"
+    )
+
+    loser = next(a for a in plan.accounts if a.source_rows[0].key[1] == "1")
+    assert loser.emails == []
+    assert loser.email == f"1@{UNCLAIMED_EMAIL_DOMAIN}"
+
+
+def test_a_key_too_shared_to_identify_anyone_goes_to_nobody():
+    """Otherwise every account holding it collides on the unique index."""
+    account = build_unified_account(
+        component(row("walle_lpcl", "1", mobile="9876543210")),
+        withheld={"9876543210"},
+    )
+
+    assert account.mobiles == []
+    assert account.mobile is None
+
+
+def test_addresses_are_stored_as_their_owner_types_them():
+    """Login compares what is typed, and Gmail users type the dots."""
+    account = build_unified_account(
+        component(
+            row("walle_lpcl", "1", email="Rahul.Patel@Gmail.com"),
+            row("walle_fifth", "2", email="rahulpatel@gmail.com", last_login=RECENT),
+        )
+    )
+
+    assert account.emails == ["rahulpatel@gmail.com", "rahul.patel@gmail.com"]
+
+
+def test_a_placeholder_address_is_kept_but_not_as_an_identity():
+    account = build_unified_account(
+        component(row("walle_lpcl", "1", email="test@test.com"))
+    )
+
+    assert account.emails == []
+    assert account.email == "test@test.com"
+
+
+# --------------------------------------------------------------------------
+# accounts copied from another database (R23)
+# --------------------------------------------------------------------------
+
+COPY_OF = {"world_tower": "walle_fantasy"}
+
+
+def test_a_copy_that_was_never_used_earns_no_membership():
+    original = row("walle_fantasy", "1", last_login=RECENT)
+    copy = row("world_tower", "1", last_login=RECENT)
+
+    idle = copies_without_activity([original, copy], COPY_OF, played=set())
+
+    assert idle == {("world_tower", "1")}
+
+
+def test_a_copy_that_built_a_team_or_signed_in_later_earns_one():
+    original = row("walle_fantasy", "1", last_login=OLD)
+    played = row("world_tower", "1", last_login=OLD)
+    returned = row("world_tower", "2", last_login=RECENT)
+    other_original = row("walle_fantasy", "2", last_login=OLD)
+
+    idle = copies_without_activity(
+        [original, played, returned, other_original],
+        COPY_OF,
+        played={("world_tower", "1")},
+    )
+
+    assert idle == set()
+
+
+def test_shared_ids_must_be_declared():
+    rows = [row("walle_fantasy", "1"), row("world_tower", "1")]
+
+    assert undeclared_copies(rows, {}) == {("walle_fantasy", "world_tower"): 1}
+    assert undeclared_copies(rows, COPY_OF) == {}
+
+
+def test_an_idle_copy_is_left_off_the_profile():
+    account = build_unified_account(
+        component(row("walle_fantasy", "1"), row("world_tower", "1"))
+    )
+
+    memberships = plan_memberships(
+        account,
+        {"walle_fantasy": "tpl-s11", "world_tower": "wtpl"},
+        without_membership={("world_tower", "1")},
+    )
+
+    assert [m.tournament_slug for m in memberships] == ["tpl-s11"]
 
 
 # --------------------------------------------------------------------------
@@ -383,3 +584,82 @@ def test_collections_without_a_user_reference_are_only_tagged():
     assert not missed
     assert doc["tournament_id"] == tournament
     assert "legacy_user_id" not in doc
+
+
+# --------------------------------------------------------------------------
+# the platform-admin list
+# --------------------------------------------------------------------------
+
+
+def test_the_admin_list_matches_however_the_address_is_written(tmp_path):
+    """The list is compared with the accounts' normalised keys, so it is
+    normalised the same way -- or a capital letter or a Gmail dot would
+    silently leave someone without the access they were listed for."""
+    import importlib
+
+    phase2 = importlib.import_module("scripts.unified_auth.03_apply_merges")
+    listed = tmp_path / "admins.txt"
+    listed.write_text("# platform admins\nRahul.Patel@Gmail.com\n+91 98765 43210\n")
+
+    keys = phase2.load_admin_keys(listed)
+    account = build_unified_account(
+        component(row("walle_lpcl", "1", email="rahulpatel@gmail.com")),
+        platform_admin_keys=keys,
+    )
+
+    assert keys == {"rahulpatel@gmail.com", "9876543210"}
+    assert account.is_platform_admin
+
+
+def test_an_admin_list_entry_that_is_neither_is_refused(tmp_path):
+    import importlib
+
+    phase2 = importlib.import_module("scripts.unified_auth.03_apply_merges")
+    listed = tmp_path / "admins.txt"
+    listed.write_text("rahul\n")
+
+    with pytest.raises(SystemExit):
+        phase2.load_admin_keys(listed)
+
+
+# --------------------------------------------------------------------------
+# Sign in with Apple
+# --------------------------------------------------------------------------
+
+
+def test_an_apple_only_account_keeps_its_way_in():
+    """No password and no Google id: drop the Apple id and it is locked out.
+
+    Two such accounts exist on Dcpl, created since Apple sign-in shipped.
+    """
+    account = build_unified_account(
+        component(row("Dcpl", "1", hashed_password=None, apple_id="apple-sub-1"))
+    )
+
+    assert account.apple_ids == ["apple-sub-1"]
+    assert account.apple_id == "apple-sub-1"
+    assert account.auth_provider == "apple"
+
+
+def test_a_deleted_rows_apple_id_is_not_carried():
+    deleted = row(
+        "Dcpl", "2", is_active=False, apple_id="apple-gone", updated_at=RECENT
+    )
+    live = row("rspl", "1", hashed_password="hash")
+
+    assert build_unified_account(component(deleted, live)).apple_ids == []
+
+
+def test_a_phone_taken_from_an_account_does_not_make_it_an_admin():
+    """Two people on one listed phone: only the one who keeps it is listed."""
+    recent = row("walle_fifth", "2", mobile="9876543210", last_login=RECENT)
+    older = row("walle_lpcl", "1", mobile="9876543210")
+
+    plan = plan_accounts(
+        component(recent, older, flags=["shared_mobile_diff_names"]),
+        "walle_fifth:2",
+        platform_admin_keys={"9876543210"},
+    )
+
+    admins = {a.source_rows[0].key: a.is_platform_admin for a in plan.accounts}
+    assert admins == {("walle_fifth", "2"): True, ("walle_lpcl", "1"): False}

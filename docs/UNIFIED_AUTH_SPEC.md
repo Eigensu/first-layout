@@ -189,7 +189,11 @@ walle_arena/
   password_reset_sessions / password_reset_tokens
   identity_merge_audit       what the migration merged, and why
   user_id_map                {source_db, legacy_user_id} → global id
-  fs.avatars.*               GridFS
+  merge_review               one per flagged group: its rows, and who kept which key
+  import_ledger              which source each copied tenant document came from
+  avatar_migration           phase 2's plan for phase 4
+  avatars.*  contest_logos.*  sponsor_logos.*  carousel_images.*
+                             GridFS; files keep their source _id (§7 Phases 3-4)
 
   ── tenant-scoped: every document carries tournament_id ──
   contests            teams              team_contest_enrollments
@@ -197,8 +201,8 @@ walle_arena/
   sponsors            carousel_images    import_logs
   admin_action_logs
 
-  ── singleton ──
-  global_settings
+  ── one row per tournament, plus the platform default ──
+  global_settings     _id "tournament:<id>" per tournament; "global" is the default
 ```
 
 The name is `walle_arena` because `walle_fantasy` is already taken: it is the oldest
@@ -1339,8 +1343,10 @@ What follows from it:
 - **`MAX_ROWS_PER_KEY = 3` holds at fifteen sources.** It discards 6 mobiles (47
   accounts), none carrying one consistent name, which looks right. It also discards
   11 emails (55 accounts), of which 2 carry one consistent or blank name and may be
-  genuine regulars of four or more tournaments; those two people would stay split,
-  which is a manual link in review rather than a reason to raise the cut.
+  genuine regulars of four or more tournaments. One of the two is joined anyway by a
+  Google sign-in its accounts share (R29); the other stays split. Accounts split by a
+  junk key are singletons and never reach the review queue, so Phase 1 lists every
+  discarded key and its accounts in `junk_keys.csv` for a reviewer to link (R31).
 - **No database holds the same mobile or email twice** (after normalisation), so R9
   does not trigger on today's data. It remains a defect for rows created later.
 - **`Dcpl`'s registry includes a `tests` tournament.** It does not migrate (see
@@ -1397,7 +1403,13 @@ arguments:
 --map lodha-park=lpcl --map melangeindia11=m11 --map mtc-intervillage=mtc
 --map world_tower=wtpl --map jypl=jypl-s9 --map cccl=cccl --map mjpl=mjpl
 --map tyrant=tyrant --map jmcl=jmcl --map epl=epl --map jpl=jpl
+--copy-of world_tower=walle_fantasy
 ```
+
+`--copy-of` declares that `world_tower` was seeded with a copy of `walle_fantasy`'s
+users (R23). Phase 2 refuses to run while two sources share user ids and neither is
+declared, because which one is the original decides who gets a membership. Phases 5
+and 6 take the same `--map`; Phase 6 also takes `--copy-of` and `--platform-admins`.
 
 ### Phase 0b — configuration audit (`00_env_audit.py`)
 
@@ -1437,24 +1449,36 @@ That last check is the one that would have caught the §1.1a gap long ago.
 
 ### Phase 1 — identity graph (`02_build_identity_graph.py`)
 
-1. Load every user row from every source database.
-2. Normalize: mobile → ASCII digits only; email → trimmed lowercase.
-   Discard obviously junk keys before they join anything: empty strings, mobiles of
-   fewer than 10 digits, placeholder emails (`test@test.com`, `a@a.com`, …) —
-   **a junk key shared by 50 accounts would collapse 50 people into one.**
-3. Union-find over two edge types: shared mobile, shared email.
-4. Emit `merge_plan.json` and `merge_review.csv`.
+1. Load every user row from every source database named with `--db`. There is no
+   default: discovering every database in the cluster would also read `walle_arena`
+   and the register and aggregator databases (G2).
+2. Normalize: mobile → ASCII digits, reduced to ten local digits only for an Indian
+   number (a leading `91` on twelve digits or `0` on eleven); any other number is kept
+   whole so it can only match itself (R4). Email → trimmed lowercase, with dots and
+   `+tag` folded **for Gmail only** (R2). Discard obviously junk keys before they join
+   anything: empty strings, mobiles of fewer than 10 digits, placeholder emails
+   (`test@test.com`, `a@a.com`, …), and any mobile or email held by more than
+   `MAX_ROWS_PER_KEY = 3` rows — **a junk key shared by 50 accounts would collapse 50
+   people into one.**
+3. Union-find over four edge types: shared mobile, shared email, and a shared Google or
+   Apple sign-in (R29). A sign-in id is proof of one login, so it has no
+   `MAX_ROWS_PER_KEY` cap: someone who signed in with Google in five tournaments is one
+   person, not a junk key.
+4. Emit `merge_plan.json`, `merge_review.csv` and `junk_keys.csv`.
 
 Flag a component for review when any of these hold:
 
 | Flag | Meaning |
 |---|---|
-| `chained` | component size ≥ 3, or it is only connected through an intermediate row |
+| `chained` | some pair in the component shares nothing directly — it is only connected through an intermediate row. **Size alone is not chaining** (decided 2026-10-17, R24): three accounts on one phone are one person. |
 | `name_mismatch` | `full_name` values differ beyond a fuzzy threshold |
 | `shared_mobile_diff_names` | same number, clearly different people (family sharing a phone is common in this market) |
+| `mobile_only_name_unconfirmed` | a mobile edge with no other channel, whose names are not an exact match after normalisation — similar, or missing on one side (R3) |
 | `multi_google` | two distinct `google_id`s in one component |
-| `high_degree_key` | a mobile or email that appears in > 2 source rows |
-| `possible_recycled_mobile` | an **uncorroborated** mobile edge whose two rows have disjoint activity windows separated by a wide gap — see below |
+| `possible_recycled_mobile` | a mobile edge with no other channel whose two rows have disjoint activity windows separated by more than `RECYCLE_GAP_DAYS`, **whatever the names** — see below |
+
+A key held by more than `MAX_ROWS_PER_KEY` rows is not a flag: it is discarded, links
+nobody, and no account keeps it (R25).
 
 #### Recycled mobile numbers
 
@@ -1477,10 +1501,14 @@ gap as a tie-breaker rather than the test:
 
 | Edge | Decision |
 |---|---|
-| Mobile edge **and** an email edge between the same pair | Auto-merge — two independent identifiers agreeing is strong evidence, whatever the gap. |
-| Mobile edge alone, activity windows overlap or nearly touch | Auto-merge. |
-| Mobile edge alone, `full_name` compatible | Auto-merge. |
-| **Mobile edge alone, windows disjoint by more than `RECYCLE_GAP_DAYS`, no name corroboration** | **`possible_recycled_mobile` → review.** |
+| Mobile edge **and** another channel (email or sign-in) between the same pair | Auto-merge — two independent identifiers agreeing is strong evidence, whatever the gap. |
+| Mobile edge alone, names identical after normalisation, windows within `RECYCLE_GAP_DAYS` | Auto-merge. |
+| Mobile edge alone, names similar but not identical, or missing on either side | **`mobile_only_name_unconfirmed` → review.** A fuzzy match is too easy for two people with a common name to pass (decided 2026-10-17, R3). |
+| **Mobile edge alone, windows disjoint by more than `RECYCLE_GAP_DAYS`** | **`possible_recycled_mobile` → review, even with identical names.** |
+| Mobile edge alone, clearly different names | `shared_mobile_diff_names` → review. |
+
+On the live data (2026-10-17) 51 pairs share only a mobile: 38 with identical names, 4
+with similar ones, 9 with different ones; none is more than a year apart.
 
 Do **not** hardcode `RECYCLE_GAP_DAYS` before seeing the data. Phase 1 emits a
 **histogram of inter-row gaps across every shared-mobile pair** alongside the merge
@@ -1490,8 +1518,8 @@ roughly 180 days, but a threshold nearer 12 months will likely separate the
 seasonal-return population from the recycled one far better. The histogram will say.
 
 The same failure mode exists for email but is much rarer — a corporate address
-reassigned to a new employee is the realistic case. It is covered by the existing
-`name_mismatch` and `high_degree_key` flags rather than a rule of its own.
+reassigned to a new employee is the realistic case. It is covered by `name_mismatch`
+and the `MAX_ROWS_PER_KEY` discard rather than a rule of its own.
 
 Flagged components are held back — the migration merges the clean ones and writes the
 flagged ones as **separate accounts** with `merge_state="needs_review"`, so nobody is
@@ -1499,23 +1527,48 @@ wrongly merged by default. A later `link_accounts.py` applies your review decisi
 
 ### Phase 2 — write the unified collections (`03_apply_merges.py`)
 
-For each component, create one `User`:
+Rows are ranked **live first, then most recently active** — a deleted row never wins,
+because a soft delete stamps `updated_at` and would otherwise win by recency (R1). For
+each clean component, create one `User`:
 
-- `emails` / `mobiles` / `google_ids` = union of the component's values, primary =
-  the value from the most recently active row.
-- `hashed_password` = hash from the most recently used row; every other row's hash
-  appended to `legacy_hashes`.
-- `username` = the display name from the most recently used row.
-- `full_name`, `avatar_*` = from the most recently used row that has them.
+- `emails` = the component's addresses **as typed, lowercased** — the form login looks
+  up. The normalised form decides who is who but is not stored: it folds Gmail's dots,
+  and someone typing `rahul.patel@gmail.com` must find their account (R26).
+- `mobiles` = the normalised numbers. `google_ids` / `apple_ids` = from **live** rows
+  only. Primary of each = the first.
+- `hashed_password` = the first live row's hash; every other live row's hash appended
+  to `legacy_hashes`. **A deleted row contributes no credential** — no password, no
+  Google or Apple sign-in — and an account deleted everywhere carries none (R1).
+- `username` = the display name from the first row.
+- `full_name`, `avatar_*` = from the first row that has them.
 - `created_at` = earliest; `last_login` = latest.
 - `is_active` = true unless **every** member row was inactive/deleted.
 - `is_verified` = true if any member row was.
-- `is_platform_admin` = only if the row is on your confirmed allowlist.
+- `is_platform_admin` = only if a row's normalised email or mobile is on the
+  `--platform-admins` list, which is normalised the same way (R27).
 - `legacy_accounts` = full provenance for all members.
+- Junk keys go to nobody (R25).
 
-Then one `TournamentMembership` per source row (`display_name` from that row,
-`role="admin"` where that row had `is_admin`), and one `user_id_map` entry per source
-row.
+A **flagged** component becomes one account per row, sharing a `merge_group_id`. Any key
+two of its rows share goes to the **most recently active live row**; the others lose it
+(decided 2026-10-17, R8). An account left with no email gets
+`<legacy_user_id>@unclaimed.wallearena.com`, since `email` is required. `merge_review`
+records every flagged group, its rows, and who kept which key.
+
+Then one `TournamentMembership` **per tournament** — not per row, since two rows from
+one database can merge (R9) — with `display_name` from that tournament's latest row and
+`role="admin"` if any of its rows had `is_admin`. A row copied from another database
+(`--copy-of`) earns one only if that person built a team there or signed in there after
+the original (R23). One `user_id_map` entry per source row either way, with
+`earns_membership` for Phase 5.
+
+**Re-runnable**, because Phase 6 runs it again (R5–R7). Each account resolves to the
+user id any of its rows was already mapped to, so a signup joining an imported person is
+attached to them. The id map is written first, then the user, avatar plan and
+memberships — every write an upsert keyed on what it describes — and each run rewrites
+the account from its sources, so a reset or a deletion during the backfill arrives.
+Rows that now group differently from what an earlier run wrote are **reported as
+conflicts and left alone**; merging or splitting written accounts is a review decision.
 
 ### Phase 3 — copy, tag and rewrite the game data (`04_import_tenant_data.py --db <name> --slug <slug>`)
 
@@ -1531,7 +1584,9 @@ async def import_collection(src_db, name, tournament_id, user_field=None):
         if user_field and doc.get(user_field) is not None:
             doc["legacy_user_id"] = doc[user_field]        # kept for rollback
             doc[user_field] = user_id_map[(src_db.name, doc[user_field])]
-        await dest[name].insert_one(doc)                    # _id preserved — see below
+        await dest[name].replace_one({"_id": doc["_id"]}, doc, upsert=True)
+        await ledger.record(name, doc["_id"], src_db.name)  # see below
+    await remove_copies_whose_source_is_gone(name, src_db.name)
 ```
 
 | Collection | User field to rewrite |
@@ -1541,7 +1596,7 @@ async def import_collection(src_db, name, tournament_id, user_field=None):
 | `import_logs` | `user_id` *(string)* |
 | `admin_action_logs` | `admin_id` *(string)* |
 | `contests`, `players`, `slots`, `player_contest_points`, `sponsors`, `carousel_images` | — tag only |
-| `global_settings` | — becomes that tournament's settings row (§3.5) |
+| `global_settings` | — becomes that tournament's settings row, `_id` `tournament:<id>` (R12) |
 
 **Preserve `_id` on every copy.** Documents reference each other by ObjectId —
 `teams.contest_id`, `enrollments.team_id` / `contest_id`,
@@ -1549,12 +1604,21 @@ async def import_collection(src_db, name, tournament_id, user_field=None):
 references stays valid with no rewriting at all. Regenerating ids would mean remapping
 each reference by hand, for no benefit.
 
-**Check for `_id` collisions across the five sources first.** ObjectIds are practically
-unique, so a clash is very unlikely — but "very unlikely" across five databases and
-hundreds of thousands of documents deserves a pre-flight check rather than optimism.
-The unique `_id` index makes a missed collision fail loudly on insert rather than
-corrupt anything silently, so the failure mode is safe either way; the pre-flight just
-means you find out before a long run rather than during one.
+**`import_ledger` records which source put each document there** (R10, R11). Because
+`_id` is preserved, after one run every copied document exists in both places; the
+ledger is what tells "copied from here last time" apart from a real clash, so a re-run
+updates its own copies and refuses only another source's. It also finds copies whose
+source document has since been deleted, and removes them — including from collections
+since emptied or dropped. A ledger rather than a field on the document, because the app
+drops fields its models do not declare the first time it saves one.
+
+Checked on the live data (2026-10-17): across all fifteen sources, the only `_id` any
+two share is `global_settings`' `"global"`, which R12 renames.
+
+**Files come across too** (R13): the `contest_logos`, `sponsor_logos` and
+`carousel_images` GridFS buckets, copied as the documents GridFS stores under their own
+`_id` and metadata — so nothing that refers to them changes, and a re-run finds them
+present.
 
 **`team_contest_enrollments` still needs the merge check.** Its
 `uniq_active_user_per_contest` partial unique index means that if two merged accounts
@@ -1564,33 +1628,48 @@ enrolled team active, set the others to `REMOVED` with `removed_at` and a note. 
 list belongs in the migration report — it is the one place where merging actually takes
 something away from a user.
 
-**Contest code collisions are now possible too.** `code` was globally unique per
-database; two tournaments may each have a `FINAL`. Under the new per-tournament unique
-index (§3.5) that is fine and needs no intervention — but the old *global* unique index
-must be dropped before the import, or the first cross-tournament duplicate aborts it.
+**Contest code collisions are now possible too.** Two tournaments may each have a
+`FINAL`. Under the per-tournament unique index (§3.5) that is fine and needs no
+intervention. There is no global unique index to drop: the one `Contest.code` declared
+was never built (R14, R22).
 
 ### Phase 4 — move avatars (`05_copy_avatars.py`)
 
-Copy each referenced GridFS file from the tenant `avatars` bucket into
-the unified database's, then rewrite `avatar_file_id` on the new user. Only the winning
-avatar per merged account is copied; the rest are listed in the report and left in
-place.
+Copy each avatar Phase 2 planned (one per account, the winning one) from its source's
+`avatars` bucket into the unified database's, **under its own `_id` and with its own
+metadata**. The id Phase 2 wrote on the user is therefore already right, the real
+content type survives (R15), and a re-run skips files already copied (R16). An avatar
+missing from its source is cleared from the user rather than left pointing nowhere.
 
 ### Phase 5 — verify (`06_verify.py`)
 
-Hard assertions, all must pass before any flip:
+`06_verify.py --map …`, with Phase 2's `--map`. Hard assertions, all must pass before
+any flip. Some look for something wrong among what was written; the rest reconcile
+against the sources, because a phase that stopped early leaves nothing wrong behind,
+only something missing (R20).
 
-- Every legacy user row maps to exactly one `user_id_map` entry.
-- `users` count == number of components (clean) + flagged rows.
-- No `teams.user_id` or `team_contest_enrollments.user_id` in any tenant DB fails to
-  resolve to a unified `users` document.
-- `uniq_emails`, `uniq_mobiles`, `uniq_google_ids` all build without conflict.
+What should exist, does:
+
+- Every source's user rows map to `user_id_map` exactly — counted per source.
+- Every mapped row with `earns_membership` has a membership in its tournament.
+- Every tenant collection reconciles with each source: as many documents in the
+  source, recorded in `import_ledger`, and present.
+- Every tournament whose source had settings has its settings row.
+- Every file a document points at (`avatar_file_id`, contest and sponsor
+  `logo_file_id`, `image_file_id`, `default_contest_logo_file_id`) exists in its bucket.
+
+Nothing written is wrong:
+
+- No `emails`, `mobiles`, `google_ids` or `apple_ids` value on two accounts.
 - No `tournament_memberships` duplicate for a (user, tournament).
-- Every account has at least one usable credential (`hashed_password`, a
-  `legacy_hashes` entry, or a `google_ids` entry) — **an account with none is locked
-  out**, and that list must be empty or explicitly accepted.
-- Sample-login check: pick N users per source DB, verify their old password still
-  authenticates against the new record.
+- No `teams.user_id` or `team_contest_enrollments.user_id` fails to resolve.
+- Every tenant document carries a `tournament_id`.
+- Every **live** account has a usable credential (`hashed_password`, a `legacy_hashes`
+  entry, or a `google_ids` or `apple_ids` entry). An account deleted everywhere carries
+  none by design (R1) and is not counted.
+
+By hand, after the script passes: pick N users per source and confirm their old
+password still signs in.
 
 ### Phase 6 — cut over
 
@@ -1604,8 +1683,10 @@ backend, and the two live tournaments move to it together.
    is modified.
 3. **Verify** (Phase 5) and review the merge report.
 4. **Read-only window on lpcl and fifth.** This is the only moment users are affected.
-5. **Delta re-sync** (`07_resync_delta.py --since <backfill ts>`) to pick up everything
-   written during the backfill.
+5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of` and
+   `--platform-admins`) to pick up everything written during the backfill. It re-runs
+   Phases 2, 3 and 4 in full rather than detecting changes (R17, R18) — every one is
+   re-runnable — then **run Phase 5 again**.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
    redeploy.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
@@ -1821,10 +1902,10 @@ These block specific phases; everything else can be built without them.
 | C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests | B |
-| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B, R21 (§13.8) |
+| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B, R21 (§13.8, fixed in #45) |
 | F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
-| H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13** |
+| H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13.10** |
 | I | Cut over — stand up the one backend, backfill, repoint both frontends, archive the five services (§7, Phase 6) | C, C2b, C3, D, E, F, H |
 | J | Remove the legacy-username branch; sweep `legacy_hashes`; archive old collections | I + 8 days / 180 days |
 
@@ -1832,8 +1913,9 @@ Stages A–G are ordinary development and can proceed now. **H must run against 
 restored snapshot, never the live cluster** — the merge report is the artefact you
 review before anything irreversible happens.
 
-**G's scripts exist (#40, #41) but are not dry-run ready.** §13 lists what review
-found in them; H waits until that list is cleared or each item is explicitly waived.
+**G's scripts are dry-run ready once #46 merges.** Every §13 item
+is fixed (2026-10-17); H waits only on §13.10: #45 merged, the platform-admin list, and
+the registry seeded.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -1861,14 +1943,15 @@ and **each was checked against the code** rather than taken from the reviewer. T
 review threads on #41 were later marked resolved on GitHub without any code change, so
 this section is the only record of them.
 
-**Status at the time of writing (2026-10-14): nothing below is fixed.** Line numbers for
-paths under `apps/backend/scripts/unified_auth/` are at `8ee1a8d`, the tip of #41 (which
-contains #40's files). App paths are on `main` unless a commit is given. IDs exist so a
-PR can say which items it closes.
+**Status (2026-10-17): every item below is fixed** — in #45 (app) or #46 (scripts) — or, for G1, satisfied. Each says where, and
+records the decisions taken on the way. Line numbers in the item text are as originally
+written: paths under `apps/backend/scripts/unified_auth/` at `8ee1a8d`, the tip of #41.
+Fixing them turned up more, R24–R37 (§13.9), all fixed too. **What is left before
+the dry run** is §13.10.
 
 ### 13.1 Ordering rules
 
-- [ ] **G1 — No backend older than #42 may serve a database that Phase 2 has written to.**
+- [x] **G1 — No backend older than #42 may serve a database that Phase 2 has written to.**
   Phase 2 keeps every source username, and usernames stop being unique with #39. Until
   #42, tokens carry `sub = username` (`app/routes/auth.py`) and `get_current_user`
   resolves it with `User.find_one(User.username == ...)` (`app/utils/dependencies.py:39`).
@@ -1877,15 +1960,17 @@ PR can say which items it closes.
   The dry run itself is safe before #42 lands: `walle_arena` does not exist yet, and the
   live services read `Dcpl` and `rspl`. **Booting today's `main` against the dry-run
   database to click around is not safe.** Smoke-test only with a build that includes #42.
-- [ ] **G2 — Phase 1 always gets explicit sources.** `02_build_identity_graph.py:133`
+  *Satisfied: #42 merged on 2026-10-17, so `main` resolves tokens by user id.*
+- [x] **G2 — Phase 1 always gets explicit sources.** `02_build_identity_graph.py:133`
   falls back to `list_candidate_databases()` (`loader.py:10`), which returns every
   non-system database in the cluster, including `walle_arena` itself once it exists and
   the register and aggregator databases, and their users would enter the identity graph. Until `--db` is made required, pass it
   for every source. Discovery is fine for the read-only `01_inventory.py`.
+  *Fixed in #46: `--db` is required.*
 
 ### 13.2 Identity: the wrong people merged, or dead credentials revived
 
-- [ ] **R1 — A deleted account's password works again.** *Security.*
+- [x] **R1 — A deleted account's password works again.** *Security.*
   `build_unified_account` takes the primary hash from the recency winner
   (`merge_apply.py:110`, `:158`) and sets `is_active=any(...)` (`:167`). A soft delete
   stamps `updated_at` (`app/routes/users.py:209-213`), so a just-deleted row *wins*
@@ -1896,12 +1981,14 @@ PR can say which items it closes.
   hash, and never wins recency for credential purposes. An account whose rows are all
   inactive stays inactive. Whether a deleted row should merge at all is a separate
   decision; this is the minimum.
-- [ ] **R2 — Plus-addressing is collapsed on every domain** (`normalise.py:137-138`). The
+  *Fixed in #46: rows rank live-first; deleted rows contribute no password and no Google or Apple id; an account deleted everywhere carries no credential. Decided 2026-10-17: deleted rows still bring their history (memberships).*
+- [x] **R2 — Plus-addressing is collapsed on every domain** (`normalise.py:137-138`). The
   comment justifies stripping `+tag` for Gmail, then the `else` branch strips it for
   every domain. `user+one@company.com` and `user+two@company.com` become one key and
   auto-merge as one person.
   *Fix:* strip `+tag` only for `gmail.com` / `googlemail.com`.
-- [ ] **R3 — A matching name overrides the recycled-number check.** *Decision needed.*
+  *Fixed in #46.*
+- [x] **R3 — A matching name overrides the recycled-number check.** *Decision needed.*
   `corroborated = len(vias) > 1 or agree is True` (`identity_graph.py:217`), and
   `_names_agree` is a fuzzy match at ratio >= 0.80 (`:147-154`, threshold at `:30`).
   Two people with a common name who held the same recycled number years apart
@@ -1910,7 +1997,8 @@ PR can say which items it closes.
   count as corroboration on a mobile-only edge, and for common Indian names it is right.
   *Recommended:* on a mobile-only edge, only an exact normalised name corroborates, and
   above `RECYCLE_GAP_DAYS` even that goes to review. If accepted, update §7's table too.
-- [ ] **R4 — Foreign numbers are truncated into Indian ones** (`normalise.py:96-97`). Any
+  *Fixed in #46, as recommended (decided 2026-10-17): new flag `mobile_only_name_unconfirmed`; §7's table updated. On the live data this moves 4 pairs to review.*
+- [x] **R4 — Foreign numbers are truncated into Indian ones** (`normalise.py:96-97`). Any
   11-15 digit number is cut to its last ten digits without checking for a `91` prefix.
   *Narrower than the review says:* the `digits[0] in "012345"` guard discards most
   results, but UK `447911123456` → `7911123456` survives and can join a real Indian
@@ -1918,10 +2006,11 @@ PR can say which items it closes.
   the same shape for login (any input over ten digits also tries its last ten).
   *Fix (both places):* strip only a leading `91` from 12 digits or `0` from 11; keep
   anything else whole so it cannot match an Indian number.
+  *Fixed in both places: scripts in #46, login in #45.*
 
 ### 13.3 Phase 2: failures, and state it cannot repair
 
-- [ ] **R5 — Rows that join an existing person are duplicated or dropped**
+- [x] **R5 — Rows that join an existing person are duplicated or dropped**
   (`03_apply_merges.py:100-108`). Only `source_rows[0]` is looked up in `user_id_map`.
   If a signup made during the backfill joins an imported person and wins recency, it
   has no mapping, so a second user is created with the same email or mobile and the
@@ -1929,35 +2018,40 @@ PR can say which items it closes.
   mapping exists, the whole account is skipped, and the new row is never mapped.
   *Fix:* look up every row, and attach unmapped rows (and their memberships) to the
   existing user instead of creating one.
-- [ ] **R6 — Revoked credentials survive the delta.** *Security.* The same `continue`
+  *Fixed in #46 (`apply_accounts.py`).*
+- [x] **R6 — Revoked credentials survive the delta.** *Security.* The same `continue`
   (`03_apply_merges.py:108`) means an imported account is never refreshed. A password
   reset or deletion during the backfill window is detected by Phase 6 and then skipped:
   the new password is refused, the old one still works, and a deleted account stays
   usable.
   *Fix:* recompute every component touched since `--since` and update the existing
   user's credentials and `is_active` (subject to R1).
-- [ ] **R7 — A crash in the middle of an account cannot be resumed**
+  *Fixed in #46: every run rewrites each account from its sources.*
+- [x] **R7 — A crash in the middle of an account cannot be resumed**
   (`03_apply_merges.py:118-162`). The user is inserted, then one `user_id_map` row per
   source row, then the avatar plan, then memberships, with no transaction, and a rerun
   decides to skip on the first row's mapping alone. Interrupted after that mapping, the
   rest is never written; interrupted before it, the rerun inserts the identity again.
   *Fix:* one transaction per account (requires a replica set; confirm the cluster is
   one), or make every write an upsert keyed on its source row.
-- [ ] **R8 — Splitting a flagged component gives every half the contested key**
+  *Fixed in #46 with upserts, map first; no transaction needed.*
+- [x] **R8 — Splitting a flagged component gives every half the contested key**
   (`merge_apply.py:194-217`). Flagged components become one account per row, each built
   from its own row, so both halves of a `shared_mobile_diff_names` pair carry the same
   normalised mobile in `mobile` and `mobiles`. The second insert violates `uniq_mobile`
   and `uniq_mobiles`, both real unique indexes.
   *Fix:* give the contested value to neither account and record it on the review item,
   or to one account by an explicit rule.
-- [ ] **R9 — Two rows from one tournament become duplicate memberships**
+  *Fixed in #46. Decided 2026-10-17: the most recently active live row keeps a shared key; an account left without an email gets `<id>@unclaimed.wallearena.com`; `merge_review` records who kept what.*
+- [x] **R9 — Two rows from one tournament become duplicate memberships**
   (`merge_apply.py:220-240`). Phase 2 writes one membership per source row. When two
   rows from the same database merge (the normaliser's own docstring says `9876543210`
   and `919876543210` both exist in live data, and see R22 on emails), both get a
   membership for the same `(user_id, tournament_id)`, and the second violates
   `uniq_user_per_tournament`.
   *Fix:* one membership per tournament; keep every row's provenance in `user_id_map`.
-- [ ] **R23 — Accounts copied between databases get memberships they never earned.**
+  *Fixed in #46.*
+- [x] **R23 — Accounts copied between databases get memberships they never earned.**
   *Not raised in review; found in Phase 0.* `world_tower` was seeded with a copy of
   `walle_fantasy`'s users: 102 user documents carry the same `_id` in both. Of those,
   only 4 built a team in `world_tower` and 5 logged in there after TPL ended; 98 never
@@ -1969,10 +2063,11 @@ PR can say which items it closes.
   original, and each later copy gets a membership only if it built a team in that
   database or its `last_login` there is later than the original's. Every row is still
   mapped in `user_id_map`.
+  *Fixed in #46, with the original declared by `--copy-of world_tower=walle_fantasy` rather than inferred (the two databases' first signups are six hours apart). 95 copies earn no membership on the live data.*
 
 ### 13.4 Phase 3: tenant data
 
-- [ ] **R10 — Phase 3 cannot run twice** (`04_import_tenant_data.py:71-75`,
+- [x] **R10 — Phase 3 cannot run twice** (`04_import_tenant_data.py:71-75`,
   `tenant_import.py:62-87`). The preflight treats any `_id` present in both the source
   and the destination as a collision. Phase 3 preserves `_id`, so after the first apply
   every copied document is in both, and every rerun aborts, including the one Phase 6
@@ -1980,73 +2075,87 @@ PR can say which items it closes.
   *Fix:* a destination document copied from this same source is expected, not a clash.
   That needs provenance on copied documents (a `source_db` field or an import ledger),
   which R11 needs too.
-- [ ] **R11 — Deletions in a source never reach the destination**
+  *Fixed in #46 with `import_ledger`.*
+- [x] **R11 — Deletions in a source never reach the destination**
   (`04_import_tenant_data.py:101-104`). The import only upserts. A contest copied
   during the backfill and deleted before cutover survives it.
   *Fix:* after each import, delete destination documents from this source whose `_id`
   is no longer in the source.
-- [ ] **R12 — Per-tournament settings are not migrated** (`tenant_import.py:20-31`).
+  *Fixed in #46, including collections since emptied or dropped.*
+- [x] **R12 — Per-tournament settings are not migrated** (`tenant_import.py:20-31`).
   `global_settings` is not in the import list, so each tournament's squad limits and
   `default_contest_logo_file_id` fall back to platform defaults. #37 made settings
   per-tournament (`GlobalSettings.get_for_tournament`), so there is now a place for them.
   *Fix:* turn each source's `"global"` document into that tournament's settings row with
   a new `_id`. §2.1 still lists `global_settings` as a singleton; update it too.
-- [ ] **R13 — Contest, sponsor and carousel images are left behind.** Phase 4 copies
+  *Fixed in #46: `_id` `tournament:<id>`. §2.1 updated.*
+- [x] **R13 — Contest, sponsor and carousel images are left behind.** Phase 4 copies
   only the `avatars` bucket. `contest_logos`, `sponsor_logos` and `carousel_images` are
   referenced by `Contest.logo_file_id`, `Sponsor.logo_file_id`,
   `CarouselImage.image_file_id` and `GlobalSettings.default_contest_logo_file_id`, and
   would return 404 after cutover.
   *Fix:* copy the three buckets preserving file `_id`, so no reference needs rewriting.
   §2.1 lists only `fs.avatars.*`; update it too.
-- [ ] **R14 — Remove the `dropIndex("code_1")` instruction**
+  *Fixed in #46. §2.1 updated.*
+- [x] **R14 — Remove the `dropIndex("code_1")` instruction**
   (`04_import_tenant_data.py:10-13`). The review item *"Sponsor names still collide
   globally"* is **not a defect**, for the same reason this instruction is unnecessary:
   `sponsors.name` and `contests.code` are not unique indexes at all (R22). Per-tournament
   contest-code uniqueness comes from `uniq_contest_code_per_tournament`. Dropping
   `code_1` is harmless (Beanie rebuilds it), but the docstring teaches something false.
+  *Fixed in #46.*
 
 ### 13.5 Phase 4: avatars
 
-- [ ] **R15 — Every avatar is relabelled as JPEG** (`05_copy_avatars.py:57-61`). Uploads
+- [x] **R15 — Every avatar is relabelled as JPEG** (`05_copy_avatars.py:57-61`). Uploads
   store the real type (`app/utils/gridfs.py:46`) and PNG, WebP and SVG are accepted; the
   copy writes `image/jpeg`, and the serving route trusts that metadata.
   *Fix:* copy the source file's `metadata.content_type`.
-- [ ] **R16 — Every rerun copies every avatar again** (`05_copy_avatars.py:40-70`). No
+  *Fixed in #46: files are copied as GridFS's own documents, metadata intact.*
+- [x] **R16 — Every rerun copies every avatar again** (`05_copy_avatars.py:40-70`). No
   plan is ever marked done, so a retry uploads a new file per plan and orphans the
   previous one.
   *Fix:* upload with the source file's `_id` (`upload_from_stream_with_id`) and skip
   ids already present, or record the destination id on the plan and skip completed ones.
+  *Fixed in #46: files keep their `_id`; present ones are skipped.*
 
 ### 13.6 Phase 6: the delta cannot currently complete
 
-- [ ] **R17 — Change detection only looks at users and teams**
+- [x] **R17 — Change detection only looks at users and teams**
   (`07_resync_delta.py:79-80`). Changes confined to contests, enrolments, players or
   `player_contest_points` (a scoring update during the window, say) print "Nothing to
   re-sync" and are lost.
   *Fix:* check every imported collection, or skip detection and always run.
-- [ ] **R18 — The delta never copies avatars** (`07_resync_delta.py:87-98`). It reruns
+  *Fixed in #46: the delta re-runs everything; there is no detection to miss things.*
+- [x] **R18 — The delta never copies avatars** (`07_resync_delta.py:87-98`). It reruns
   Phases 2 and 3 only, so a signup with an avatar during the window keeps a source-bucket
   id that the unified database cannot serve.
   *Fix:* include Phase 4.
-- [ ] **R19 — Even with R17 and R18 fixed, Phase 6 fails.** *Not raised in review.* It
+  *Fixed in #46.*
+- [x] **R19 — Even with R17 and R18 fixed, Phase 6 fails.** *Not raised in review.* It
   reruns Phase 3 with `check=True` (`07_resync_delta.py:98`), which aborts on R10, and
   it reruns Phase 2, which skips every existing account (R5, R6). Step 5 of §7 Phase 6,
   the delta inside the read-only window, cannot succeed until R5, R6 and R10 are fixed,
   and that is the step where users are waiting.
+  *Fixed with R5, R6 and R10. The delta also passes `--copy-of` and `--platform-admins` through; without the list, re-running Phase 2 would have removed every platform admin.*
 
 ### 13.7 Phase 5: verification
 
-- [ ] **R20 — Verification passes an incomplete migration** (`verify.py:44-154`). Every
+- [x] **R20 — Verification passes an incomplete migration** (`verify.py:44-154`). Every
   check looks for something *wrong* among records that exist: duplicates, orphans,
   missing `tournament_id`. None checks that what should exist does. Run it after Phase 2
   but before Phase 3 and it passes with empty game collections; interrupt Phase 2 after
   the maps but before the memberships and it passes.
   *Fix:* reconcile document counts per collection against each source, and require a
   membership for every mapped row.
+  *Fixed in #46.* A correction to the item: one existence check
+  did exist — the legacy-row count against `user_id_map` — but nothing beyond it. And
+  R23 made "a membership for every mapped row" wrong; the check uses `earns_membership`
+  instead.
 
 ### 13.8 Found while checking, outside the scripts
 
-- [ ] **R21 — `uniq_legacy_row` does not exclude app-created memberships.** *Not raised
+- [x] **R21 — `uniq_legacy_row` does not exclude app-created memberships.** *Not raised
   in review; blocks stage E.* (#39, `app/models/tournament_membership.py:94-99` at
   `f7dcd43`.) The partial filter is `{"legacy_user_id": {"$exists": true}}`, meant to
   leave out memberships with no legacy row. But `$exists: true` also matches `null`, and
@@ -2057,7 +2166,8 @@ PR can say which items it closes.
   so the suite cannot catch this.
   *Fix:* `{"legacy_user_id": {"$type": "objectId"}}`, and require `source_db` whenever
   `legacy_user_id` is set (the open review comment on #39).
-- [ ] **R22 — Several `unique=True` declarations do nothing.** When a field is declared
+  *Fixed in #45. The flawed index is already built on `Dcpl` and `rspl` (both collections empty), and MongoDB will not redefine it in place, so the backend drops that one index at startup — only while it still has the `$exists` filter — and Beanie builds the corrected one.*
+- [x] **R22 — Several `unique=True` declarations do nothing.** When a field is declared
   `Indexed(..., unique=True)` *and* listed in `Settings.indexes`, Beanie's
   `merge_indexes` keys both by field and keeps the plain `Settings` entry, dropping the
   unique flag. Checked by replaying Beanie's merge against the models:
@@ -2077,3 +2187,71 @@ PR can say which items it closes.
   on `code`" describes an index that is not built.
   *Decide:* add a real index where uniqueness is intended, or remove the misleading
   wrapper where it is not.
+  *Fixed in #45 (decided 2026-10-17: remove the markers, no database change). Replaying Beanie's merge over every model found **nine** such fields, not three: also `refresh_tokens.token`, `user_profiles.user_id`, `slots.code`, `slots.name`, `password_reset_tokens.token_hash` and `tournaments.slug`. A test now fails if one is declared that way again. See R30.*
+
+### 13.9 Found while fixing the above
+
+Each was found by running the scripts' own planning against the fifteen live sources
+(read-only, in memory), except R30.
+
+- [x] **R24 — Every group of three or more accounts was flagged `chained`.** The flag
+  exists for transitive links, but fired on size alone. On the live data that held back
+  80 people whose 3–4 accounts all share one phone or email directly: 240 accounts, the
+  most active players. *Decided 2026-10-17: only a component where some pair shares
+  nothing directly is chained (6 groups). §7's table updated.*
+- [x] **R25 — Junk keys reached accounts.** Keys held by too many rows were dropped from
+  the graph but still written onto every account holding them: 6 mobiles on 47 accounts,
+  11 emails on 55, all colliding on the unique indexes. *They now go to nobody.*
+- [x] **R26 — `emails` held the matching form.** It folds Gmail's dots, while login looks
+  up what is typed, so anyone typing `rahul.patel@gmail.com` could not sign in by email
+  after cutover. *`emails` now holds the address as typed, lowercased — as registration
+  and Google sign-in already store it.*
+- [x] **R27 — The platform-admin list was not normalised.** It was compared as typed with
+  normalised keys, so a capital letter or a Gmail dot silently withheld the access. *It
+  is normalised the same way, and a line that is neither email nor mobile stops the run.*
+- [x] **R28 — Apple sign-in ids were not migrated.** Two `Dcpl` accounts are Apple-only;
+  the loader never read `apple_id`, so they would have had no way to sign in. *Carried
+  like Google ids, from live rows only, and counted by Phase 5.*
+- [x] **R29 — One Google login on two accounts.** A `Dcpl` and an `rspl` account signed in
+  with the same Google account but shared nothing usable, their address being on five
+  accounts (so junk). Both would have carried the id into `uniq_google_ids`. *Decided
+  2026-10-17: a shared Google or Apple sign-in links accounts like a phone or email,
+  with no `MAX_ROWS_PER_KEY` cap.*
+- [x] **R30 — Duplicated refresh tokens outlived logout.** `refresh_tokens.token` was one
+  of R22's nine; `Dcpl` holds 35 duplicated tokens and `rspl` 1. Two sign-ins in the
+  same second minted identical tokens, and logout and refresh revoked only the first
+  copy. *Fixed in #45: tokens carry a random `jti`, and revocation updates every copy.*
+- [x] **R31 — Accounts split by a junk key never reached review.** They are singletons,
+  so `merge_review.csv` never shows them. *Phase 1 writes `junk_keys.csv`.*
+
+Review of #46 found six more in the fixes themselves, all fixed there with a test that
+fails without the fix:
+
+- [x] **R32 — A split rewrote the saved account before it was detected.** Phase 2 now
+  resolves every account's user id before writing any, and leaves every account in a
+  conflict untouched.
+- [x] **R33 — A shared phone could not change hands between runs.** The new keeper was
+  written while the old one still held it, and the unique index stopped Phase 6. Keys
+  an account is giving up are now released, across all accounts, before any is written.
+- [x] **R34 — An import stopped between its two writes refused to resume.** The ledger
+  claim is now written before the document.
+- [x] **R35 — Verification compared counts.** A deletion and an addition since the last
+  run kept them equal. It now compares ids, for user rows and every collection.
+- [x] **R36 — A mapping to a user that does not exist passed.** Phase 2 writes the map
+  first, so a stopped run leaves one. Verification now requires every mapping's user.
+- [x] **R37 — A phone taken from an account in a split group still made it a platform
+  admin.** Only keys the account keeps count.
+
+With all of the above, planning against the live sources gives 1,946 accounts and 2,127
+memberships, with no identity value on two accounts and no live account without a
+credential. 197 groups merge automatically and 52 go to review.
+
+### 13.10 Before the dry run
+
+- **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
+  `uniq_legacy_row` from the start.
+- **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
+  administer the whole platform. Without it no one is a platform admin after cutover.
+- **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source mapping*).
+- Then the dry run itself, stage H: Phases 1–5 into `walle_arena` from a restored
+  snapshot, with the arguments in §7.

@@ -78,13 +78,31 @@ def digits_only(value: str) -> str:
     return "".join(ch for ch in value if ch in ASCII_DIGITS)
 
 
+def indian_local_number(digits: str) -> Optional[str]:
+    """The ten-digit Indian number these digits spell, or None.
+
+    Only two prefixes are stripped: 91 from twelve digits and the trunk 0 from
+    eleven. Anything else longer than ten digits is another country's number,
+    and cutting it to its last ten would turn it into an Indian one -- UK
+    447911123456 would become 7911123456 and join whoever holds that. Same rule
+    as app/services/auth/identity.py, which login uses.
+    """
+    if len(digits) == MIN_MOBILE_DIGITS:
+        return digits
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits[2:]
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[1:]
+    return None
+
+
 def normalise_mobile(raw: Optional[str]) -> Optional[str]:
     """A comparable mobile, or None when the value cannot identify anyone.
 
-    Country codes are stripped down to the last ten digits so that
-    ``919876543210`` and ``9876543210`` -- both of which exist in the live data,
-    written by different code paths -- are recognised as the same phone rather
-    than as two people.
+    An Indian number reduces to its ten local digits, so that ``919876543210``
+    and ``9876543210`` -- both of which exist in the live data, written by
+    different code paths -- are recognised as the same phone rather than as two
+    people. Any other number is kept whole, so it can only ever match itself.
     """
     if not raw:
         return None
@@ -93,20 +111,24 @@ def normalise_mobile(raw: Optional[str]) -> Optional[str]:
     if len(digits) < MIN_MOBILE_DIGITS or len(digits) > MAX_MOBILE_DIGITS:
         return None
 
-    if len(digits) > MIN_MOBILE_DIGITS:
-        digits = digits[-MIN_MOBILE_DIGITS:]
-
     # 0000000000, 1111111111 and friends are what people type to get past a
     # required field. They are not phones.
     if len(set(digits)) == 1:
         return None
 
-    # An Indian mobile never starts below 6. This catches landlines and
-    # truncated junk that happens to be ten characters long.
-    if digits[0] in "012345":
+    local = indian_local_number(digits)
+    if local is None:
+        return digits
+
+    if len(set(local)) == 1:
         return None
 
-    return digits
+    # An Indian mobile never starts below 6. This catches landlines and
+    # truncated junk that happens to be ten characters long.
+    if local[0] in "012345":
+        return None
+
+    return local
 
 
 def normalise_email(raw: Optional[str]) -> Optional[str]:
@@ -129,15 +151,15 @@ def normalise_email(raw: Optional[str]) -> Optional[str]:
     # rahulpatel@gmail.com and rahul+lpcl@gmail.com are one inbox and one
     # person. Treating them as three would leave that person with three
     # accounts after a migration meant to give them one.
+    #
+    # Gmail only. Elsewhere a "+tag" may be a separate mailbox or nothing
+    # special at all, and stripping it would merge user+one@company.com with
+    # user+two@company.com as one person (spec §13.2, R2).
     if domain in {"gmail.com", "googlemail.com"}:
         local = local.split("+", 1)[0].replace(".", "")
         if not local:
             return None
         domain = "gmail.com"
-    else:
-        local = local.split("+", 1)[0]
-        if not local:
-            return None
 
     return f"{local}@{domain}"
 
