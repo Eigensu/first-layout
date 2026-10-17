@@ -249,14 +249,70 @@ async def test_a_username_containing_digits_is_never_read_as_a_number(db):
     assert found is not None and found.id == mixed.id
 
 
-def test_is_phone_shaped_accepts_only_typed_number_punctuation():
+def test_is_phone_shaped_is_digits_without_letters():
     assert is_phone_shaped("9876543210")
     assert is_phone_shaped("+91 98765-43210")
     assert is_phone_shaped("(098) 765 4321")
+    # Signup keeps the digits of whatever was typed, so this was stored as
+    # 9876543210 and has to sign in the same way.
+    assert is_phone_shaped("98765/43210")
     assert not is_phone_shaped("rahul123")
     assert not is_phone_shaped("rahul")
     assert not is_phone_shaped("")
     assert not is_phone_shaped("+-()")  # punctuation with no digits at all
+
+
+@pytest.mark.asyncio
+async def test_a_punctuated_username_beats_the_number_its_digits_spell(db):
+    """Usernames may hold digits, "_" and "-", so this one is entirely valid."""
+    named = User(
+        username="98_765_432_10",
+        email="named@example.com",
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await named.insert()
+    await User(
+        username="holder",
+        email="holder@example.com",
+        mobile="9876543210",
+        hashed_password=get_password_hash(CURRENT),
+    ).insert()
+
+    found = await resolve_login_identity("98_765_432_10")
+    assert found is not None and found.id == named.id
+
+
+@pytest.mark.asyncio
+async def test_bare_digits_still_reach_the_number_before_a_username(db):
+    holder = User(
+        username="holder",
+        email="holder@example.com",
+        mobile="9876543210",
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await holder.insert()
+    await User(
+        username="9876543210",
+        email="named@example.com",
+        hashed_password=get_password_hash(CURRENT),
+    ).insert()
+
+    found = await resolve_login_identity("9876543210")
+    assert found is not None and found.id == holder.id
+
+
+@pytest.mark.asyncio
+async def test_a_number_typed_with_a_slash_signs_in(db):
+    user = User(
+        username="slash",
+        email="slash@example.com",
+        mobile="9876543210",
+        hashed_password=get_password_hash(CURRENT),
+    )
+    await user.insert()
+
+    found = await resolve_login_identity("98765/43210")
+    assert found is not None and found.id == user.id
 
 
 # --------------------------------------------------------------------------

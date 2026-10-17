@@ -4,7 +4,7 @@ from typing import Annotated, Dict, List, Optional
 from beanie import PydanticObjectId
 from beanie.operators import Or, RegEx
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
@@ -24,9 +24,8 @@ from app.services.contest_status import (
     contest_status_filter_clauses,
     sync_contest_status,
 )
-from app.utils.dependencies import get_current_active_user
+from app.utils.dependencies import get_current_active_user, get_optional_current_user
 from app.utils.gridfs import open_contest_logo_stream
-from app.utils.security import decode_token
 from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/contests", tags=["contests"])
@@ -93,25 +92,6 @@ async def to_contest_response(
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
-
-
-async def get_optional_current_user(
-    authorization: Optional[str] = Header(None),
-) -> Optional[User]:
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    token = authorization.replace("Bearer ", "")
-    try:
-        payload = decode_token(token)
-    except Exception:
-        return None
-    if payload is None:
-        return None
-    username = payload.get("sub")
-    if not username or not isinstance(username, str):
-        return None
-    user = await User.find_one(User.username == username)
-    return user
 
 
 @router.get("", response_model=ContestListResponse)
