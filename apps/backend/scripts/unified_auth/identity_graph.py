@@ -321,6 +321,24 @@ def build_components(
     return components, junk
 
 
+def rows_holding_junk(
+    rows: Sequence[LegacyRow], junk: Set[str]
+) -> Dict[str, List[LegacyRow]]:
+    """Each discarded key and the rows that hold it.
+
+    Rows split apart by a junk key are singletons, so they never appear in the
+    review queue. This is how a reviewer finds them -- most are strangers on a
+    shared office number, but a regular of four or more tournaments looks the
+    same, and only a person can tell them apart.
+    """
+    holding: Dict[str, List[LegacyRow]] = defaultdict(list)
+    for row in rows:
+        for key in (normalise_mobile(row.mobile), normalise_email(row.email)):
+            if key in junk:
+                holding[key].append(row)
+    return dict(holding)
+
+
 def gap_histogram(
     components: Iterable[Component],
     buckets_days: Sequence[int] = (0, 30, 90, 180, 365, 730),

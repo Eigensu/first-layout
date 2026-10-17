@@ -14,6 +14,7 @@ from scripts.unified_auth.identity_graph import (
     LegacyRow,
     build_components,
     gap_histogram,
+    rows_holding_junk,
     summarise,
 )
 from scripts.unified_auth.normalise import (
@@ -376,6 +377,26 @@ def test_an_overshared_key_merges_nobody():
     assert len(components) == 8
     assert all(c.size == 1 for c in components)
     assert "9876543210" in junk
+
+
+def test_rows_split_by_a_junk_key_can_still_be_found_for_review():
+    """They are singletons, so the review queue never shows them."""
+    rows = [
+        row(db="walle_lpcl", uid=str(i), mobile="9876543210", full_name=f"P {i}")
+        for i in range(5)
+    ]
+    components, junk = build_components(rows)
+
+    holding = rows_holding_junk(rows, junk)
+
+    assert all(not c.flags for c in components)
+    assert [r.legacy_user_id for r in holding["9876543210"]] == [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+    ]
 
 
 def test_placeholder_email_does_not_chain_strangers():

@@ -12,6 +12,7 @@ and the register and aggregator databases, into the identity graph.
 Produces:
     merge_plan.json    every component, its rows, its edges and its flags
     merge_review.csv   only the flagged ones, for reading in a spreadsheet
+    junk_keys.csv      every key discarded as too widely shared, and who held it
     summary.json       the counts, and the gap histogram that sets RECYCLE_GAP
 
 Nothing flagged is merged. Read merge_review.csv before running phase 2.
@@ -34,9 +35,21 @@ from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 
 from scripts.unified_auth.identity_graph import (  # noqa: E402
     build_components,
+    rows_holding_junk,
     summarise,
 )
 from scripts.unified_auth.loader import load_rows  # noqa: E402
+
+
+def write_junk(rows, junk, out_dir: Path) -> None:
+    with (out_dir / "junk_keys.csv").open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["key", "source_db", "legacy_user_id", "username", "full_name"])
+        for key, holders in sorted(rows_holding_junk(rows, junk).items()):
+            for r in holders:
+                writer.writerow(
+                    [key, r.source_db, r.legacy_user_id, r.username, r.full_name]
+                )
 
 
 def write_plan(components, junk, out_dir: Path) -> None:
@@ -145,7 +158,11 @@ async def main() -> None:
         rows, recycle_gap=timedelta(days=args.recycle_gap_days)
     )
     write_plan(components, junk, args.out)
-    print(f"\nwrote {args.out}/merge_plan.json, merge_review.csv, summary.json")
+    write_junk(rows, junk, args.out)
+    print(
+        f"\nwrote {args.out}/merge_plan.json, merge_review.csv, junk_keys.csv, "
+        "summary.json"
+    )
     print("Nothing has been merged. Review merge_review.csv before phase 2.")
 
 
