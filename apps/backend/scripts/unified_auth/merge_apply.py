@@ -7,15 +7,23 @@ not recognising themselves.
 
 The rule throughout is **most recently active wins**: whatever that person was
 using last is what they will expect to see. Anything the winner does not have
-is taken from the next row that does, rather than dropped.
+is taken from the next row that does, rather than dropped. A row its owner
+deleted never wins, and never contributes a way in (spec §13.2, R1).
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .identity_graph import Component, LegacyRow
 from .normalise import normalise_email, normalise_mobile
+
+# Where an account whose only address was given to someone else gets one. The
+# User model requires an email, and a placeholder on a domain this product owns
+# can never reach a stranger -- unlike reusing the shared address, or inventing
+# one on a domain anybody could register.
+UNCLAIMED_EMAIL_DOMAIN = "unclaimed.wallearena.com"
 
 
 @dataclass
@@ -43,10 +51,9 @@ class UnifiedAccount:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
-    # Resolved by phase 4 once the file has been copied into the unified
-    # bucket; the id here still points into `avatar_source_db`.
+    # GridFS ids are preserved when phase 4 copies the file, so this id is
+    # already the one the unified bucket will hold.
     avatar_file_id: Optional[str] = None
-    avatar_url: Optional[str] = None
     avatar_source_db: Optional[str] = None
     # The rows this account was built from, in the order they were considered.
     source_rows: List[LegacyRow] = field(default_factory=list)
@@ -54,7 +61,7 @@ class UnifiedAccount:
 
 @dataclass
 class MembershipPlan:
-    """One (person, tournament) row, built from one legacy account."""
+    """One (person, tournament) row."""
 
     tournament_slug: str
     source_db: str
@@ -65,6 +72,25 @@ class MembershipPlan:
     last_login_at: Optional[datetime]
 
 
+@dataclass
+class Withheld:
+    """A login key no account in a flagged group was given, or only one was."""
+
+    kind: str  # "email" | "mobile" | "google_id"
+    value: str
+    kept_by: Optional[Tuple[str, str]]  # the row that kept it, or None
+    held_by: List[Tuple[str, str]]
+
+
+@dataclass
+class AccountPlan:
+    """What one component becomes, and what a reviewer needs to know about it."""
+
+    accounts: List[UnifiedAccount]
+    withheld: List[Withheld] = field(default_factory=list)
+    flags: List[str] = field(default_factory=list)
+
+
 def _activity(row: LegacyRow) -> datetime:
     """When this account was last plausibly used."""
     stamps = [d for d in (row.last_login, row.updated_at, row.created_at) if d]
@@ -72,18 +98,24 @@ def _activity(row: LegacyRow) -> datetime:
 
 
 def rows_by_recency(rows: Sequence[LegacyRow]) -> List[LegacyRow]:
-    """Most recently active first, ties broken deterministically.
+    """Live rows first, each group most recently active first.
+
+    A deleted row sorts after every live one whatever its timestamps -- and a
+    soft delete stamps updated_at, so by recency alone the row someone has just
+    deleted would be the one most likely to win.
 
     The tie-break matters more than it looks: without it two runs of the
     migration over the same data could pick different winners, and "idempotent"
     would quietly stop being true.
     """
     return sorted(
-        rows, key=lambda r: (_activity(r), r.source_db, r.legacy_user_id), reverse=True
+        rows,
+        key=lambda r: (r.is_active, _activity(r), r.source_db, r.legacy_user_id),
+        reverse=True,
     )
 
 
-def _ordered_unique(values: Sequence[Optional[str]]) -> List[str]:
+def _ordered_unique(values: Iterable[Optional[str]]) -> List[str]:
     seen: Set[str] = set()
     out: List[str] = []
     for value in values:
@@ -93,29 +125,69 @@ def _ordered_unique(values: Sequence[Optional[str]]) -> List[str]:
     return out
 
 
+def _email_key(row: LegacyRow) -> Optional[str]:
+    return normalise_email(row.email)
+
+
+def _mobile_key(row: LegacyRow) -> Optional[str]:
+    return normalise_mobile(row.mobile)
+
+
+def _address_as_typed(row: LegacyRow) -> Optional[str]:
+    """The address as its owner types it, lowercased -- the form login looks up.
+
+    The normalised form is for deciding who is who: it folds Gmail's dots, so
+    rahul.patel@gmail.com becomes rahulpatel@gmail.com. Storing that would lock
+    the person out, because login compares what they type, and they type the
+    dots. Registration and Google sign-in store the typed form too.
+    """
+    if not _email_key(row):
+        return None
+    return row.email.strip().lower()
+
+
 def build_unified_account(
     component: Component,
     platform_admin_keys: Optional[Set[str]] = None,
     merge_group_id: Optional[str] = None,
+    withheld: Iterable[str] = (),
 ) -> UnifiedAccount:
     """Build one account from one component's rows.
 
-    `platform_admin_keys` holds the emails and mobiles of the people who should
-    administer the whole platform. Legacy `is_admin` deliberately does not grant
-    it: merging means someone who administered one tournament would otherwise
-    inherit every tournament, including ones they have never been near.
+    `platform_admin_keys` holds the normalised emails and mobiles of the people
+    who should administer the whole platform. Legacy `is_admin` deliberately
+    does not grant it: merging means someone who administered one tournament
+    would otherwise inherit every tournament, including ones they have never
+    been near.
+
+    `withheld` holds normalised emails and mobiles, and Google ids, that this
+    account must not carry: junk keys shared too widely to identify anyone, and
+    in a split group the values another account kept.
     """
     platform_admin_keys = platform_admin_keys or set()
+    withheld = set(withheld)
     ranked = rows_by_recency(component.rows)
     winner = ranked[0]
 
-    emails = _ordered_unique([normalise_email(r.email) or r.email for r in ranked])
-    mobiles = _ordered_unique([normalise_mobile(r.mobile) for r in ranked])
-    google_ids = _ordered_unique([r.google_id for r in ranked])
+    # A deleted row contributes no credential: no password, legacy or primary,
+    # and no Google sign-in. Its owner asked for that account to stop working,
+    # and merging must not quietly reopen it through the account it joins.
+    live = [r for r in ranked if r.is_active]
 
-    # Every row's password stays valid. A merged account has more than one, and
-    # the person remembers whichever they last used -- picking one and
+    emails = _ordered_unique(
+        _address_as_typed(r) for r in ranked if _email_key(r) not in withheld
+    )
+    mobiles = _ordered_unique(
+        _mobile_key(r) for r in ranked if _mobile_key(r) not in withheld
+    )
+    google_ids = _ordered_unique(
+        r.google_id for r in live if r.google_id not in withheld
+    )
+
+    # Every live row's password stays valid. A merged account has more than one,
+    # and the person remembers whichever they last used -- picking one and
     # discarding the rest locks out whoever guessed wrong.
+    hashed_password = live[0].hashed_password if live else None
     legacy_hashes = [
         {
             "hashed_password": r.hashed_password,
@@ -123,7 +195,7 @@ def build_unified_account(
             "legacy_user_id": r.legacy_user_id,
             "last_login": r.last_login,
         }
-        for r in ranked[1:]
+        for r in live[1:]
         if r.hashed_password
     ]
 
@@ -142,29 +214,27 @@ def build_unified_account(
     logins = [r.last_login for r in ranked if r.last_login]
 
     is_platform_admin = any(
-        (normalise_email(r.email) or "") in platform_admin_keys
-        or (normalise_mobile(r.mobile) or "") in platform_admin_keys
+        (_email_key(r) or "") in platform_admin_keys
+        or (_mobile_key(r) or "") in platform_admin_keys
         for r in ranked
     )
 
     return UnifiedAccount(
         username=winner.username,
-        email=emails[0] if emails else winner.email,
+        email=_scalar_email(winner, emails, withheld),
         emails=emails,
         mobiles=mobiles,
         google_ids=google_ids,
         mobile=mobiles[0] if mobiles else None,
         google_id=google_ids[0] if google_ids else None,
-        hashed_password=winner.hashed_password,
+        hashed_password=hashed_password,
         legacy_hashes=legacy_hashes,
         full_name=full_name,
-        auth_provider=(
-            "google" if google_ids and not winner.hashed_password else "password"
-        ),
+        auth_provider="google" if google_ids and not hashed_password else "password",
         # Deactivated in one tournament and active in another means the person
         # is still around. Only an account that was disabled everywhere stays
-        # disabled.
-        is_active=any(r.is_active for r in ranked),
+        # disabled -- and, having no live row, it carries no credential either.
+        is_active=bool(live),
         is_verified=any(r.is_verified for r in ranked),
         is_admin=False,
         is_platform_admin=is_platform_admin,
@@ -183,6 +253,7 @@ def build_unified_account(
                 "username": r.username,
                 "email": r.email,
                 "mobile": r.mobile,
+                "is_active": r.is_active,
                 "created_at": r.created_at,
             }
             for r in ranked
@@ -191,11 +262,57 @@ def build_unified_account(
     )
 
 
+def _scalar_email(winner: LegacyRow, emails: List[str], withheld: Set[str]) -> str:
+    """The `email` field, which the User model requires.
+
+    The first identity address when there is one. Otherwise the winner's own
+    value, kept as it was -- a placeholder like test@test.com identifies
+    nobody, but it is what the account held and `email` is not unique. Only an
+    address this account was denied is replaced, so that it cannot be reached
+    through the field the array was denied it in.
+    """
+    if emails:
+        return emails[0]
+    if winner.email and _email_key(winner) not in withheld:
+        return winner.email.strip().lower()
+    return f"{winner.legacy_user_id}@{UNCLAIMED_EMAIL_DOMAIN}"
+
+
+def _contested(rows: Sequence[LegacyRow]) -> List[Withheld]:
+    """Login keys held by more than one row of a group that is being split.
+
+    Each goes to the most recently active live row holding it (decided for
+    R8); the others lose it. Live rows rank first, so a deleted account never
+    keeps a key from a live one.
+    """
+    holders: Dict[Tuple[str, str], List[LegacyRow]] = defaultdict(list)
+    for r in rows_by_recency(rows):
+        for kind, value in (
+            ("email", _email_key(r)),
+            ("mobile", _mobile_key(r)),
+            ("google_id", r.google_id),
+        ):
+            if value:
+                holders[(kind, value)].append(r)
+
+    return [
+        Withheld(
+            kind=kind,
+            value=value,
+            kept_by=held[0].key,
+            held_by=[r.key for r in held],
+        )
+        for (kind, value), held in holders.items()
+        if len(held) > 1
+    ]
+
+
 def plan_accounts(
     component: Component,
-    component_id: str,
+    merge_group_id: str,
     platform_admin_keys: Optional[Set[str]] = None,
-) -> List[UnifiedAccount]:
+    junk: Iterable[str] = (),
+) -> AccountPlan:
     """The accounts this component becomes.
 
     A clean component becomes one account. A flagged one becomes **several** --
@@ -203,38 +320,126 @@ def plan_accounts(
     find the set and link them deliberately. That is the whole point of
     flagging: the migration declines to guess, but leaves the question asked
     rather than silently dropping it.
-    """
-    if component.should_merge:
-        return [build_unified_account(component, platform_admin_keys)]
 
-    return [
-        build_unified_account(
-            Component(rows=[row], edges=[], flags=component.flags),
-            platform_admin_keys,
-            merge_group_id=component_id,
+    Splitting has a catch: the rows were grouped because they share a mobile or
+    an email, and a login key can belong to one account only. Each shared key
+    goes to the most recently active row holding it, and is recorded so the
+    reviewer can see who lost it (R8).
+
+    `junk` keys -- held by too many rows to identify anyone -- go to nobody, in
+    any component: otherwise every account holding one collides with the next.
+    """
+    junk = set(junk)
+    if component.should_merge:
+        return AccountPlan(
+            accounts=[build_unified_account(component, platform_admin_keys, None, junk)]
         )
-        for row in rows_by_recency(component.rows)
-    ]
+
+    contested = [w for w in _contested(component.rows) if w.value not in junk]
+    accounts = []
+    for row in rows_by_recency(component.rows):
+        lost = {w.value for w in contested if w.kept_by != row.key}
+        accounts.append(
+            build_unified_account(
+                Component(rows=[row], edges=[], flags=component.flags),
+                platform_admin_keys,
+                merge_group_id=merge_group_id,
+                withheld=junk | lost,
+            )
+        )
+    return AccountPlan(accounts=accounts, withheld=contested, flags=component.flags)
+
+
+def copies_without_activity(
+    rows: Sequence[LegacyRow],
+    copy_of: Dict[str, str],
+    played: Set[Tuple[str, str]],
+) -> Set[Tuple[str, str]]:
+    """Rows that exist only because their database was seeded from another.
+
+    `copy_of` maps a database to the one it was seeded from, as declared by the
+    operator: world_tower started as a copy of walle_fantasy's users, so 102
+    people appear in both under the same _id, and 98 of them never used World
+    Towers. A copy earns its tournament a place on the profile only if that
+    person built a team there, or signed in there after they last signed in to
+    the original (decided for R23). Every row is still mapped either way.
+    """
+    by_key = {r.key: r for r in rows}
+    idle = set()
+    for r in rows:
+        original_db = copy_of.get(r.source_db)
+        if original_db is None:
+            continue
+        original = by_key.get((original_db, r.legacy_user_id))
+        if original is None:
+            continue
+        if r.key in played:
+            continue
+        if r.last_login and (
+            original.last_login is None or r.last_login > original.last_login
+        ):
+            continue
+        idle.add(r.key)
+    return idle
+
+
+def undeclared_copies(
+    rows: Sequence[LegacyRow], copy_of: Dict[str, str]
+) -> Dict[Tuple[str, str], int]:
+    """Pairs of databases sharing user _ids with no --copy-of saying which came first.
+
+    A shared _id means one database was seeded from the other. Which one is the
+    original decides who gets a membership, so it is declared rather than
+    guessed -- the two first signups in the live case are six hours apart.
+    """
+    dbs_by_id: Dict[str, Set[str]] = defaultdict(set)
+    for r in rows:
+        dbs_by_id[r.legacy_user_id].add(r.source_db)
+
+    shared: Dict[Tuple[str, str], int] = defaultdict(int)
+    for dbs in dbs_by_id.values():
+        ordered = sorted(dbs)
+        for i, a in enumerate(ordered):
+            for b in ordered[i + 1 :]:
+                if copy_of.get(a) != b and copy_of.get(b) != a:
+                    shared[(a, b)] += 1
+    return dict(shared)
 
 
 def plan_memberships(
-    account: UnifiedAccount, slug_by_db: Dict[str, str]
+    account: UnifiedAccount,
+    slug_by_db: Dict[str, str],
+    without_membership: Set[Tuple[str, str]] = frozenset(),
 ) -> List[MembershipPlan]:
-    """One membership per legacy row, so every tournament shows on the profile.
+    """One membership per tournament the person played in.
 
-    Role is per tournament: a legacy `is_admin` makes that person an admin of
-    the tournament they administered, and of nothing else.
+    Per tournament, not per row: two rows from one database can merge -- the
+    same phone stored as 9876543210 and 919876543210, or one email registered
+    twice through a racing signup -- and two memberships for one tournament
+    would break uniq_user_per_tournament (R9). Every row stays in user_id_map.
+
+    Role is per tournament: a legacy `is_admin` on any row makes that person an
+    admin of the tournament they administered, and of nothing else.
     """
-    return [
-        MembershipPlan(
-            tournament_slug=slug_by_db[row.source_db],
-            source_db=row.source_db,
-            legacy_user_id=row.legacy_user_id,
-            display_name=row.username,
-            role="admin" if row.is_admin else "player",
-            joined_at=row.created_at,
-            last_login_at=row.last_login,
+    by_db: Dict[str, List[LegacyRow]] = defaultdict(list)
+    for row in account.source_rows:  # already most recent first
+        if row.source_db in slug_by_db and row.key not in without_membership:
+            by_db[row.source_db].append(row)
+
+    plans = []
+    for db, rows in by_db.items():
+        lead = rows[0]
+        created = [r.created_at for r in rows if r.created_at]
+        logins = [r.last_login for r in rows if r.last_login]
+        plans.append(
+            MembershipPlan(
+                tournament_slug=slug_by_db[db],
+                source_db=db,
+                legacy_user_id=lead.legacy_user_id,
+                display_name=lead.username,
+                role="admin" if any(r.is_admin for r in rows) else "player",
+                joined_at=min(created) if created else None,
+                last_login_at=max(logins) if logins else None,
+            )
         )
-        for row in account.source_rows
-        if row.source_db in slug_by_db
-    ]
+    return plans

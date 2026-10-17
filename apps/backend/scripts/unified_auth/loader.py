@@ -1,6 +1,6 @@
 """Reading legacy user rows out of the per-tournament databases."""
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -64,6 +64,17 @@ async def load_rows(
                 )
             )
     return rows
+
+
+async def load_team_owners(
+    client: AsyncIOMotorClient, db_names: Sequence[str]
+) -> Set[Tuple[str, str]]:
+    """(source_db, legacy_user_id) of every account that built a team there."""
+    owners: Set[Tuple[str, str]] = set()
+    for db_name in db_names:
+        for user_id in await client[db_name]["teams"].distinct("user_id"):
+            owners.add((db_name, str(user_id)))
+    return owners
 
 
 async def inventory(
