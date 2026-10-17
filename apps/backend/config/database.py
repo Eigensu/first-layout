@@ -1,23 +1,24 @@
 from typing import Optional
 
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from config.settings import get_settings
-from app.models.user import User, RefreshToken, UserProfile
-from app.models.sponsor import Sponsor
-from app.models.carousel import CarouselImage
-from app.models.team import Team
-from app.models.contest import Contest
-from app.models.team_contest_enrollment import TeamContestEnrollment
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from app.models.admin.audit_log import AdminActionLog
+from app.models.admin.import_log import ImportLog
 from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
-from app.models.admin.import_log import ImportLog
-from app.models.admin.audit_log import AdminActionLog
+from app.models.carousel import CarouselImage
+from app.models.contest import Contest
+from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
-from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.settings import GlobalSettings
+from app.models.sponsor import Sponsor
+from app.models.team import Team
+from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
+from app.models.user import RefreshToken, User, UserProfile
+from config.settings import get_settings
 
 settings = get_settings()
 
@@ -35,7 +36,7 @@ async def connect_to_mongo():
         mongo_client = client
 
         # Test connection
-        await mongo_client.admin.command('ping')
+        await mongo_client.admin.command("ping")
         print(f"[OK] Connected to MongoDB at {settings.mongodb_url}")
 
         # Initialize Beanie with document models
@@ -60,7 +61,7 @@ async def connect_to_mongo():
                 PasswordResetToken,
                 GlobalSettings,
                 Tournament,
-            ]
+            ],
         )
         print(f"[OK] Initialized Beanie ODM with database: {settings.mongodb_db_name}")
 

@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class ContestStatus(str, Enum):
     LIVE = "live"
     ONGOING = "ongoing"

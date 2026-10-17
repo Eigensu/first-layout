@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
-from app.models.settings import GlobalSettings
-from app.models.user import User
-from app.utils.dependencies import get_admin_user
-from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs, open_contest_logo_stream
-from app.utils.timezone import now_ist
-from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
+from app.models.settings import GlobalSettings
+from app.models.user import User
+from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
+from app.utils.dependencies import get_admin_user
+from app.utils.gridfs import (
+    delete_contest_logo_from_gridfs,
+    open_contest_logo_stream,
+    upload_contest_logo_to_gridfs,
+)
+from app.utils.timezone import now_ist
+
 router = APIRouter(prefix="/api/admin/settings", tags=["Admin - Settings"])
+
 
 class UploadResponse(BaseModel):
     url: str
@@ -72,6 +78,7 @@ async def upload_default_logo(
     settings = await GlobalSettings.get_instance()
 
     import logging
+
     logger = logging.getLogger(__name__)
 
     # Delete old logo if it exists
@@ -79,18 +86,21 @@ async def upload_default_logo(
         try:
             await delete_contest_logo_from_gridfs(settings.default_contest_logo_file_id)
         except Exception as e:
-            logger.warning(f"Failed to delete old default logo {settings.default_contest_logo_file_id}: {e}")
+            logger.warning(
+                f"Failed to delete old default logo {settings.default_contest_logo_file_id}: {e}"
+            )
 
     # Save new logo
     try:
-        file_id = await upload_contest_logo_to_gridfs(file, filename_prefix="default_contest_logo")
+        file_id = await upload_contest_logo_to_gridfs(
+            file, filename_prefix="default_contest_logo"
+        )
         settings.default_contest_logo_file_id = file_id
         settings.updated_at = now_ist()
         await settings.save()
-        
+
         return UploadResponse(
-            url="/api/settings/logo",
-            message="Default logo uploaded successfully"
+            url="/api/settings/logo", message="Default logo uploaded successfully"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload logo: {str(e)}")

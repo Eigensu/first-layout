@@ -1,6 +1,7 @@
-from beanie import Document, PydanticObjectId, Indexed
-from pydantic import Field
 from datetime import datetime
+
+from beanie import Document, Indexed, PydanticObjectId
+from pydantic import Field
 
 
 class PlayerContestPoints(Document):

@@ -1,12 +1,13 @@
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from pydantic import ValidationError
 
 from app.schemas.tournament import (
-    validate_slug,
     TournamentCreate,
-    TournamentUpdate,
     TournamentResponse,
+    TournamentUpdate,
+    validate_slug,
 )
 from app.utils.timezone import IST
 
@@ -79,16 +80,12 @@ class TestTournamentCreate:
             TournamentCreate(slug="dpcl")
 
     def test_naive_datetime_string_treated_as_ist(self):
-        t = TournamentCreate(
-            slug="dpcl", name="DPCL", start_at="2026-08-01T10:00:00"
-        )
+        t = TournamentCreate(slug="dpcl", name="DPCL", start_at="2026-08-01T10:00:00")
         assert t.start_at.tzinfo == IST
         assert t.start_at.hour == 10
 
     def test_utc_z_suffix_converted_to_ist(self):
-        t = TournamentCreate(
-            slug="dpcl", name="DPCL", start_at="2026-08-01T04:30:00Z"
-        )
+        t = TournamentCreate(slug="dpcl", name="DPCL", start_at="2026-08-01T04:30:00Z")
         assert t.start_at.tzinfo == IST
         assert t.start_at.hour == 10
         assert t.start_at.minute == 0

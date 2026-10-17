@@ -1,11 +1,13 @@
-from beanie import Document, PydanticObjectId
-from pydantic import Field, BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
+
+from beanie import Document, PydanticObjectId
+from pydantic import BaseModel, Field
 
 
 class PlayerSelection(BaseModel):
     """Player selection within a team"""
+
     player_id: str
     is_captain: bool = False
     is_vice_captain: bool = False
@@ -13,7 +15,7 @@ class PlayerSelection(BaseModel):
 
 class Team(Document):
     """Team model for fantasy cricket teams"""
-    
+
     user_id: PydanticObjectId  # Reference to User._id
     team_name: str
     player_ids: List[str] = []  # List of selected player IDs
@@ -24,11 +26,11 @@ class Team(Document):
     rank: Optional[int] = None
     rank_change: Optional[int] = None  # positive = moved up, negative = moved down
     contest_id: Optional[str] = None  # Optional: reference to a contest
-    
+
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     class Settings:
         name = "teams"
         indexes = [

@@ -1,9 +1,11 @@
+from typing import List, Optional
+
 from pydantic import BaseModel
-from typing import Optional, List
 
 
 class LeaderboardEntrySchema(BaseModel):
     """Schema for a single leaderboard entry"""
+
     rank: int
     username: str
     displayName: str
@@ -21,13 +23,14 @@ class LeaderboardEntrySchema(BaseModel):
                 "displayName": "Cricket Master",
                 "teamName": "Mumbai Warriors",
                 "points": 2456.0,
-                "rankChange": 1
+                "rankChange": 1,
             }
         }
 
 
 class LeaderboardResponseSchema(BaseModel):
     """Schema for leaderboard response"""
+
     entries: List[LeaderboardEntrySchema]
     currentUserEntry: Optional[LeaderboardEntrySchema] = None
 
@@ -41,9 +44,9 @@ class LeaderboardResponseSchema(BaseModel):
                         "displayName": "Cricket Master",
                         "teamName": "Mumbai Warriors",
                         "points": 2456.0,
-                        "rankChange": 1
+                        "rankChange": 1,
                     }
                 ],
-                "currentUserEntry": None
+                "currentUserEntry": None,
             }
         }

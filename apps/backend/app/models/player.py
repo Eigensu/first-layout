@@ -1,12 +1,13 @@
+from datetime import datetime
+from typing import Dict, Optional
+
 from beanie import Document
 from pydantic import Field, field_validator
-from datetime import datetime
-from typing import Optional, Dict
 
 
 class Player(Document):
     """Player model for cricket players"""
-    
+
     name: str
     team: Optional[str] = None
     # Auction sale value; 0 means never auctioned. Shared collection with
@@ -19,25 +20,25 @@ class Player(Document):
     # players fetched through this model. None (absent in the document) reads
     # as Active.
     status: Optional[str] = None
-    
+
     # Additional stats
     stats: Optional[Dict] = None  # {"matches": 0, "runs": 0, "wickets": 0, etc.}
     form: Optional[str] = None  # Recent form indicator
     injury_status: Optional[str] = None
     image_url: Optional[str] = None
-    
+
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    @field_validator('slot', mode='before')
+
+    @field_validator("slot", mode="before")
     @classmethod
     def convert_slot_to_string(cls, v):
         """Convert slot to string if it's not already a string"""
         if v is not None and not isinstance(v, str):
             return str(v)
         return v
-    
+
     class Settings:
         name = "players"
         indexes = [

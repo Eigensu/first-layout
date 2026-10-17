@@ -1,16 +1,17 @@
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
-from secrets import token_urlsafe
 import hashlib
+from datetime import datetime, timedelta
+from secrets import token_urlsafe
+from typing import Optional, Tuple
 
 from beanie import PydanticObjectId
 from beanie.operators import In
 
-from config.settings import get_settings
-from app.models.user import User, RefreshToken
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
-from app.services.auth.twofactor import send_otp_autogen, verify_otp as provider_verify_otp
+from app.models.user import RefreshToken, User
+from app.services.auth.twofactor import send_otp_autogen
+from app.services.auth.twofactor import verify_otp as provider_verify_otp
 from app.utils.security import get_password_hash
+from config.settings import get_settings
 
 settings = get_settings()
 
@@ -67,7 +68,11 @@ async def verify_otp_and_issue_token(phone: str, otp: str) -> Tuple[str, int]:
             PasswordResetSession.phone.regex(input_digits),
             PasswordResetSession.status == "pending",
         )
-    if not session or session.expires_at < _now() or session.attempts >= session.max_attempts:
+    if (
+        not session
+        or session.expires_at < _now()
+        or session.attempts >= session.max_attempts
+    ):
         raise ValueError("Invalid or expired session")
     session.attempts += 1
     session.updated_at = _now()
@@ -94,7 +99,9 @@ async def verify_otp_and_issue_token(phone: str, otp: str) -> Tuple[str, int]:
 
 async def reset_password(reset_token: str, new_password: str) -> None:
     token_hash = _hash_token(reset_token)
-    token_doc = await PasswordResetToken.find_one(PasswordResetToken.token_hash == token_hash)
+    token_doc = await PasswordResetToken.find_one(
+        PasswordResetToken.token_hash == token_hash
+    )
     if not token_doc or token_doc.used_at is not None or token_doc.expires_at < _now():
         raise ValueError("Invalid or expired token")
     session = await PasswordResetSession.get(token_doc.session_id)
@@ -107,7 +114,9 @@ async def reset_password(reset_token: str, new_password: str) -> None:
     user.updated_at = _now()
     await user.save()
     # Revoke all refresh tokens for this user
-    async for rt in RefreshToken.find(RefreshToken.user_id == user.id, RefreshToken.revoked == False):
+    async for rt in RefreshToken.find(
+        RefreshToken.user_id == user.id, RefreshToken.revoked == False
+    ):
         rt.revoked = True
         await rt.save()
     token_doc.used_at = _now()

@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from beanie import PydanticObjectId
 
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.common.enums.tournaments import TournamentStatus
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.common.enums.tournaments import TournamentStatus
 from app.schemas.tournament import (
-    TournamentCreate,
-    TournamentUpdate,
-    TournamentResponse,
-    TournamentListResponse,
     SlugAvailabilityResponse,
+    TournamentCreate,
+    TournamentListResponse,
+    TournamentResponse,
+    TournamentUpdate,
     validate_slug,
 )
 from app.utils.dependencies import get_admin_user
@@ -122,7 +123,9 @@ async def list_tournaments(
 
     total = await query.count()
     skip = (page - 1) * page_size
-    rows = await query.skip(skip).limit(page_size).sort(-Tournament.created_at).to_list()
+    rows = (
+        await query.skip(skip).limit(page_size).sort(-Tournament.created_at).to_list()
+    )
     return TournamentListResponse(
         tournaments=[to_response(t) for t in rows],
         total=total,
@@ -195,4 +198,6 @@ async def delete_tournament(
     tournament.status = TournamentStatus.ARCHIVED
     tournament.updated_at = now_ist()
     await tournament.save()
-    return {"message": f"Tournament '{tournament.slug}' archived; its subdomain no longer resolves"}
+    return {
+        "message": f"Tournament '{tournament.slug}' archived; its subdomain no longer resolves"
+    }
