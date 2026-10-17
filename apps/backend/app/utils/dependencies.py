@@ -2,7 +2,7 @@ from typing import Optional
 
 from beanie import PydanticObjectId
 from bson import ObjectId
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
@@ -91,6 +91,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         raise credentials_exception
 
     return user
+
+
+async def get_optional_current_user(
+    authorization: Optional[str] = Header(None),
+) -> Optional[User]:
+    """The signed-in user if a valid access token came with the request.
+
+    For public endpoints that show their owner a little more -- a leaderboard's
+    "your rank" row, a team before its contest starts. Resolves the subject
+    exactly as get_current_user does; these used to read `sub` as a username
+    themselves, and stopped recognising anyone once tokens carried ids.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    payload = decode_token(authorization[len("Bearer ") :])
+    if payload is None or payload.get("type") != "access":
+        return None
+    subject = payload.get("sub")
+    if not subject or not isinstance(subject, str):
+        return None
+    return await resolve_token_subject(subject, payload.get(SUBJECT_KIND_CLAIM))
 
 
 async def get_current_active_user(

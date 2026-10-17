@@ -2,39 +2,15 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.player import Player as PublicPlayer
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
-from app.utils.security import decode_token
+from app.utils.dependencies import get_optional_current_user
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
-
-
-async def get_optional_current_user(
-    authorization: Optional[str] = Header(None),
-) -> Optional[User]:
-    """Get current user if authenticated, otherwise return None"""
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-
-    try:
-        token = authorization.replace("Bearer ", "")
-        payload = decode_token(token)
-        if payload is None:
-            return None
-
-        username = payload.get("sub")
-        if not username or not isinstance(username, str):
-            return None
-
-        # Find user in MongoDB
-        user = await User.find_one(User.username == username)
-        return user
-    except Exception:
-        return None
 
 
 async def _compute_team_points(team: Team) -> float:

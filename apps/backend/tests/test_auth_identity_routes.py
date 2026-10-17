@@ -384,6 +384,69 @@ async def test_refresh_resolves_from_the_stored_record_not_the_subject(
 
 
 # --------------------------------------------------------------------------
+# optional sign-in on public endpoints
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_optional_sign_in_recognises_both_subject_forms(db, legacy_user):
+    from app.utils.dependencies import get_optional_current_user
+
+    by_id = create_access_token(data=subject_claims(legacy_user))
+    by_name = create_access_token(data={"sub": "rahul"})
+
+    assert (await get_optional_current_user(f"Bearer {by_id}")).id == legacy_user.id
+    assert (await get_optional_current_user(f"Bearer {by_name}")).id == legacy_user.id
+
+
+@pytest.mark.asyncio
+async def test_optional_sign_in_ignores_what_is_not_an_access_token(db, legacy_user):
+    from app.utils.dependencies import get_optional_current_user
+
+    refresh = create_refresh_token(data=subject_claims(legacy_user))
+
+    assert await get_optional_current_user(None) is None
+    assert await get_optional_current_user("Bearer not-a-jwt") is None
+    assert await get_optional_current_user(f"Bearer {refresh}") is None
+
+
+@pytest.mark.asyncio
+async def test_an_owner_sees_their_team_before_the_contest_starts(client, legacy_user):
+    """Owners may always see their own team; everyone else waits for the start.
+
+    The owner check went through a resolver that read `sub` as a username, so
+    once tokens carried ids every owner was treated as a stranger and got 403.
+    """
+    from app.models.contest import Contest
+    from app.models.team import Team
+    from app.models.team_contest_enrollment import TeamContestEnrollment
+    from app.utils.timezone import now_ist
+
+    start = now_ist() + timedelta(days=1)
+    contest = Contest(
+        code="c1", name="Contest", start_at=start, end_at=start + timedelta(days=7)
+    )
+    await contest.insert()
+    team = Team(user_id=legacy_user.id, team_name="Rahul XI")
+    await team.insert()
+    await TeamContestEnrollment(
+        team_id=team.id, user_id=legacy_user.id, contest_id=contest.id
+    ).insert()
+    url = f"/api/contests/{contest.id}/teams/{team.id}"
+
+    owner = await client.get(
+        url,
+        headers={
+            "Authorization": f"Bearer {create_access_token(data=subject_claims(legacy_user))}"
+        },
+    )
+    stranger = await client.get(url)
+
+    assert owner.status_code == 200
+    assert stranger.status_code == 403
+
+
+# --------------------------------------------------------------------------
 # setting a password retires the carried-over ones
 # --------------------------------------------------------------------------
 
