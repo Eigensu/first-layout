@@ -340,9 +340,10 @@ async def refresh_token(refresh_token: str):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
-    # Revoke old refresh token
-    token_doc.revoked = True
-    await token_doc.save()
+    # Revoke every stored copy, not just the one found: tokens minted before
+    # they carried a jti can be stored twice, and a surviving copy would let
+    # this token refresh again.
+    await _revoke_refresh_token(refresh_token)
 
     # Generate new tokens
     new_access_token = create_access_token(data=subject_claims(user))
@@ -367,14 +368,15 @@ async def refresh_token(refresh_token: str):
 async def logout(refresh_token: str):
     """Logout and revoke refresh token"""
 
-    # Find and revoke refresh token
-    token_doc = await RefreshToken.find_one(RefreshToken.token == refresh_token)
-
-    if token_doc:
-        token_doc.revoked = True
-        await token_doc.save()
+    await _revoke_refresh_token(refresh_token)
 
     return {"message": "Successfully logged out"}
+
+
+async def _revoke_refresh_token(refresh_token: str) -> None:
+    await RefreshToken.find(RefreshToken.token == refresh_token).update(
+        {"$set": {"revoked": True}}
+    )
 
 
 @router.post("/forgot-password/request")

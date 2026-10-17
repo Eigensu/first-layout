@@ -30,7 +30,9 @@ class PasswordResetSession(Document):
 class PasswordResetToken(Document):
     user_id: PydanticObjectId
     session_id: PydanticObjectId
-    token_hash: Indexed(str, unique=True)  # type: ignore
+    # The hash of 48 random bytes, so unique in practice; not in the database,
+    # where the field-level unique was shadowed by Settings.indexes (spec §13.8, R22).
+    token_hash: str
     expires_at: datetime
     used_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

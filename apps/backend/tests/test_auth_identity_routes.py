@@ -383,6 +383,50 @@ async def test_refresh_resolves_from_the_stored_record_not_the_subject(
     assert me.json()["username"] == "rahul"
 
 
+def test_two_tokens_minted_in_the_same_second_differ():
+    """Identical claims used to mean identical tokens, stored twice."""
+    claims = {"sub": "rahul"}
+    assert create_refresh_token(data=claims) != create_refresh_token(data=claims)
+    assert create_access_token(data=claims) != create_access_token(data=claims)
+
+
+async def two_stored_copies(user):
+    """How a token minted before jti existed can sit in the database."""
+    token = create_refresh_token(data={"sub": user.username})
+    for _ in range(2):
+        await RefreshToken(
+            user_id=user.id,
+            token=token,
+            expires_at=datetime.utcnow() + timedelta(days=7),
+        ).insert()
+    return token
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_every_stored_copy(client, legacy_user):
+    token = await two_stored_copies(legacy_user)
+
+    await client.post("/api/auth/logout", params={"refresh_token": token})
+
+    copies = await RefreshToken.find(RefreshToken.token == token).to_list()
+    assert [c.revoked for c in copies] == [True, True]
+    refresh = await client.post("/api/auth/refresh", params={"refresh_token": token})
+    assert refresh.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_a_used_refresh_token_cannot_refresh_again_through_its_twin(
+    client, legacy_user
+):
+    token = await two_stored_copies(legacy_user)
+
+    first = await client.post("/api/auth/refresh", params={"refresh_token": token})
+    again = await client.post("/api/auth/refresh", params={"refresh_token": token})
+
+    assert first.status_code == 200
+    assert again.status_code == 401
+
+
 # --------------------------------------------------------------------------
 # optional sign-in on public endpoints
 # --------------------------------------------------------------------------

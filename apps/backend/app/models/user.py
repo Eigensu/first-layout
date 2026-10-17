@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from beanie import Document, Indexed, PydanticObjectId
+from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pymongo import IndexModel
 
@@ -61,7 +61,11 @@ class User(Document):
     # removes a declaration that contradicted both the spec and the behaviour,
     # and that anyone reasoning about the merge would reasonably believe.
     username: str
-    email: Indexed(EmailStr, unique=True)  # type: ignore
+    # Not unique in the database, only in the register route's check: a
+    # field-level unique here was shadowed by the plain "email" entry in
+    # Settings.indexes and never built (spec §13.8, R22). `uniq_emails` is the real
+    # constraint, and every account has `emails` once the backfill has run.
+    email: EmailStr
 
     # --- identity, post-unification ----------------------------------------
     # Merging on "mobile OR email" means one person can legitimately end up
@@ -181,7 +185,10 @@ class RefreshToken(Document):
     """Refresh token document model for MongoDB"""
 
     user_id: PydanticObjectId
-    token: Indexed(str, unique=True)  # type: ignore
+    # Not unique in the database: the field-level unique was shadowed by the
+    # "token" entry in Settings.indexes (spec §13.8, R22). Each token carries a random
+    # jti, so two are never equal, and revocation updates every copy anyway.
+    token: str
     expires_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
     revoked: bool = False
@@ -198,7 +205,9 @@ class RefreshToken(Document):
 class UserProfile(Document):
     """Optional: User profile document for additional user data"""
 
-    user_id: Indexed(PydanticObjectId, unique=True)  # type: ignore
+    # Shadowed by the "user_id" entry in Settings.indexes, so never unique in
+    # the database (spec §13.8, R22).
+    user_id: PydanticObjectId
     bio: Optional[str] = None
     location: Optional[str] = None
     website: Optional[str] = None

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from secrets import token_hex
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -29,7 +30,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
 
-    to_encode.update({"exp": expire, "type": "access", "iat": datetime.utcnow()})
+    to_encode.update(
+        {
+            "exp": expire,
+            "type": "access",
+            "iat": datetime.utcnow(),
+            "jti": token_hex(16),
+        }
+    )
 
     encoded_jwt = jwt.encode(
         to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
@@ -42,7 +50,17 @@ def create_refresh_token(data: dict, expires_days: int = 7) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=expires_days)
 
-    to_encode.update({"exp": expire, "type": "refresh", "iat": datetime.utcnow()})
+    # jti makes every token distinct. Without it, two sign-ins by one account
+    # in the same second minted byte-identical tokens -- Dcpl held 35 such
+    # pairs -- and revoking one stored copy left the other working.
+    to_encode.update(
+        {
+            "exp": expire,
+            "type": "refresh",
+            "iat": datetime.utcnow(),
+            "jti": token_hex(16),
+        }
+    )
 
     encoded_jwt = jwt.encode(
         to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
