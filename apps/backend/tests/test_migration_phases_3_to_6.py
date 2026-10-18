@@ -273,6 +273,7 @@ def test_the_delta_reruns_every_phase_with_the_backfills_arguments():
         ["world_tower=walle_fantasy"],
         "admins.txt",
         apply=True,
+        links="merge_review.csv",
     )
     scripts = [c[1].rsplit("/", 1)[-1] for c in commands]
 
@@ -285,6 +286,8 @@ def test_the_delta_reruns_every_phase_with_the_backfills_arguments():
     phase2 = commands[0]
     assert phase2[phase2.index("--copy-of") + 1] == "world_tower=walle_fantasy"
     assert phase2[phase2.index("--platform-admins") + 1] == "admins.txt"
+    # Without the review, every linked group would be planned as open again.
+    assert phase2[phase2.index("--links") + 1] == "merge_review.csv"
     assert all(c[-1] == "--apply" for c in commands)
 
 

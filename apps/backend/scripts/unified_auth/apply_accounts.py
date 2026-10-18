@@ -37,6 +37,7 @@ class ApplyReport:
     accounts_updated: int = 0
     memberships: int = 0
     review_groups: int = 0
+    reviewed_groups: int = 0
     conflicts: List[dict] = field(default_factory=list)
 
 
@@ -262,6 +263,7 @@ async def apply_accounts(
     for group_id, plan in planned:
         if plan.flags:
             report.review_groups += 1
+            report.reviewed_groups += plan.reviewed
             if apply:
                 await _write_review_item(dest, group_id, plan)
 
@@ -319,37 +321,41 @@ async def _release(
 
 
 async def _write_review_item(dest, group_id: str, plan: AccountPlan) -> None:
-    """One document per flagged group: who is in it, and who lost which key."""
+    """One document per flagged group: who is in it, how it was resolved, and
+    who lost which key."""
     rows = [r for a in plan.accounts for r in a.source_rows]
-    await dest["merge_review"].update_one(
-        {"_id": group_id},
-        {
-            "$set": {
-                "flags": plan.flags,
-                "rows": [
-                    {
-                        "source_db": r.source_db,
-                        "legacy_user_id": r.legacy_user_id,
-                        "username": r.username,
-                        "email": r.email,
-                        "mobile": r.mobile,
-                        "full_name": r.full_name,
-                        "is_active": r.is_active,
-                    }
-                    for r in rows
-                ],
-                "withheld": [
-                    {
-                        "kind": w.kind,
-                        "value": w.value,
-                        "kept_by": list(w.kept_by) if w.kept_by else None,
-                        "held_by": [list(k) for k in w.held_by],
-                    }
-                    for w in plan.withheld
-                ],
-                "updated_at": datetime.utcnow(),
-            },
-            "$setOnInsert": {"status": "open"},
+    update = {
+        "$set": {
+            "flags": plan.flags,
+            # Which rows became which account: one row each until reviewed.
+            "accounts": [[list(r.key) for r in a.source_rows] for a in plan.accounts],
+            "rows": [
+                {
+                    "source_db": r.source_db,
+                    "legacy_user_id": r.legacy_user_id,
+                    "username": r.username,
+                    "email": r.email,
+                    "mobile": r.mobile,
+                    "full_name": r.full_name,
+                    "is_active": r.is_active,
+                }
+                for r in rows
+            ],
+            "withheld": [
+                {
+                    "kind": w.kind,
+                    "value": w.value,
+                    "kept_by": list(w.kept_by) if w.kept_by else None,
+                    "held_by": [list(k) for k in w.held_by],
+                }
+                for w in plan.withheld
+            ],
+            "updated_at": datetime.utcnow(),
         },
-        upsert=True,
-    )
+    }
+    # One or the other: Mongo refuses a field in both $set and $setOnInsert.
+    if plan.reviewed:
+        update["$set"]["status"] = "reviewed"
+    else:
+        update["$setOnInsert"] = {"status": "open"}
+    await dest["merge_review"].update_one({"_id": group_id}, update, upsert=True)

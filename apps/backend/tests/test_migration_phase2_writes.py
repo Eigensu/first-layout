@@ -39,13 +39,17 @@ UID_B = str(ObjectId())
 UID_C = str(ObjectId())
 
 
-async def run(dest, rows, without_membership=frozenset()):
+async def run(dest, rows, without_membership=frozenset(), links=None):
     components, junk = build_components(rows)
     planned = [
         (
             f"{c.rows[0].source_db}:{c.rows[0].legacy_user_id}",
             plan_accounts(
-                c, f"{c.rows[0].source_db}:{c.rows[0].legacy_user_id}", None, junk
+                c,
+                f"{c.rows[0].source_db}:{c.rows[0].legacy_user_id}",
+                None,
+                junk,
+                links,
             ),
         )
         for c in components
@@ -272,3 +276,32 @@ async def test_a_shared_phone_can_change_hands_between_runs(dest):
     assert report.conflicts == []
     holder = await dest["users"].find_one({"mobiles": "9876543210"})
     assert holder["username"] == f"user{UID_A}"
+
+
+@pytest.mark.asyncio
+async def test_a_reviewed_group_is_written_as_the_reviewer_linked_it(dest):
+    rows = [
+        row("walle_lpcl", UID_A, mobile="9876543210", full_name="Rahul Patel"),
+        row(
+            "walle_fifth",
+            UID_B,
+            mobile="9876543210",
+            email="r@corp.com",
+            full_name="Rahul Kumar Patel",
+            last_login=RECENT,
+        ),
+        row("walle_fifth", UID_C, email="r@corp.com", full_name="Priya Patel"),
+    ]
+    links = {("walle_lpcl", UID_A): "rahul", ("walle_fifth", UID_B): "rahul"}
+
+    report = await run(dest, rows, links=links)
+
+    assert (report.review_groups, report.reviewed_groups) == (1, 1)
+    assert await dest["users"].count_documents({}) == 2
+    rahul = await dest["users"].find_one({"mobiles": "9876543210"})
+    assert rahul["merge_state"] == "reviewed"
+    assert rahul["emails"] == ["r@corp.com"]
+    assert [h["legacy_user_id"] for h in rahul["legacy_hashes"]] == [UID_A]
+    item = await dest["merge_review"].find_one({})
+    assert item["status"] == "reviewed"
+    assert sorted(len(a) for a in item["accounts"]) == [1, 2]

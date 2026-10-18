@@ -11,6 +11,7 @@ is taken from the next row that does, rather than dropped. A row its owner
 deleted never wins, and never contributes a way in (spec §13.2, R1).
 """
 
+import csv
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -91,6 +92,8 @@ class AccountPlan:
     accounts: List[UnifiedAccount]
     withheld: List[Withheld] = field(default_factory=list)
     flags: List[str] = field(default_factory=list)
+    # A person has ruled on this flagged group (--links).
+    reviewed: bool = False
 
 
 def _activity(row: LegacyRow) -> datetime:
@@ -153,6 +156,7 @@ def build_unified_account(
     platform_admin_keys: Optional[Set[str]] = None,
     merge_group_id: Optional[str] = None,
     withheld: Iterable[str] = (),
+    merge_state: Optional[str] = None,
 ) -> UnifiedAccount:
     """Build one account from one component's rows.
 
@@ -251,7 +255,7 @@ def build_unified_account(
         is_verified=any(r.is_verified for r in ranked),
         is_admin=False,
         is_platform_admin=is_platform_admin,
-        merge_state=component.flags and "needs_review" or "clean",
+        merge_state=merge_state or (component.flags and "needs_review" or "clean"),
         merge_group_id=merge_group_id,
         # The oldest signup is when this person joined, whichever row it was.
         created_at=min(created) if created else None,
@@ -326,6 +330,7 @@ def plan_accounts(
     merge_group_id: str,
     platform_admin_keys: Optional[Set[str]] = None,
     junk: Iterable[str] = (),
+    links: Optional[Dict[Tuple[str, str], str]] = None,
 ) -> AccountPlan:
     """The accounts this component becomes.
 
@@ -335,10 +340,15 @@ def plan_accounts(
     flagging: the migration declines to guess, but leaves the question asked
     rather than silently dropping it.
 
+    `links` holds the reviewer's answer, row key -> label (see load_links).
+    Rows of this component with the same label become one account; rows
+    without one stay on their own. Labels are compared within a component
+    only, so "a" in one group and "a" in another are unrelated.
+
     Splitting has a catch: the rows were grouped because they share a mobile or
     an email, and a login key can belong to one account only. Each shared key
-    goes to the most recently active row holding it, and is recorded so the
-    reviewer can see who lost it (R8).
+    goes to the account holding the most recently active row with it, and is
+    recorded so the reviewer can see who lost it (R8).
 
     `junk` keys -- held by too many rows to identify anyone -- go to nobody, in
     any component: otherwise every account holding one collides with the next.
@@ -349,19 +359,73 @@ def plan_accounts(
             accounts=[build_unified_account(component, platform_admin_keys, None, junk)]
         )
 
-    contested = [w for w in _contested(component.rows) if w.value not in junk]
-    accounts = []
+    links = links or {}
+    reviewed = any(r.key in links for r in component.rows)
+    groups: Dict[str, List[LegacyRow]] = {}
     for row in rows_by_recency(component.rows):
-        lost = {w.value for w in contested if w.kept_by != row.key}
+        label = links.get(row.key) or f"unlinked {row.source_db}:{row.legacy_user_id}"
+        groups.setdefault(label, []).append(row)
+    group_of = {r.key: label for label, rows in groups.items() for r in rows}
+
+    # A key only one account's rows hold is not contested, however many rows.
+    contested = [
+        w
+        for w in _contested(component.rows)
+        if w.value not in junk and len({group_of[k] for k in w.held_by}) > 1
+    ]
+    accounts = []
+    for rows in groups.values():
+        keys = {r.key for r in rows}
+        lost = {w.value for w in contested if w.kept_by not in keys}
         accounts.append(
             build_unified_account(
-                Component(rows=[row], edges=[], flags=component.flags),
+                Component(rows=rows, edges=[], flags=component.flags),
                 platform_admin_keys,
                 merge_group_id=merge_group_id,
                 withheld=junk | lost,
+                merge_state="reviewed" if reviewed else None,
             )
         )
-    return AccountPlan(accounts=accounts, withheld=contested, flags=component.flags)
+    return AccountPlan(
+        accounts=accounts,
+        withheld=contested,
+        flags=component.flags,
+        reviewed=reviewed,
+    )
+
+
+def load_links(path) -> Dict[Tuple[str, str], str]:
+    """A reviewer's decisions: which rows of a flagged group are one person.
+
+    Any CSV with source_db, legacy_user_id and link columns -- merge_review.csv
+    with its link column filled in is one. Rows of one group given the same
+    link become one account; a row left blank stays on its own.
+    """
+    with open(path, newline="") as fh:
+        reader = csv.DictReader(fh)
+        missing = {"source_db", "legacy_user_id", "link"} - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"{path}: no {', '.join(sorted(missing))} column")
+        # Stripped: a spreadsheet round trip adds spaces. A mangled id is
+        # caught by unknown_links rather than silently skipped.
+        return {
+            (r["source_db"].strip(), r["legacy_user_id"].strip()): r["link"].strip()
+            for r in reader
+            if (r.get("link") or "").strip()
+        }
+
+
+def unknown_links(
+    components: Iterable[Component], links: Dict[Tuple[str, str], str]
+) -> List[Tuple[str, str]]:
+    """Linked rows the sources no longer hold.
+
+    Decisions made on a dry run are applied at cutover. A row deleted in
+    between is reported rather than skipped: the decision it belonged to may
+    no longer mean what the reviewer meant.
+    """
+    present = {r.key for c in components for r in c.rows}
+    return sorted(key for key in links if key not in present)
 
 
 def copies_without_activity(

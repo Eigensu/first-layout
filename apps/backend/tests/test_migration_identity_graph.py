@@ -707,3 +707,174 @@ def test_only_declared_copies_are_joined_by_id():
     components, _ = build_components(rows, copy_of=COPY_OF)
 
     assert sorted(len(c.rows) for c in components) == [1, 2]
+
+
+# --------------------------------------------------------------------------
+# keys shared across tournaments (R42)
+# --------------------------------------------------------------------------
+
+
+def test_a_regular_of_four_tournaments_keeps_their_number():
+    """One row in each of four tournaments is one person, not four strangers.
+
+    Counting rows across every database called this junk, merged nobody, and
+    took the number off all four accounts.
+    """
+    rows = [
+        row(db=db, uid=str(i), mobile="9876543210", full_name="Rahul Patel")
+        for i, db in enumerate(("cccl", "jmcl", "jypl", "mtc-intervillage"))
+    ]
+    components, junk = build_components(rows)
+
+    assert junk == set()
+    assert len(components) == 1
+    assert components[0].should_merge
+
+
+def test_a_key_crowded_within_one_tournament_is_junk_whatever_else_holds_it():
+    rows = [
+        row(db="walle_lpcl", uid=str(i), mobile="9876543210", full_name="Rahul Patel")
+        for i in range(4)
+    ] + [row(db="walle_fifth", uid="9", mobile="9876543210", full_name="Rahul Patel")]
+    components, junk = build_components(rows)
+
+    assert "9876543210" in junk
+    assert all(c.size == 1 for c in components)
+
+
+def test_a_key_carried_under_three_given_names_is_junk():
+    """An office number or a staff address used to register other people."""
+    rows = [
+        row(db="walle_m11", uid="1", email="office@corp.com", full_name="Rahul Patel"),
+        row(db="walle_lpcl", uid="2", email="office@corp.com", full_name="Priya Shah"),
+        row(db="walle_fifth", uid="3", email="office@corp.com", full_name="Amit Kumar"),
+    ]
+    components, junk = build_components(rows)
+
+    assert "office@corp.com" in junk
+    assert all(c.size == 1 for c in components)
+
+
+def test_two_people_on_one_key_are_held_back_rather_than_discarded():
+    """A couple on one phone: the reviewer decides, and one of them keeps it."""
+    rows = [
+        row(db="walle_m11", uid="1", mobile="9876543210", full_name="Rahul Patel"),
+        row(db="walle_lpcl", uid="2", mobile="9876543210", full_name="Priya Patel"),
+    ]
+    components, junk = build_components(rows)
+
+    assert junk == set()
+    assert "shared_mobile_diff_names" in flags_of(components)
+
+
+# --------------------------------------------------------------------------
+# names (R43)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "first,second",
+    [
+        ("Rahul Patel", "Rahul Mahesh Patel"),  # father's name added
+        ("R", "Rahul Patel"),  # an initial
+        ("P S", "Priya Sharma"),  # initials
+        ("Amit Kothari", "Amit Jain"),  # a community surname for a family one
+        ("MR.AMIT KUMAR SHAH", "Amit kumar shah"),  # a title
+        ("Amitjain", "Amit Jain"),  # typed without the space
+        ("Shah Rahul", "Rahul Shah"),  # reordered
+        ("9876501234", "Neha Gupta"),  # a phone number is not a name
+    ],
+)
+def test_one_person_under_two_spellings_merges_on_two_channels(first, second):
+    shared = dict(mobile="9876543210", email="p@corp.com")
+    rows = [
+        row(db="walle_m11", uid="1", full_name=first, **shared),
+        row(db="walle_lpcl", uid="2", full_name=second, **shared),
+    ]
+    components, _ = build_components(rows)
+
+    assert components[0].should_merge, flags_of(components)
+
+
+def test_different_given_names_are_held_back_however_alike():
+    """Siblings on the family email and phone. A whole-name ratio scored
+    these 0.95 and merged them."""
+    rows = [
+        row(
+            db="walle_m11",
+            uid="1",
+            mobile="9876543210",
+            email="p@corp.com",
+            full_name="Ishan Rao",
+        ),
+        row(
+            db="walle_lpcl",
+            uid="2",
+            mobile="9876543210",
+            email="p@corp.com",
+            full_name="Ishani Rao",
+        ),
+    ]
+    components, _ = build_components(rows)
+
+    assert "shared_mobile_diff_names" in flags_of(components)
+    assert not components[0].should_merge
+
+
+def test_another_family_name_on_one_address_alone_is_held_back():
+    """Two channels settle "Amit Kothari" and "Amit Jain"; one does not."""
+    rows = [
+        row(db="walle_m11", uid="1", email="k@corp.com", full_name="Amit Kothari"),
+        row(db="walle_lpcl", uid="2", email="k@corp.com", full_name="Amit Jain"),
+    ]
+    components, _ = build_components(rows)
+
+    assert "name_mismatch" in flags_of(components)
+
+
+def test_a_middle_name_on_one_address_alone_still_merges():
+    rows = [
+        row(db="walle_m11", uid="1", email="s@corp.com", full_name="Rahul Patel"),
+        row(
+            db="walle_lpcl",
+            uid="2",
+            email="s@corp.com",
+            full_name="Rahul Mahesh Patel",
+        ),
+    ]
+    components, _ = build_components(rows)
+
+    assert components[0].should_merge
+
+
+def test_a_title_does_not_stop_an_exact_name_on_a_phone_alone():
+    rows = [
+        row(db="walle_m11", uid="1", mobile="9876543210", full_name="MR. Amit Shah"),
+        row(db="walle_lpcl", uid="2", mobile="9876543210", full_name="Amit Shah"),
+    ]
+    components, _ = build_components(rows)
+
+    assert components[0].should_merge
+
+
+def test_initials_that_do_not_fit_are_different_people():
+    rows = [
+        row(db="walle_m11", uid="1", email="x@corp.com", full_name="S M"),
+        row(db="walle_lpcl", uid="2", email="x@corp.com", full_name="Rahul Patel"),
+    ]
+    components, _ = build_components(rows)
+
+    assert "name_mismatch" in flags_of(components)
+
+
+def test_an_initial_with_another_family_name_is_held_back_on_two_channels():
+    """ "R" could be Ravi: with the family name differing too, nothing says
+    "R Kumar" is "Rahul Patel", however many channels they share."""
+    shared = dict(mobile="9876543210", email="p@corp.com")
+    rows = [
+        row(db="walle_m11", uid="1", full_name="R Kumar", **shared),
+        row(db="walle_lpcl", uid="2", full_name="Rahul Patel", **shared),
+    ]
+    components, _ = build_components(rows)
+
+    assert "shared_mobile_diff_names" in flags_of(components)

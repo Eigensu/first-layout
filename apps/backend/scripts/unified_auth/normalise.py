@@ -7,7 +7,7 @@ accounts, and treating it as one would collapse them into a single login.
 """
 
 import re
-from typing import Optional
+from typing import List, Optional
 
 ASCII_DIGITS = "0123456789"
 
@@ -17,21 +17,37 @@ ASCII_DIGITS = "0123456789"
 MIN_MOBILE_DIGITS = 10
 MAX_MOBILE_DIGITS = 15
 
-# A key appearing in more rows than this is treated as junk rather than as an
-# identity, however plausible it looks. Two accounts sharing a number is a
-# person with two accounts; eight sharing one is a call-centre number, a
-# placeholder, or a shared family phone -- and it would chain all eight into
-# one login. The cut is deliberately low: a false junk call splits accounts
-# that should merge, which a human can fix, while a false identity call merges
-# people who are not the same, which a human may never notice.
+# A key held by more rows than this in one database is treated as junk rather
+# than as an identity, however plausible it looks. Two accounts in one
+# tournament sharing a number is a person with two accounts; eight sharing one
+# is a call-centre number, a placeholder, or a shared family phone -- and it
+# would chain all eight into one login. The cut is deliberately low: a false
+# junk call splits accounts that should merge, while a false identity call
+# merges people who are not the same, which a human may never notice.
+#
+# Per database, not in total (R42). One row in each of four tournaments is the
+# regular the unified profile exists for, and counting every database together
+# discarded their phone and address from all four accounts -- leaving some with
+# no way to sign in or reset a password at all.
 MAX_ROWS_PER_KEY = 3
+
+# A key held across tournaments under more given names than this is shared
+# rather than personal: an office number or a staff address used to register
+# other people. Two is a couple on one phone, which the name flags hold back
+# for review; three is a bridge between strangers. Counted from given names,
+# so "Rahul Patel" and "Rahul R Patel" are one.
+MAX_PEOPLE_PER_KEY = 2
+
+# Titles people type before their name. "MR.AMIT KUMAR SHAH" is Amit Kumar
+# Shah.
+_HONORIFICS = {"mr", "mrs", "ms", "miss", "dr", "shri", "smt", "sri"}
 
 # Addresses that are obviously not a person's, whatever the row says.
 # Deliberately short. A denylist that guesses costs more than it saves: reject
 # a real address and that person is split off from their own other account,
 # silently, with nothing in the review queue to notice it by. The structural
-# defence -- a key held by more rows than MAX_ROWS_PER_KEY is junk whatever it
-# looks like -- catches shared placeholders without having to predict them, so
+# defences -- MAX_ROWS_PER_KEY and MAX_PEOPLE_PER_KEY, whatever the key looks
+# like -- catch shared placeholders without having to predict them, so
 # only unambiguous ones are listed here. Single letters were listed once and
 # removed: b@company.com is a plausible corporate alias.
 _PLACEHOLDER_EMAIL_LOCALS = {
@@ -170,3 +186,16 @@ def normalise_name(raw: Optional[str]) -> str:
         return ""
     value = re.sub(r"[^a-z0-9\s]", " ", raw.strip().lower())
     return re.sub(r"\s+", " ", value).strip()
+
+
+def name_words(raw: Optional[str]) -> List[str]:
+    """The words of a name that say who someone is, given name first.
+
+    Titles go, and so do words that are only digits: people type their phone
+    number into the name field, and "9876543210" is not a name to compare.
+    """
+    return [
+        word
+        for word in normalise_name(raw).split()
+        if word not in _HONORIFICS and not word.isdigit()
+    ]

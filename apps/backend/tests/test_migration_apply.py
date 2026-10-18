@@ -15,11 +15,13 @@ from scripts.unified_auth.merge_apply import (
     UNCLAIMED_EMAIL_DOMAIN,
     build_unified_account,
     copies_without_activity,
+    load_links,
     plan_accounts,
     plan_memberships,
     point_copied_avatars_at_originals,
     rows_by_recency,
     undeclared_copies,
+    unknown_links,
 )
 from scripts.unified_auth.tenant_import import (
     REMOVED,
@@ -707,3 +709,99 @@ def test_a_phone_taken_from_an_account_does_not_make_it_an_admin():
 
     admins = {a.source_rows[0].key: a.is_platform_admin for a in plan.accounts}
     assert admins == {("walle_fifth", "2"): True, ("walle_lpcl", "1"): False}
+
+
+# --------------------------------------------------------------------------
+# a reviewer's decisions (--links)
+# --------------------------------------------------------------------------
+
+
+def test_linked_rows_of_a_flagged_group_become_one_account():
+    rahul_old = row("walle_lpcl", "1", mobile="9876500001", email="family@corp.com")
+    rahul_new = row(
+        "walle_fifth",
+        "2",
+        mobile="9876500001",
+        email="family@corp.com",
+        hashed_password="new-hash",
+        last_login=RECENT,
+    )
+    priya = row("walle_fifth", "3", mobile="9876500002", email="family@corp.com")
+    links = {rahul_old.key: "rahul", rahul_new.key: "rahul"}
+
+    plan = plan_accounts(
+        component(rahul_old, rahul_new, priya, flags=["chained"]), "g1", links=links
+    )
+
+    by_rows = {frozenset(r.key for r in a.source_rows): a for a in plan.accounts}
+    rahul = by_rows[frozenset({rahul_old.key, rahul_new.key})]
+    assert set(by_rows) == {
+        frozenset({rahul_old.key, rahul_new.key}),
+        frozenset({priya.key}),
+    }
+    assert plan.reviewed
+    assert {a.merge_state for a in plan.accounts} == {"reviewed"}
+    assert {a.merge_group_id for a in plan.accounts} == {"g1"}
+    assert rahul.hashed_password == "new-hash"
+    assert rahul.mobiles == ["9876500001"]
+    assert rahul.emails == ["family@corp.com"]
+    # The address Priya shared goes with the most recently active row (R8);
+    # the phone only Rahul's rows hold is nobody else's to lose.
+    assert [(w.kind, w.kept_by) for w in plan.withheld] == [("email", rahul_new.key)]
+    assert by_rows[frozenset({priya.key})].emails == []
+
+
+def test_link_labels_mean_nothing_outside_their_own_group():
+    first = [row("walle_lpcl", "1"), row("walle_fifth", "2")]
+    second = [row("walle_lpcl", "3"), row("walle_fifth", "4")]
+    links = {r.key: "a" for r in first + second}
+
+    plans = [
+        plan_accounts(component(*rows, flags=["chained"]), gid, links=links)
+        for gid, rows in (("g1", first), ("g2", second))
+    ]
+
+    assert [len(p.accounts) for p in plans] == [1, 1]
+    assert [len(p.accounts[0].source_rows) for p in plans] == [2, 2]
+
+
+def test_a_group_with_no_links_is_still_open():
+    rows = [row("walle_lpcl", "1"), row("walle_fifth", "2")]
+
+    plan = plan_accounts(
+        component(*rows, flags=["chained"]), "g1", links={("walle_m11", "9"): "a"}
+    )
+
+    assert not plan.reviewed
+    assert {a.merge_state for a in plan.accounts} == {"needs_review"}
+
+
+def test_links_are_read_from_the_reviewed_merge_review_csv(tmp_path):
+    path = tmp_path / "merge_review.csv"
+    path.write_text(
+        "component_id,flags,source_db,legacy_user_id,full_name,link\n"
+        "c1,chained,walle_lpcl,1,Rahul Patel,rahul\n"
+        "c1,chained,walle_fifth, 2 ,RAHUL MAHESH PATEL, rahul \n"
+        "c1,chained,walle_fifth,3,Priya Patel,\n"
+    )
+
+    assert load_links(path) == {
+        ("walle_lpcl", "1"): "rahul",
+        ("walle_fifth", "2"): "rahul",
+    }
+
+
+def test_a_links_file_without_a_link_column_is_refused(tmp_path):
+    path = tmp_path / "merge_review.csv"
+    path.write_text("component_id,source_db,legacy_user_id\nc1,walle_lpcl,1\n")
+
+    with pytest.raises(ValueError, match="link"):
+        load_links(path)
+
+
+def test_links_to_rows_no_source_holds_are_reported():
+    """A decision from the dry run whose row was deleted before cutover."""
+    present = component(row("walle_lpcl", "1"))
+    links = {("walle_lpcl", "1"): "a", ("walle_fifth", "9"): "a"}
+
+    assert unknown_links([present], links) == [("walle_fifth", "9")]

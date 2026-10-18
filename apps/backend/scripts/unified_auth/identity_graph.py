@@ -14,24 +14,23 @@ splitting two accounts that should have merged is an inconvenience while
 merging two that should not is a breach.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from difflib import SequenceMatcher
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .normalise import (
+    MAX_PEOPLE_PER_KEY,
     MAX_ROWS_PER_KEY,
+    name_words,
     normalise_email,
     normalise_mobile,
-    normalise_name,
 )
 
-# Below this, two full_name values are treated as different people rather than
-# as spelling variants, and the pair is flagged. At or above it they are not
-# called different -- but on a mobile-only edge that is still not enough to
-# merge; there only an exact match is (see _flag_component).
-NAME_SIMILARITY_THRESHOLD = 0.80
+# How two full_name values relate (see _name_relation).
+SAME_NAME = "same"
+SAME_GIVEN_NAME = "same_given_name"
+DIFFERENT_NAMES = "different"
 
 # A mobile edge whose two accounts were never active within this of each other
 # is treated as possibly a recycled number rather than one person returning.
@@ -142,11 +141,34 @@ def _index_by_key(
     junk: Set[str] = set()
     for bucket in (by_mobile, by_email):
         for value, holders in list(bucket.items()):
-            if len(holders) > MAX_ROWS_PER_KEY:
+            if _overshared(holders):
                 junk.add(value)
                 del bucket[value]
 
     return by_mobile, by_email, junk
+
+
+def _overshared(holders: Sequence[LegacyRow]) -> bool:
+    """Whether a key is shared too widely to say who anyone is.
+
+    Crowded within one tournament, or carried under too many given names
+    across them. Not the number of rows in total: one row in each of four
+    tournaments is one regular, not four strangers (R42).
+    """
+    per_db = Counter(r.source_db for r in holders)
+    if max(per_db.values()) > MAX_ROWS_PER_KEY:
+        return True
+    return len(_given_names(holders)) > MAX_PEOPLE_PER_KEY
+
+
+def _given_names(rows: Sequence[LegacyRow]) -> Set[str]:
+    """The distinct given names these rows carry; an initial says too little."""
+    names = set()
+    for row in rows:
+        words = name_words(row.full_name)
+        if words and len(words[0]) > 1:
+            names.add(words[0])
+    return names
 
 
 def _index_by_sign_in(
@@ -194,20 +216,58 @@ def _copies(
     ]
 
 
-def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
-    """True/False when both have a name, None when at least one does not."""
-    na, nb = normalise_name(a.full_name), normalise_name(b.full_name)
-    if not na or not nb:
+def _words_match(x: str, y: str) -> bool:
+    """Two words of a name standing for each other: equal, or one the initial."""
+    return (
+        x == y or (len(x) == 1 and y.startswith(x)) or (len(y) == 1 and x.startswith(y))
+    )
+
+
+def _fits_within(shorter: List[str], longer: List[str]) -> bool:
+    """`shorter` is `longer` with words left out, given name first.
+
+    "Rahul Patel" is "Rahul Mahesh Patel" without the father's name, and
+    "P S" is "Priya Sharma" in initials.
+    """
+    if not _words_match(shorter[0], longer[0]):
+        return False
+    rest = iter(longer[1:])
+    return all(any(_words_match(word, other) for other in rest) for word in shorter[1:])
+
+
+def _name_relation(a: LegacyRow, b: LegacyRow) -> Optional[str]:
+    """How two rows' names relate, or None when either has no name.
+
+    Given names decide. A whole-name similarity ratio did not: "Rahul Patel"
+    and "Rahul Mahesh Patel" score 0.76 and were called two people, while
+    "Ishan Rao" and "Ishani Rao" score 0.95 and were called one (R43).
+
+    SAME_NAME: one name is the other with words left out, initialled or
+    reordered. SAME_GIVEN_NAME: the given names match but a family name does
+    not -- "Amit Kothari" and "Amit Jain" are one person here, where a
+    community surname and a family one are used interchangeably, but nothing
+    in the strings says so. DIFFERENT_NAMES: the given names differ.
+    """
+    wa, wb = name_words(a.full_name), name_words(b.full_name)
+    if not wa or not wb:
         return None
-    if na == nb:
-        return True
-    return SequenceMatcher(None, na, nb).ratio() >= NAME_SIMILARITY_THRESHOLD
+    shorter, longer = sorted((wa, wb), key=len)
+    if sorted(wa) == sorted(wb) or _fits_within(shorter, longer):
+        return SAME_NAME
+    # Typed without the space: "Amitjain", "Priyasharma".
+    if len(shorter) == 1 and shorter[0] in ("".join(longer), longer[0] + longer[-1]):
+        return SAME_NAME
+    # Spelled out, not an initial: with the family name differing too, "R" says
+    # too little to call "R Kumar" the same person as "Rahul Patel".
+    if wa[0] == wb[0]:
+        return SAME_GIVEN_NAME
+    return DIFFERENT_NAMES
 
 
 def _names_match_exactly(a: LegacyRow, b: LegacyRow) -> bool:
     """Both have a name, and they are identical once normalised."""
-    na, nb = normalise_name(a.full_name), normalise_name(b.full_name)
-    return bool(na) and na == nb
+    wa = name_words(a.full_name)
+    return bool(wa) and wa == name_words(b.full_name)
 
 
 def _windows_are_disjoint_by(a: LegacyRow, b: LegacyRow, gap: timedelta) -> bool:
@@ -262,13 +322,20 @@ def _flag_component(
 
     for pair, vias in channels.items():
         a, b = (by_key[k] for k in pair)
-        agree = _names_agree(a, b)
+        relation = _name_relation(a, b)
 
-        if agree is False:
+        if relation == DIFFERENT_NAMES:
             if "mobile" in vias:
                 flags.append("shared_mobile_diff_names")
             else:
                 flags.append("name_mismatch")
+            continue
+
+        # Same given name, another family name: one person using two
+        # surnames, or two people. Two channels agreeing settle it; one
+        # address on its own does not.
+        if relation == SAME_GIVEN_NAME and len(vias) == 1 and vias != {"mobile"}:
+            flags.append("name_mismatch")
             continue
 
         # A mobile on its own is the weakest edge there is: numbers get
@@ -357,8 +424,8 @@ def rows_holding_junk(
 
     Rows split apart by a junk key are singletons, so they never appear in the
     review queue. This is how a reviewer finds them -- most are strangers on a
-    shared office number, but a regular of four or more tournaments looks the
-    same, and only a person can tell them apart.
+    shared office number, but a staff member who registered others under their
+    own address looks the same, and only a person can tell them apart.
     """
     holding: Dict[str, List[LegacyRow]] = defaultdict(list)
     for row in rows:
