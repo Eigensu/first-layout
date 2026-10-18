@@ -13,6 +13,11 @@ and the register and aggregator databases, into the identity graph.
 Pass phase 2's --copy-of too: it joins each copied account to its original,
 and without it this plan would not be the one phase 2 applies.
 
+Reviewing: fill in merge_review.csv's link column -- rows of one group that are
+one person get the same link, anything else stays on its own -- and give the
+file to phase 2 and phase 6 as --links. Given here too, it is checked against
+the sources and carried into the new merge_review.csv.
+
 Produces:
     merge_plan.json    every component, its rows, its edges and its flags
     merge_review.csv   only the flagged ones, for reading in a spreadsheet
@@ -43,6 +48,7 @@ from scripts.unified_auth.identity_graph import (  # noqa: E402
     summarise,
 )
 from scripts.unified_auth.loader import load_rows  # noqa: E402
+from scripts.unified_auth.merge_apply import load_links, unknown_links  # noqa: E402
 
 
 def write_junk(rows, junk, out_dir: Path) -> None:
@@ -56,7 +62,8 @@ def write_junk(rows, junk, out_dir: Path) -> None:
                 )
 
 
-def write_plan(components, junk, out_dir: Path) -> None:
+def write_plan(components, junk, out_dir: Path, links=None) -> None:
+    links = links or {}
     out_dir.mkdir(parents=True, exist_ok=True)
 
     plan = [
@@ -103,6 +110,7 @@ def write_plan(components, junk, out_dir: Path) -> None:
                 "full_name",
                 "created_at",
                 "last_login",
+                "link",
             ]
         )
         for entry in plan:
@@ -122,10 +130,14 @@ def write_plan(components, junk, out_dir: Path) -> None:
                         row["full_name"],
                         row["created_at"],
                         row["last_login"],
+                        links.get((row["source_db"], row["legacy_user_id"]), ""),
                     ]
                 )
 
     summary = summarise(components, junk)
+    summary["reviewed_components"] = sum(
+        1 for c in components if c.flags and any(r.key in links for r in c.rows)
+    )
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
     print(json.dumps(summary, indent=2, default=str))
 
@@ -151,6 +163,9 @@ async def main() -> None:
         default=[],
         help="copydb=originaldb, for a database seeded from another's users",
     )
+    parser.add_argument(
+        "--links", help="a reviewed merge_review.csv, its link column filled in"
+    )
     args = parser.parse_args()
     copy_of = dict(pair.split("=", 1) for pair in args.copy_of)
     for copy, original in copy_of.items():
@@ -171,7 +186,12 @@ async def main() -> None:
     components, junk = build_components(
         rows, recycle_gap=timedelta(days=args.recycle_gap_days), copy_of=copy_of
     )
-    write_plan(components, junk, args.out)
+    links = load_links(args.links) if args.links else {}
+    unknown = unknown_links(components, links)
+    if unknown:
+        listed = ", ".join(f"{db}:{uid}" for db, uid in unknown)
+        raise SystemExit(f"--links names rows no source holds: {listed}")
+    write_plan(components, junk, args.out, links)
     write_junk(rows, junk, args.out)
     print(
         f"\nwrote {args.out}/merge_plan.json, merge_review.csv, junk_keys.csv, "

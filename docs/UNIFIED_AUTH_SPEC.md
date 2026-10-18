@@ -1354,6 +1354,10 @@ What follows from it:
   Google sign-in its accounts share (R29); the other stays split. Accounts split by a
   junk key are singletons and never reach the review queue, so Phase 1 lists every
   discarded key and its accounts in `junk_keys.csv` for a reviewer to link (R31).
+  *Superseded by R42 (§13.12): counted across every source, the cap discarded the
+  keys of regulars of four or more tournaments. It now counts per database, plus a cap
+  on the given names one key is carried under; 4 keys are discarded, all staff and
+  test accounts.*
 - **No database holds the same mobile or email twice** (after normalisation), so R9
   does not trigger on today's data. It remains a defect for rows created later.
 - **`Dcpl`'s registry includes a `tests` tournament.** It does not migrate (see
@@ -1422,9 +1426,10 @@ arguments:
 `--copy-of` declares that `world_tower` was seeded with a copy of `walle_fantasy`'s
 users (R23). Phase 2 refuses to run while two sources share user ids and neither is
 declared, because which one is the original decides who gets a membership. Phases 5
-and 6 take the same `--map`; Phase 6 also takes `--copy-of` and `--platform-admins`.
-Phase 1 takes the same `--copy-of`, since it joins each copied account to its original
-(R41); its `--db` names the same fifteen sources.
+and 6 take the same `--map`; Phase 6 also takes `--copy-of`, `--platform-admins` and
+`--links`. Phase 1 takes the same `--copy-of`, since it joins each copied account to
+its original (R41); its `--db` names the same fifteen sources. `--links` is the
+reviewed `merge_review.csv` (R44, *Review* below); Phases 1, 2 and 6 all take it.
 
 ### Phase 0b — configuration audit (`00_env_audit.py`)
 
@@ -1472,9 +1477,11 @@ That last check is the one that would have caught the §1.1a gap long ago.
    whole so it can only match itself (R4). Email → trimmed lowercase, with dots and
    `+tag` folded **for Gmail only** (R2). Discard obviously junk keys before they join
    anything: empty strings, mobiles of fewer than 10 digits, placeholder emails
-   (`test@test.com`, `a@a.com`, …), and any mobile or email held by more than
-   `MAX_ROWS_PER_KEY = 3` rows — **a junk key shared by 50 accounts would collapse 50
-   people into one.**
+   (`test@test.com`, `a@a.com`, …), any mobile or email held by more than
+   `MAX_ROWS_PER_KEY = 3` rows **in one database**, and any carried under more than
+   `MAX_PEOPLE_PER_KEY = 2` given names across them — **a junk key shared by 50
+   accounts would collapse 50 people into one.** Per database, because one row in each
+   of four tournaments is one regular, not four strangers (R42).
 3. Union-find over five edge types: shared mobile, shared email, a shared Google or
    Apple sign-in (R29), and a copy (R41). A sign-in id is proof of one login, so it has
    no `MAX_ROWS_PER_KEY` cap: someone who signed in with Google in five tournaments is
@@ -1488,14 +1495,21 @@ Flag a component for review when any of these hold:
 | Flag | Meaning |
 |---|---|
 | `chained` | some pair in the component shares nothing directly — it is only connected through an intermediate row. **Size alone is not chaining** (decided 2026-10-17, R24): three accounts on one phone are one person. |
-| `name_mismatch` | `full_name` values differ beyond a fuzzy threshold |
-| `shared_mobile_diff_names` | same number, clearly different people (family sharing a phone is common in this market) |
+| `name_mismatch` | the given names differ; or the same given name with another family name, joined by one channel only (R43) |
+| `shared_mobile_diff_names` | same number, different given names (family sharing a phone is common in this market) |
 | `mobile_only_name_unconfirmed` | a mobile edge with no other channel, whose names are not an exact match after normalisation — similar, or missing on one side (R3) |
 | `multi_google` | two distinct `google_id`s in one component |
 | `possible_recycled_mobile` | a mobile edge with no other channel whose two rows have disjoint activity windows separated by more than `RECYCLE_GAP_DAYS`, **whatever the names** — see below |
 
-A key held by more than `MAX_ROWS_PER_KEY` rows is not a flag: it is discarded, links
-nobody, and no account keeps it (R25).
+A junk key is not a flag: it is discarded, links nobody, and no account keeps it (R25).
+
+**Names** are compared by given name (R43). One name that is the other with words left
+out, initialled or reordered — a father's name added, "P S" for Priya Sharma — is the
+same name; titles and all-digit words do not count. The same given name with another
+family name ("Amit Kothari", "Amit Jain": a community surname used for a family one is
+common here) merges only when two channels agree. Different given names are different
+people, however alike the strings: a similarity ratio called siblings one person and
+one person with a middle name two.
 
 #### Recycled mobile numbers
 
@@ -1536,11 +1550,24 @@ seasonal-return population from the recycled one far better. The histogram will 
 
 The same failure mode exists for email but is much rarer — a corporate address
 reassigned to a new employee is the realistic case. It is covered by `name_mismatch`
-and the `MAX_ROWS_PER_KEY` discard rather than a rule of its own.
+and the junk-key rules rather than a rule of its own.
 
 Flagged components are held back — the migration merges the clean ones and writes the
 flagged ones as **separate accounts** with `merge_state="needs_review"`, so nobody is
-wrongly merged by default. A later `link_accounts.py` applies your review decisions.
+wrongly merged by default.
+
+#### Review (`--links`)
+
+`merge_review.csv` has a `link` column. The reviewer gives the rows of one group that
+are one person the same link; a row left blank stays on its own. The reviewed file is
+passed as `--links` to Phases 1, 2 and 6, and each linked set becomes one account with
+`merge_state="reviewed"` (R44). Links are compared within a group only. A key shared
+across the resulting accounts goes to the one holding the most recently active row,
+as for any split (R8). Phases 1 and 2 stop on a link to a row no source holds.
+
+Pass it from the **first** Phase 2 run: a run never merges accounts an earlier run
+wrote (it reports a conflict), so links added later do nothing. The file names
+people; keep it with the migration's outputs, not in this repository.
 
 ### Phase 2 — write the unified collections (`03_apply_merges.py`)
 
@@ -1700,8 +1727,8 @@ backend, and the two live tournaments move to it together.
    is modified.
 3. **Verify** (Phase 5) and review the merge report.
 4. **Read-only window on lpcl and fifth.** This is the only moment users are affected.
-5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of` and
-   `--platform-admins`) to pick up everything written during the backfill. It re-runs
+5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of`,
+   `--platform-admins` and `--links`) to pick up everything written during the backfill. It re-runs
    Phases 2, 3 and 4 in full rather than detecting changes (R17, R18) — every one is
    re-runnable — then **run Phase 5 again**.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
@@ -1840,7 +1867,7 @@ New test files:
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Chained merges collapse two real people | **High** | Flagged components are *not* merged; they migrate as separate accounts pending review. `link_accounts.py` applies decisions afterwards. |
+| Chained merges collapse two real people | **High** | Flagged components are *not* merged; they migrate as separate accounts unless a reviewer links them (`--links`, R44). |
 | Shared family mobile numbers | **High** | Same as above — `shared_mobile_diff_names` is a flag, not an auto-merge. |
 | Username login stops working | Medium | Transitional single-match fallback + 409 with a clear message + login form copy change + release comms. |
 | JWT `sub` change invalidates live sessions | Medium | Legacy-username branch kept for cutover + 8 days, covering both token TTLs. |
@@ -1931,8 +1958,11 @@ restored snapshot, never the live cluster** — the merge report is the artefact
 review before anything irreversible happens.
 
 **H ran on 2026-10-17** against a local copy, after #45 and #46 merged. It found four
-more items, all fixed (§13.11). What is left before I is the review, a password
-spot-check and the platform-admin list (§13.10–13.11).
+more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three more
+(R42–R44, §13.12), also fixed; a third pass with the review applied passes Phase 5 and
+leaves 2 of 1,962 password accounts unreachable, both staff logins. What is left
+before I is the platform-admin list (§13.10) and keeping the reviewed links for
+cutover.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -2328,4 +2358,60 @@ a full Phase 6 delta (no account created, none in conflict).
 
 Still to do by hand before cutover: sign in as a few migrated users per source with
 their old password (§7, Phase 5), review the 52 groups and `junk_keys.csv`, and supply
-the platform-admin list.
+the platform-admin list. *Done 2026-10-18 except the list; see §13.12.*
+
+### 13.12 Found reviewing the dry run
+
+Reviewed 2026-10-18: every flagged group, every junk key, and whether each migrated
+account can still be signed into. Nobody's password is known, so the check is in two
+parts that together amount to one: every live row's password hash is on the account
+it maps to — bcrypt verifies the same password against the same hash — and the app's
+own `resolve_login_identity` reaches that account from an email, mobile or username
+the person used before. All 1,962 hashes were carried; **79 accounts could not be
+reached** by anything their owner knew.
+
+- [x] **R42 — Junk keys were counted across all fifteen sources.** `MAX_ROWS_PER_KEY`
+  counted every database together, so a regular of four tournaments had their phone or
+  address discarded from all four accounts. One player became four accounts with no
+  email or mobile between them, and so no way to sign in or reset a password; staff
+  accounts were scattered the same way. 33 of the 79. *Fixed: a key is junk when more
+  than three rows in one database hold it, or when it is carried under more than two
+  given names across them (`MAX_PEOPLE_PER_KEY`) — an office number, or a staff
+  address used to register other people. Junk keys fall from 17 to 4, all staff and
+  test accounts.*
+- [x] **R43 — Names were compared as whole strings.** A 0.80 similarity ratio called one
+  person with a father's name added two people (0.76–0.79) and two siblings one
+  (0.95). 47 of the 52 review groups were one person under two spellings: a middle
+  name, an initial, a title, a missing space, or a community surname used for a family
+  one. *Fixed: given names decide (§7, Phase 1, *Names*). A mobile edge alone still
+  needs an exact name (R3), titles and digits aside.* With R42 the queue falls from 52
+  groups to 20; the 38 automatic merges this adds were each checked by eye and are all
+  one person.
+- [x] **R44 — Nothing applied a review.** §7 promised a `link_accounts.py`; it was never
+  written, so every flagged group would have stayed split. Within a group the shared
+  key went to one row and the username was no longer unique, so the other rows could
+  not be signed into at all: 46 of the 79. *Fixed differently: the review is applied
+  when the merge is planned, not after — `merge_review.csv`'s `link` column, passed as
+  `--links` to Phases 1, 2 and 6 (§7, Phase 1, *Review*).*
+
+**Review decisions.** Of the 20 remaining groups, 14 are one person, and 6 hold one
+family member — a spouse or child on the shared phone or address — who stays separate.
+The largest staff group became one account for one staff member's own rows and one
+for the shared `walleadmin` login. The reviewed file is kept with the dry run's outputs, not here: it
+names people.
+
+**Results, third pass** (2026-10-18, with the links): 2,222 legacy rows become 1,830
+accounts and 2,122 memberships. 232 groups merge automatically and all 20 flagged
+groups are reviewed; 4 junk keys are withheld. **1,960 of the 1,962 password accounts
+are reachable** from an identifier their owner used before; the other two are a staff
+events login and a nameless copy whose owner signs in through the account it joined.
+Enrolment collisions are unchanged at 10. Phase 5 passes every check, and again after
+a full Phase 6 delta (no account created, none in conflict).
+
+Still open before cutover:
+
+- [ ] **The platform-admin list** (§13.10). The candidates are the four people behind
+  the legacy admin rows; the shared `walleadmin` login should not be one.
+- [ ] **Keep the reviewed links** for cutover and re-run Phase 1 with them on the
+  cutover snapshot. A group that gained a row since the review shows as reviewed, but
+  the new row stays on its own until it is linked.

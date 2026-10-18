@@ -16,6 +16,12 @@ run it again to pick up what changed (see apply_accounts.py).
 --copy-of declares a database that was seeded with a copy of another's users.
 Phase 2 refuses to run if two databases share user ids and neither is declared,
 because which one is the original decides who gets a membership.
+
+--links applies the review: merge_review.csv from phase 1 with its link column
+filled in. Rows of one flagged group given the same link become one account.
+Pass it from the first run on: an account a run has already written is never
+merged by a later one (it is reported as a conflict instead), and phase 6 must
+be given the same file.
 """
 
 import argparse
@@ -37,9 +43,11 @@ from scripts.unified_auth.identity_graph import build_components  # noqa: E402
 from scripts.unified_auth.loader import load_rows, load_team_owners  # noqa: E402
 from scripts.unified_auth.merge_apply import (  # noqa: E402
     copies_without_activity,
+    load_links,
     plan_accounts,
     point_copied_avatars_at_originals,
     undeclared_copies,
+    unknown_links,
 )
 from scripts.unified_auth.normalise import (  # noqa: E402
     normalise_email,
@@ -96,6 +104,9 @@ async def main() -> None:
     parser.add_argument(
         "--platform-admins", help="file of emails/mobiles, one per line"
     )
+    parser.add_argument(
+        "--links", help="the reviewed merge_review.csv, its link column filled in"
+    )
     parser.add_argument("--apply", action="store_true", help="write; otherwise dry run")
     parser.add_argument("--out", type=Path, default=Path("out"))
     args = parser.parse_args()
@@ -106,6 +117,7 @@ async def main() -> None:
         if copy not in slug_by_db or original not in slug_by_db:
             raise SystemExit(f"--copy-of {copy}={original}: both must be --map'd")
     admin_keys = load_admin_keys(args.platform_admins)
+    links = load_links(args.links) if args.links else {}
 
     from config.settings import get_settings
 
@@ -127,6 +139,10 @@ async def main() -> None:
         without_membership = copies_without_activity(rows, copy_of, played)
 
         components, junk = build_components(rows, copy_of=copy_of)
+        unknown = unknown_links(components, links)
+        if unknown:
+            listed = ", ".join(f"{db}:{uid}" for db, uid in unknown)
+            raise SystemExit(f"--links names rows no source holds: {listed}")
 
         tournament_ids = {
             t["slug"]: t["_id"] async for t in dest["tournaments"].find({}, {"slug": 1})
@@ -140,7 +156,7 @@ async def main() -> None:
             )
 
         planned = [
-            (group_id(c), plan_accounts(c, group_id(c), admin_keys, junk))
+            (group_id(c), plan_accounts(c, group_id(c), admin_keys, junk, links))
             for c in components
         ]
         point_copied_avatars_at_originals(
@@ -161,6 +177,7 @@ async def main() -> None:
         "memberships": report.memberships,
         "copied_rows_without_membership": len(without_membership),
         "review_groups": report.review_groups,
+        "reviewed_groups": report.reviewed_groups,
         "junk_keys_withheld": len(junk),
         "platform_admins_configured": len(admin_keys),
         "conflicts": report.conflicts,
