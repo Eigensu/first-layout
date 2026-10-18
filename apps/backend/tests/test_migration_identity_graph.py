@@ -865,3 +865,16 @@ def test_initials_that_do_not_fit_are_different_people():
     components, _ = build_components(rows)
 
     assert "name_mismatch" in flags_of(components)
+
+
+def test_an_initial_with_another_family_name_is_held_back_on_two_channels():
+    """ "R" could be Ravi: with the family name differing too, nothing says
+    "R Kumar" is "Rahul Patel", however many channels they share."""
+    shared = dict(mobile="9876543210", email="p@corp.com")
+    rows = [
+        row(db="walle_m11", uid="1", full_name="R Kumar", **shared),
+        row(db="walle_lpcl", uid="2", full_name="Rahul Patel", **shared),
+    ]
+    components, _ = build_components(rows)
+
+    assert "shared_mobile_diff_names" in flags_of(components)

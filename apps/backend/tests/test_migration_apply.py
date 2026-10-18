@@ -781,7 +781,7 @@ def test_links_are_read_from_the_reviewed_merge_review_csv(tmp_path):
     path.write_text(
         "component_id,flags,source_db,legacy_user_id,full_name,link\n"
         "c1,chained,walle_lpcl,1,Rahul Patel,rahul\n"
-        "c1,chained,walle_fifth,2,RAHUL MAHESH PATEL, rahul \n"
+        "c1,chained,walle_fifth, 2 ,RAHUL MAHESH PATEL, rahul \n"
         "c1,chained,walle_fifth,3,Priya Patel,\n"
     )
 

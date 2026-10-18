@@ -257,7 +257,9 @@ def _name_relation(a: LegacyRow, b: LegacyRow) -> Optional[str]:
     # Typed without the space: "Amitjain", "Priyasharma".
     if len(shorter) == 1 and shorter[0] in ("".join(longer), longer[0] + longer[-1]):
         return SAME_NAME
-    if _words_match(wa[0], wb[0]):
+    # Spelled out, not an initial: with the family name differing too, "R" says
+    # too little to call "R Kumar" the same person as "Rahul Patel".
+    if wa[0] == wb[0]:
         return SAME_GIVEN_NAME
     return DIFFERENT_NAMES
 

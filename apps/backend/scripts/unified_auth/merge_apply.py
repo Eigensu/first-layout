@@ -406,8 +406,10 @@ def load_links(path) -> Dict[Tuple[str, str], str]:
         missing = {"source_db", "legacy_user_id", "link"} - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"{path}: no {', '.join(sorted(missing))} column")
+        # Stripped: a spreadsheet round trip adds spaces. A mangled id is
+        # caught by unknown_links rather than silently skipped.
         return {
-            (r["source_db"], r["legacy_user_id"]): r["link"].strip()
+            (r["source_db"].strip(), r["legacy_user_id"].strip()): r["link"].strip()
             for r in reader
             if (r.get("link") or "").strip()
         }
