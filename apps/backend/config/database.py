@@ -27,11 +27,12 @@ settings = get_settings()
 client: Optional[AsyncIOMotorClient] = None
 
 # Indexes that shipped with a wrong definition, as (collection, name, the
-# partial filter they were wrongly built with). init_beanie never drops an
-# index, and MongoDB refuses to redefine one under the same name, so a corrected
-# definition would stop the service from starting. Each is dropped here -- only
-# while it still has the wrong filter -- and init_beanie then builds the
-# corrected one. Once dropped, the check finds nothing and does nothing.
+# partial filter they were built with). init_beanie never drops an index, so a
+# wrong one outlives its correction -- and MongoDB refuses to redefine one under
+# the same name, so a corrected definition would stop the service from
+# starting. Each is dropped here -- only while it still has that filter -- and
+# init_beanie then builds the corrected one. Once dropped, the check finds
+# nothing and does nothing.
 FLAWED_INDEXES = [
     # $exists matches null, so this took in every membership the app creates
     # and refused the second (docs/UNIFIED_AUTH_SPEC.md §13.8, R21). Built on
@@ -40,6 +41,15 @@ FLAWED_INDEXES = [
         "tournament_memberships",
         "uniq_legacy_row",
         {"legacy_user_id": {"$exists": True}},
+    ),
+    # Sponsor priority unique across every tournament, so one database cannot
+    # hold two tournaments' priority-3 sponsors (spec §13.11, R38). Its
+    # filter was right; its keys lacked tournament_id. The corrected index has
+    # its own name, uniq_sponsor_priority_per_tournament.
+    (
+        "sponsors",
+        "featured_1_priority_1",
+        {"priority": {"$gt": 0}},
     ),
 ]
 

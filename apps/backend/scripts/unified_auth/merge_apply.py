@@ -397,6 +397,38 @@ def copies_without_activity(
     return idle
 
 
+def point_copied_avatars_at_originals(
+    accounts: Iterable[UnifiedAccount],
+    rows: Sequence[LegacyRow],
+    copy_of: Dict[str, str],
+) -> int:
+    """Read an avatar a copy inherited from the original's bucket.
+
+    Seeding a database from another copied its users' avatar_file_id but not
+    the files, so world_tower's users point at images only walle_fantasy's
+    avatars bucket holds. Planned from the copy, phase 4 finds nothing there
+    and clears an avatar that exists (R39). Returns how many plans moved.
+    """
+    by_key = {r.key: r for r in rows}
+    moved = 0
+    for account in accounts:
+        original_db = copy_of.get(account.avatar_source_db)
+        if original_db is None:
+            continue
+        for row in account.source_rows:
+            if (
+                row.source_db != account.avatar_source_db
+                or row.avatar_file_id != account.avatar_file_id
+            ):
+                continue
+            original = by_key.get((original_db, row.legacy_user_id))
+            if original and original.avatar_file_id == account.avatar_file_id:
+                account.avatar_source_db = original_db
+                moved += 1
+            break
+    return moved
+
+
 def undeclared_copies(
     rows: Sequence[LegacyRow], copy_of: Dict[str, str]
 ) -> Dict[Tuple[str, str], int]:

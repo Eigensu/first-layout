@@ -642,3 +642,68 @@ def test_nothing_is_merged_by_building_the_plan():
         ("walle_fifth", "2"),
         ("walle_lpcl", "1"),
     ]
+
+
+# --------------------------------------------------------------------------
+# accounts copied into a database seeded from another (R41)
+# --------------------------------------------------------------------------
+
+COPY_OF = {"world_tower": "walle_fantasy"}
+
+
+def test_a_copied_account_joins_its_original_with_nothing_else_in_common():
+    """world_tower was seeded with walle_fantasy's users under the same _id.
+    Someone whose phone and address are junk shares nothing usable with their
+    own copy, and without this edge became two accounts."""
+    rows = [
+        row(db="walle_fantasy", uid="a1", full_name="Rahul Patel"),
+        row(db="world_tower", uid="a1", full_name="Rahul Patel"),
+    ]
+
+    split, _ = build_components(rows)
+    joined, _ = build_components(rows, copy_of=COPY_OF)
+
+    assert len(split) == 2
+    assert len(joined) == 1
+    assert joined[0].should_merge
+    assert [e.via for e in joined[0].edges] == ["copy"]
+
+
+def test_a_copy_corroborates_a_shared_mobile():
+    """A copy plus the phone they share is two channels, not a mobile-only
+    edge that needs an exact name to merge."""
+    rows = [
+        row(db="walle_fantasy", uid="a1", mobile="9876543210", full_name="Rahul"),
+        row(db="world_tower", uid="a1", mobile="9876543210", full_name="Rahul P"),
+    ]
+
+    components, _ = build_components(rows, copy_of=COPY_OF)
+
+    assert len(components) == 1
+    assert "mobile_only_name_unconfirmed" not in flags_of(components)
+
+
+def test_a_copy_under_another_name_is_still_held_for_review():
+    """The copy edge joins the rows; it does not overrule a name that says the
+    account changed hands."""
+    rows = [
+        row(db="walle_fantasy", uid="a1", full_name="Rahul Patel"),
+        row(db="world_tower", uid="a1", full_name="Sunita Iyer"),
+    ]
+
+    components, _ = build_components(rows, copy_of=COPY_OF)
+
+    assert len(components) == 1
+    assert "name_mismatch" in flags_of(components)
+
+
+def test_only_declared_copies_are_joined_by_id():
+    rows = [
+        row(db="walle_fantasy", uid="a1"),
+        row(db="world_tower", uid="a1"),
+        row(db="tyrant", uid="a1"),
+    ]
+
+    components, _ = build_components(rows, copy_of=COPY_OF)
+
+    assert sorted(len(c.rows) for c in components) == [1, 2]

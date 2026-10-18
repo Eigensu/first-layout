@@ -599,6 +599,10 @@ IndexModel([("tournament_id", 1), ("code", 1)], unique=True, name="uniq_contest_
 `TeamContestEnrollment.uniq_active_user_per_contest` needs no change: `contest_id` is
 already unique to one tournament, so the constraint remains correct as written.
 
+`Sponsor`'s unique `(featured, priority)` index was missed here and found by the dry
+run, when the second tournament's sponsors collided with the first's. It is now
+`uniq_sponsor_priority_per_tournament`, led by `tournament_id` (R38).
+
 Every other tenant index gains `tournament_id` as its **leading** field, so that a
 tenant-scoped query is a prefix match rather than a filter applied after the fact:
 
@@ -1331,6 +1335,9 @@ What follows from it:
   already exists as the oldest tournament's database and is one of the sources.
   `walle_arena` does not exist in the cluster yet. Phases 2–6 write to whatever
   `MONGODB_DB_NAME` is set to, so they run with `MONGODB_DB_NAME=walle_arena`.
+  The root `.env` sets it to `Dcpl` for the app, so every writing script refuses a
+  source database as its destination; run unchanged, Phase 2 would have written the
+  merged accounts into live `Dcpl`.
 - **No other database holds accounts.** `walle-register`, `walle-regi-owner` and
   `jmcl-register` contain only `players`, `payments` and `app_config`.
   `tournament_aggregator` contains `tournaments` (10 rows) and `carousel_slides`; its
@@ -1367,11 +1374,11 @@ then DCPL, each with its own database).
 | Source database | Tournament | When | Slug |
 |---|---|---|---|
 | `walle_fantasy` | TPL Season 11 | Oct–Nov 2025 | `tpl-s11` |
-| `mwpl` | MWPL | Dec 2025 – Mar 2026 | `mwpl` |
+| `mwpl` | MWPL | Dec 2025 (a "Test" contest in Mar 2026) | `mwpl` |
 | `lodha-park` | Lodha Park | Jan 2026 | `lpcl` |
 | `melangeindia11` | Melange Team11 | Jan 2026 | `m11` |
 | `mtc-intervillage` | MTC Marudha Cup | Jan 2026 | `mtc` |
-| `world_tower` | World Towers Premier League | Feb 2026 | `wtpl` |
+| `world_tower` | World Towers Premier League | Nov 2025 (season 7), Feb–Mar 2026 (season 8) | `wtpl` |
 | `jypl` | JYPL Season 9 | Feb–Mar 2026 | `jypl-s9` |
 | `cccl` | Colaba Cricket Club | Mar–Apr 2026 | `cccl` |
 | `mjpl` | Mewad Jain Premier League | Mar 2026 | `mjpl` |
@@ -1380,16 +1387,22 @@ then DCPL, each with its own database).
 | `epl` | EPL | Apr–May 2026 | `epl` |
 | `jpl` | JPL | Apr–May 2026 | `jpl` |
 | `Dcpl` | DCPL | Aug–Sep 2026 (live) | `dcpl` |
-| `rspl` | Reliance Surface Sankriti Premier League | Sep 2026 (live) | `rspl` |
+| `rspl` | Reliance Surfaces Sanskriti Premier League | Sep 2026 (live) | `rspl` |
 
 Decisions that go with it:
 
 - **Numbered seasons carry the season in the slug** (`tpl-s11`, `jypl-s9`), so a later
   season of either league gets its own slug in the same pattern (`tpl-s12`).
-- **`walle_arena`'s registry needs all fifteen rows before Phase 2 runs.** Copy `dcpl`
-  and `rspl` from `Dcpl.tournaments`, which already carry name, logo and colours; create
-  the other thirteen as archived rows with the name and dates above, using the
-  aggregator's `image_url` as the logo where it has one.
+- **`walle_arena`'s registry needs all fifteen rows before Phase 2 runs.**
+  `seed_registry.py` writes them (decided 2026-10-17). It copies `dcpl` and `rspl` from
+  `Dcpl.tournaments` under their own `_id`s; those rows carry no logo, colours or
+  dates, and their names read "DPCL" and "Reliance Surface Sankriti", so the copies are
+  named as their contests spell them. The other thirteen are archived rows with the
+  names above, dated from the first real contest's start to the last one's end
+  (contests named "test" left out). None gets a logo: no aggregator `image_url` is one;
+  they are page links, and one stock photo.
+- **`world_tower` holds two WTPL seasons**, 7 and 8. It stays one tournament, `wtpl`,
+  dated across both (decided 2026-10-17): Phase 3 imports one database under one slug.
 - **`Dcpl`'s archived `tests` tournament does not migrate.** The contests named "test"
   in `Dcpl` (2026-09-20 to 09-22) and "Test" in `jpl` (2026-05-05 to 05-06) **do**: they
   import with the rest of their database and appear under `dcpl` and `jpl`.
@@ -1410,6 +1423,8 @@ arguments:
 users (R23). Phase 2 refuses to run while two sources share user ids and neither is
 declared, because which one is the original decides who gets a membership. Phases 5
 and 6 take the same `--map`; Phase 6 also takes `--copy-of` and `--platform-admins`.
+Phase 1 takes the same `--copy-of`, since it joins each copied account to its original
+(R41); its `--db` names the same fifteen sources.
 
 ### Phase 0b — configuration audit (`00_env_audit.py`)
 
@@ -1460,10 +1475,12 @@ That last check is the one that would have caught the §1.1a gap long ago.
    (`test@test.com`, `a@a.com`, …), and any mobile or email held by more than
    `MAX_ROWS_PER_KEY = 3` rows — **a junk key shared by 50 accounts would collapse 50
    people into one.**
-3. Union-find over four edge types: shared mobile, shared email, and a shared Google or
-   Apple sign-in (R29). A sign-in id is proof of one login, so it has no
-   `MAX_ROWS_PER_KEY` cap: someone who signed in with Google in five tournaments is one
-   person, not a junk key.
+3. Union-find over five edge types: shared mobile, shared email, a shared Google or
+   Apple sign-in (R29), and a copy (R41). A sign-in id is proof of one login, so it has
+   no `MAX_ROWS_PER_KEY` cap: someone who signed in with Google in five tournaments is
+   one person, not a junk key. A copy is a row of a `--copy-of` database and the row
+   with the same `_id` in its original: one account, copied. Like any edge it still
+   flags a pair whose names differ.
 4. Emit `merge_plan.json`, `merge_review.csv` and `junk_keys.csv`.
 
 Flag a component for review when any of these hold:
@@ -1913,9 +1930,9 @@ Stages A–G are ordinary development and can proceed now. **H must run against 
 restored snapshot, never the live cluster** — the merge report is the artefact you
 review before anything irreversible happens.
 
-**G's scripts are dry-run ready once #46 merges.** Every §13 item
-is fixed (2026-10-17); H waits only on §13.10: #45 merged, the platform-admin list, and
-the registry seeded.
+**H ran on 2026-10-17** against a local copy, after #45 and #46 merged. It found four
+more items, all fixed (§13.11). What is left before I is the review, a password
+spot-check and the platform-admin list (§13.10–13.11).
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -2248,10 +2265,67 @@ credential. 197 groups merge automatically and 52 go to review.
 
 ### 13.10 Before the dry run
 
-- **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
-  `uniq_legacy_row` from the start.
-- **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
+- [x] **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
+  `uniq_legacy_row` from the start. *Merged 2026-10-17 (`f76c24b`); both live services
+  dropped the flawed index at startup and rebuilt it with the `$type` filter.*
+- [ ] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
   administer the whole platform. Without it no one is a platform admin after cutover.
-- **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source mapping*).
-- Then the dry run itself, stage H: Phases 1–5 into `walle_arena` from a restored
-  snapshot, with the arguments in §7.
+  *Decided 2026-10-17: the first dry run goes without it; it is needed before cutover.*
+- [x] **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source
+  mapping*). *`seed_registry.py`, run before Phase 2. Seeded into the dry run's copy
+  (2026-10-17; a second run changes nothing). The real `walle_arena` is seeded the same
+  way at cutover, before its Phase 2.*
+- [x] Then the dry run itself, stage H: Phases 1–5 into `walle_arena` from a restored
+  snapshot, with the arguments in §7. *Decided 2026-10-17: the snapshot is a local
+  `mongod` restored from a `mongodump` of the fifteen sources, so nothing is written to
+  the Atlas cluster. Build `walle_arena`'s indexes first by running the app's
+  `connect_to_mongo` against it, as the unified backend would on first boot.*
+  *Run 2026-10-17; results and what it found in §13.11.*
+
+### 13.11 Found by the dry run
+
+Run 2026-10-17 against a local copy of the fifteen sources (counts matched Atlas
+collection by collection), with the app's own indexes built first. The first pass
+stopped in Phase 3 on R38; with R38 worked around it completed, and turned up R39–R41.
+All four are fixed, and the second pass ran end to end with no manual step.
+
+- [x] **R38 — Sponsor priority was unique across all tournaments.** `Sponsor` declares
+  a unique `(featured, priority)` index without `tournament_id`, so Phase 3 stopped at
+  the second tournament: Dcpl and walle_fantasy both have a priority-3 sponsor. §3.5
+  missed it. *Fixed: `uniq_sponsor_priority_per_tournament`, led by `tournament_id`;
+  startup drops the old `featured_1_priority_1` (`FLAWED_INDEXES`). On Dcpl and rspl
+  every sponsor has no `tournament_id`, so the new index holds wherever the old one
+  did. The sponsor routes still pick the next priority across all tournaments; that is
+  part of moving routes onto `scoped()`, not this fix.*
+- [x] **R39 — Avatars a copy inherited were cleared.** `world_tower` got its users'
+  `avatar_file_id` from walle_fantasy but not the files. Where the copied row won, the
+  avatar was planned from world_tower's bucket, found missing, and cleared: 4 avatars
+  that exist. *Fixed: Phase 2 plans an avatar a copy inherited from the original's
+  bucket.*
+- [x] **R40 — 22 mwpl `import_logs` name a user who exists nowhere.** All from one
+  player import on 2025-12-04, by an account no source still holds (most likely a
+  deleted admin). Phase 3 reports them as unmapped and prints "Stop here". *Decided
+  2026-10-17: copy them as they are, still pointing at that id — the same dangling
+  reference the source has. Expected; not a failure. Phase 5 checks `teams` and
+  `team_contest_enrollments`, where an unmapped user would be one.*
+- [x] **R41 — A copied account and its original became two accounts.** Rows are keyed
+  by `(source_db, _id)` and joined only through a phone, address or sign-in (R23), so
+  three people whose keys were all junk were split from their own copies. *Decided
+  2026-10-17: Phase 1 and 2 join a declared copy to its original by `_id`, as a fifth
+  edge type.* 86 of the 102 copies now share their original's account; the other 16 are
+  in groups held for review, as before.
+
+**Results, second pass:** 2,222 legacy rows become 1,943 accounts and 2,127
+memberships. 200 groups merge automatically and 52 (136 accounts) wait for review;
+17 junk keys are withheld; 95 copies earn no membership (R23). Every shared-mobile gap
+is under a year, so the 365-day `RECYCLE_GAP` flags no recycled numbers. Phase 3
+copies 2,402 teams, 2,750 enrolments, 46 contests and 13 settings rows. It found 10
+enrolment collisions — one merged person with two active teams in one contest — and
+kept the most recent active, the rest REMOVED (cccl 1, jypl-s9 1, lpcl 3, m11 1,
+tpl-s11 2, tyrant 1, wtpl 1); tell those users. Phase 4
+copies 4 avatars with none missing. Phase 5 passes all fifteen checks, and again after
+a full Phase 6 delta (no account created, none in conflict).
+
+Still to do by hand before cutover: sign in as a few migrated users per source with
+their old password (§7, Phase 5), review the 52 groups and `junk_keys.csv`, and supply
+the platform-admin list.

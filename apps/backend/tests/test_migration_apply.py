@@ -17,6 +17,7 @@ from scripts.unified_auth.merge_apply import (
     copies_without_activity,
     plan_accounts,
     plan_memberships,
+    point_copied_avatars_at_originals,
     rows_by_recency,
     undeclared_copies,
 )
@@ -433,6 +434,49 @@ def test_shared_ids_must_be_declared():
 
     assert undeclared_copies(rows, {}) == {("walle_fantasy", "world_tower"): 1}
     assert undeclared_copies(rows, COPY_OF) == {}
+
+
+def test_an_avatar_a_copy_inherited_is_read_from_the_original():
+    """world_tower got its users' avatar_file_id from walle_fantasy, but not
+    the files, so planning from the copy would clear an avatar that exists."""
+    original = row("walle_fantasy", "1", avatar_file_id="f1", last_login=OLD)
+    copy = row("world_tower", "1", avatar_file_id="f1", last_login=RECENT)
+    account = build_unified_account(component(original, copy))
+    assert account.avatar_source_db == "world_tower"
+
+    moved = point_copied_avatars_at_originals([account], [original, copy], COPY_OF)
+
+    assert moved == 1
+    assert (account.avatar_source_db, account.avatar_file_id) == (
+        "walle_fantasy",
+        "f1",
+    )
+
+
+def test_an_avatar_uploaded_to_the_copy_is_read_from_the_copy():
+    original = row("walle_fantasy", "1", avatar_file_id="f1", last_login=OLD)
+    copy = row("world_tower", "1", avatar_file_id="f2", last_login=RECENT)
+    account = build_unified_account(component(original, copy))
+
+    moved = point_copied_avatars_at_originals([account], [original, copy], COPY_OF)
+
+    assert moved == 0
+    assert (account.avatar_source_db, account.avatar_file_id) == (
+        "world_tower",
+        "f2",
+    )
+
+
+def test_a_split_copy_still_reads_its_inherited_avatar_from_the_original():
+    """A flagged group becomes one account per row, so the copy's account is
+    built without its original -- the lookup goes through every row."""
+    original = row("walle_fantasy", "1", avatar_file_id="f1")
+    copy = row("world_tower", "1", avatar_file_id="f1")
+    split = build_unified_account(component(copy))
+
+    point_copied_avatars_at_originals([split], [original, copy], COPY_OF)
+
+    assert split.avatar_source_db == "walle_fantasy"
 
 
 def test_an_idle_copy_is_left_off_the_profile():

@@ -1,8 +1,9 @@
 """Deciding which legacy accounts belong to the same person.
 
 Accounts are joined when they share a mobile, an email, or the Google or Apple
-account they signed in with, and each connected component becomes one unified
-account. That is the whole idea, and the whole
+account they signed in with, or when one was copied from the other into a
+database seeded from another's users. Each connected component becomes one
+unified account. That is the whole idea, and the whole
 risk: every edge is a claim that two logins are one human, and a wrong claim
 hands someone a stranger's account.
 
@@ -83,7 +84,7 @@ class LegacyRow:
 class Edge:
     a: Tuple[str, str]
     b: Tuple[str, str]
-    via: str  # "mobile" | "email" | "google" | "apple"
+    via: str  # "mobile" | "email" | "google" | "apple" | "copy"
     value: str
 
 
@@ -173,6 +174,24 @@ def _index_by_sign_in(
         if row.apple_id:
             buckets["apple"][row.apple_id].append(row)
     return buckets
+
+
+def _copies(
+    rows: Sequence[LegacyRow], copy_of: Dict[str, str]
+) -> List[Tuple[LegacyRow, LegacyRow]]:
+    """Each row of a declared copy paired with the row it was copied from.
+
+    A database seeded from another holds its users under the same _id, so the
+    pair is one account copied, not two that happen to look alike. Without
+    this edge they join only through a phone or address, and someone whose
+    keys are all junk becomes two accounts (R41).
+    """
+    by_key = {r.key: r for r in rows}
+    return [
+        (by_key[(copy_of[r.source_db], r.legacy_user_id)], r)
+        for r in rows
+        if r.source_db in copy_of and (copy_of[r.source_db], r.legacy_user_id) in by_key
+    ]
 
 
 def _names_agree(a: LegacyRow, b: LegacyRow) -> Optional[bool]:
@@ -270,11 +289,15 @@ def _flag_component(
 
 
 def build_components(
-    rows: Sequence[LegacyRow], recycle_gap: timedelta = RECYCLE_GAP
+    rows: Sequence[LegacyRow],
+    recycle_gap: timedelta = RECYCLE_GAP,
+    copy_of: Optional[Dict[str, str]] = None,
 ) -> Tuple[List[Component], Set[str]]:
     """Group legacy rows into one component per person, flagging the doubtful.
 
-    Returns the components and the set of keys discarded as junk.
+    `copy_of` maps a database to the one it was seeded from (--copy-of); each
+    copied row is joined to its original. Returns the components and the set
+    of keys discarded as junk.
     """
     uf = _UnionFind()
     for row in rows:
@@ -297,6 +320,12 @@ def build_components(
             for i, a in enumerate(holders):
                 for b in holders[i + 1 :]:
                     edges.append(Edge(a=a.key, b=b.key, via=via, value=value))
+
+    for original, copy in _copies(rows, copy_of or {}):
+        uf.union(original.key, copy.key)
+        edges.append(
+            Edge(a=original.key, b=copy.key, via="copy", value=copy.legacy_user_id)
+        )
 
     grouped_rows: Dict[Tuple[str, str], List[LegacyRow]] = defaultdict(list)
     for row in rows:

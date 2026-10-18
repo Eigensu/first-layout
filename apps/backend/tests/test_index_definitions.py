@@ -13,7 +13,9 @@ from conftest import DOCUMENT_MODELS
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 from pymongo import IndexModel
+from pymongo.errors import DuplicateKeyError
 
+from app.models.sponsor import Sponsor
 from app.models.tournament_membership import TournamentMembership
 from config.database import FLAWED_INDEXES, drop_flawed_indexes
 
@@ -162,3 +164,62 @@ def test_the_corrected_filter_is_not_itself_listed_as_flawed():
     for _, name, wrong_filter in FLAWED_INDEXES:
         if name == "uniq_legacy_row":
             assert wrong_filter != LEGACY_ROW_FILTER
+
+
+# --------------------------------------------------------------------------
+# sponsor priority is unique per tournament, not across all of them (R38)
+# --------------------------------------------------------------------------
+
+
+def _sponsor_priority_index() -> dict:
+    for entry in Sponsor.Settings.indexes:
+        document = getattr(entry, "document", {})
+        if document.get("name") == "uniq_sponsor_priority_per_tournament":
+            return document
+    raise AssertionError("uniq_sponsor_priority_per_tournament is not declared")
+
+
+@pytest.mark.asyncio
+async def test_two_tournaments_may_both_have_a_priority_3_sponsor():
+    """One database holds every tournament's sponsors after the migration.
+
+    Built from the declared keys: mongomock cannot apply the partial filter,
+    and every sponsor here has a priority above zero anyway.
+    """
+    index = _sponsor_priority_index()
+    sponsors = AsyncMongoMockClient()["walle_arena"]["sponsors"]
+    await sponsors.create_index(list(index["key"].items()), unique=True)
+    dcpl, tpl = PydanticObjectId(), PydanticObjectId()
+
+    await sponsors.insert_one({"tournament_id": dcpl, "featured": False, "priority": 3})
+    await sponsors.insert_one({"tournament_id": tpl, "featured": False, "priority": 3})
+
+    with pytest.raises(DuplicateKeyError):
+        await sponsors.insert_one(
+            {"tournament_id": dcpl, "featured": False, "priority": 3}
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_drops_the_tournament_blind_sponsor_priority_index():
+    """Built on every database before R38; it stopped the migration's phase 3
+    at the second tournament with sponsors."""
+    database = AsyncMongoMockClient()["live-db"]
+    collection = database["sponsors"]
+    await collection.create_index(
+        [("featured", 1), ("priority", 1)],
+        unique=True,
+        partialFilterExpression={"priority": {"$gt": 0}},
+    )
+
+    dropped = await drop_flawed_indexes(database)
+
+    assert dropped == ["sponsors.featured_1_priority_1"]
+    assert "featured_1_priority_1" not in await collection.index_information()
+
+
+def test_the_corrected_sponsor_index_is_not_listed_as_flawed():
+    assert "uniq_sponsor_priority_per_tournament" not in {
+        name for _, name, _ in FLAWED_INDEXES
+    }
+    assert next(iter(_sponsor_priority_index()["key"])) == "tournament_id"
