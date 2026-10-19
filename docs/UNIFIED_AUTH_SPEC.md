@@ -1246,6 +1246,18 @@ GET /api/users/me/tournaments
 Sorted by `last_active_at desc`, falling back to `joined_at`. Also add
 `GET /api/admin/users/{user_id}/tournaments` (tournament admin scope) for support.
 
+**Built (stage E, 2026-10-19)** in `app/routes/users.py`. It differs from the above in
+three ways:
+- `registered_only` entries also carry `logo_url` and `status`, so both lists can
+  render the same card.
+- Archived tournaments are included, because a profile is a history.
+- Dates are served in IST with the offset written out (`…+05:30`), like the contest
+  and tournament responses. Mongo returns them without a zone, which a browser would
+  read as local time.
+
+The admin support endpoint is **not built**. It would show one tournament's admin
+which other tournaments a player has played, which is a privacy call to make first.
+
 ### 6.2 Where the numbers come from
 
 > **First, a correction to the premise this section was written on.** The original
@@ -1301,6 +1313,24 @@ await TournamentMembership.find_one(
 Everything numeric — `teams_count`, `contests_count`, `best_rank`, `total_points` —
 comes from the job. So the split is: **the row appears instantly, the numbers catch up.**
 
+**Built (stage E)** in `app/services/membership.py`, with one change to when a row
+appears. `record_sign_in` runs on every sign-in on a tournament's site, not only on
+registration: password, Google, Apple and registration itself. It creates a
+`registered` row if there is none and otherwise only moves `last_login_at` on. There
+are two reasons for the change:
+- With one account everywhere, registering for a tournament now means turning up on
+  its site signed in.
+- Google and Apple sign-in find or create an account in one step, so a route cannot
+  tell a new account from a returning one.
+
+`record_play` runs on team create and contest entry. It sets `played`,
+`last_active_at`, and `first_played_at` the first time only.
+
+Both do nothing under `TENANCY=single`, or on the apex where there is no tournament.
+Neither can fail the request that called it: a failed write is logged and left to the
+job. A row created by a concurrent request between the update and the insert still
+gets this request's write.
+
 ### 6.2a The job
 
 `scripts/refresh_membership_stats.py`, one aggregation per live tournament:
@@ -1320,6 +1350,26 @@ pipeline = [
 `--tournament <slug>` for one, `--all-live` for the scheduled run, `--since <ts>` for
 an incremental pass. Run it from a Railway cron, or on demand from the admin panel —
 "Refresh stats" next to the tournament is a reasonable button to have.
+
+**Built (stage E)** as `app/services/membership_stats.py`, run by the script. It
+differs from the pipeline above:
+- `teams_count` counts the **teams a person made** (the `teams` collection), not the
+  teams they entered, so a team never entered still counts.
+- `contests_count` counts contests with an **active** entry; a withdrawn entry does
+  not count.
+- `best_rank` and `total_points` come from `app/services/standings.py`. That is the
+  leaderboard's own computation, moved out of the route unchanged, so a profile's best
+  rank is always the rank its leaderboard showed. `total_points` sums each contest's
+  entry; there is one active entry per person per contest.
+- It **repairs** as it goes. Anyone with a team but no row gets one, dated from their
+  first team, and a member who has played is marked `played`. `last_active_at` is
+  rebuilt from their latest team or entry, but only ever moved forward, so a later
+  play written inline is kept. The profile orders tournaments by it.
+- Flags are `--all-live`, `--tournament <slug>` (repeatable) and `--all`, which takes
+  every tournament, archived included, for the cutover fill below. `--since` is not
+  built: a pass over one live tournament is cheap.
+
+Scheduling it is part of cutover (§7, Phase 6).
 
 **It is the same script as the migration backfill**, so it is not throwaway code: the
 one-time historical fill for m11, third and mtc and the ongoing refresh are the same
@@ -1798,7 +1848,9 @@ backend, and the two live tournaments move to it together.
 5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of`,
    `--platform-admins` and `--links`) to pick up everything written during the backfill. It re-runs
    Phases 2, 3 and 4 in full rather than detecting changes (R17, R18) — every one is
-   re-runnable — then **run Phase 5 again**.
+   re-runnable — then **run Phase 5 again**. Then fill the membership numbers, which
+   the migration writes as zeros: `scripts/refresh_membership_stats.py --all`, once,
+   so past tournaments' profiles show their history.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
    redeploy.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
@@ -1806,6 +1858,8 @@ backend, and the two live tournaments move to it together.
    tournament's subdomain, and the Tournaments tab as a platform admin.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
    `fourth-layout-mtc`, `fifth-layout`.
+9. **Schedule** `scripts/refresh_membership_stats.py --all-live` on the unified
+   service (a Railway cron), so live tournaments' profile numbers keep up.
 
 > **Do this between seasons.** The read-only window is short, but a live contest is the
 > worst time to be moving teams and enrolments between databases — a user mid-squad-edit
@@ -2015,7 +2069,7 @@ These block specific phases; everything else can be built without them.
 | C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
-| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B, R21 (§13.8, fixed in #45) |
+| E | `GET /api/users/me/tournaments`, membership write paths, reconcile job — **done 2026-10-19** (§6.1–6.2a; the admin support endpoint is deferred) | B, R21 (§13.8, fixed in #45) |
 | F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
 | H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13.10** |
