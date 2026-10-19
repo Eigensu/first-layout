@@ -20,6 +20,7 @@ from app.utils.import_players.import_validators import (
     check_conflict,
     validate_player_row,
 )
+from app.utils.tenant import TenantId
 
 # Configuration
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB for XLSX
@@ -89,6 +90,8 @@ class PlayerImportService:
         rows: List[Dict[str, Any]],
         slot_strategy: str,
         conflict_policy: str,
+        *,
+        tournament_id: TenantId,
     ) -> Tuple[List[Dict[str, Any]], List[RowError], List[ConflictDetail]]:
         """
         Validate all rows and handle conflicts
@@ -110,7 +113,7 @@ class PlayerImportService:
 
             # Validate row
             validated_data, validation_error = await validate_player_row(
-                row, slot_strategy=slot_strategy
+                row, slot_strategy=slot_strategy, tournament_id=tournament_id
             )
 
             if validation_error:
@@ -124,7 +127,9 @@ class PlayerImportService:
                 continue
 
             # Check for conflicts
-            existing = await check_conflict(validated_data["name"])
+            existing = await check_conflict(
+                validated_data["name"], tournament_id=tournament_id
+            )
 
             if existing:
                 if conflict_policy == "error":
@@ -177,7 +182,9 @@ class PlayerImportService:
         return samples
 
     @staticmethod
-    async def save_players(valid_data: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+    async def save_players(
+        valid_data: List[Dict[str, Any]], *, tournament_id: TenantId
+    ) -> Tuple[int, int, int]:
         """
         Save validated players to database
 
@@ -212,6 +219,7 @@ class PlayerImportService:
                 else:
                     # Create new player
                     new_player = Player(
+                        tournament_id=tournament_id,
                         name=validated_data["name"],
                         team=validated_data["team"],
                         status=validated_data["status"],
@@ -246,9 +254,12 @@ class PlayerImportService:
         sample_errors: Optional[List[Dict[str, Any]]] = None,
         conflicts: Optional[List[Dict[str, Any]]] = None,
         idempotency_key: Optional[str] = None,
+        *,
+        tournament_id: TenantId,
     ) -> ImportLog:
         """Create and save import log"""
         import_log = ImportLog(
+            tournament_id=tournament_id,
             user_id=user_id,
             started_at=datetime.utcnow(),
             completed_at=datetime.utcnow(),
@@ -280,6 +291,8 @@ class PlayerImportService:
         slot_strategy: str,
         header_row: int = 1,
         idempotency_key: Optional[str] = None,
+        *,
+        tournament_id: TenantId,
     ) -> ImportResponse:
         """
         Main orchestration method for player import
@@ -307,7 +320,7 @@ class PlayerImportService:
         # Validate and process rows
         valid_data, errors, conflicts = (
             await PlayerImportService.validate_and_process_rows(
-                rows, slot_strategy, conflict
+                rows, slot_strategy, conflict, tournament_id=tournament_id
             )
         )
 
@@ -321,7 +334,7 @@ class PlayerImportService:
 
         if not dry_run and len(errors) == 0:
             created, updated, skipped = await PlayerImportService.save_players(
-                valid_data
+                valid_data, tournament_id=tournament_id
             )
 
         # Create import log
@@ -345,6 +358,7 @@ class PlayerImportService:
             ],
             conflicts=[{"row": c.row, "reason": c.reason} for c in conflicts],
             idempotency_key=idempotency_key,
+            tournament_id=tournament_id,
         )
 
         # Return response

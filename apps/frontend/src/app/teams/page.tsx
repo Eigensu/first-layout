@@ -14,7 +14,7 @@ import {
   updateTeam,
   type TeamResponse,
 } from "@/lib/api/teams";
-import { API_BASE_URL, LS_KEYS, ROUTES } from "@/common/consts";
+import { API_BASE_URL, LS_KEYS, ROUTES, tenantHeaders } from "@/common/consts";
 import { CONTEST_FORMAT } from "@/common/consts/contest";
 import {
   publicContestsApi,
@@ -159,7 +159,7 @@ export default function TeamsPage() {
         const url = contestIdParam
           ? `${API_BASE_URL}/api/players?contest_id=${encodeURIComponent(contestIdParam)}&limit=1000`
           : `${API_BASE_URL}/api/players?limit=1000`;
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: tenantHeaders() });
         if (!res.ok) throw new Error("Failed to load players");
         const data: ApiPlayer[] = await res.json();
         const mapped: Player[] = data.map((p) => ({

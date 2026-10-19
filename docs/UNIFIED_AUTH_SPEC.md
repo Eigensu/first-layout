@@ -255,33 +255,47 @@ await init_beanie(
 
 ### 2.3 How a service knows which tournament it is
 
-Two mechanisms, in priority order:
-
-1. **`TOURNAMENT_SLUG` env var** — each legacy service serves exactly one tournament,
-   so its identity is configuration. Required on all five services.
-2. **`X-Tournament-Slug` request header** — for the shared backend once it serves more
-   than one tournament. The frontend `apiClient` gains a request interceptor that reads
-   the slug from the host (it already computes it in `middleware.ts`) and sets the header.
-   The backend validates it against the `tournaments` registry and rejects unknown slugs.
+> **Built 2026-10-19 (stage A2).** One setting, `TENANCY`, instead of a per-service
+> `TOURNAMENT_SLUG`:
+>
+> - **`shared`** — the one backend on `walle_arena`. Every request names its
+>   tournament in **`X-Tournament-Slug`**, which the frontend sets from the host on
+>   every API call (`tenantHeaders()` in `common/consts/tournament.ts`, the same
+>   `getTournamentSlugFromHost` the middleware uses). `get_tenant` resolves the slug
+>   through the registry, so a header cannot invent a tenant. A missing, unknown or
+>   archived slug is a 400.
+> - **`single`** (the default) — a legacy per-tournament service. The tenant is
+>   `None`, and `{"tournament_id": null}` matches exactly the documents that lack the
+>   field, which in a legacy database is all of them. The live services needed no
+>   variable change, and the same `scoped()` filter serves both modes.
+>
+> A service started in the wrong mode shows nothing rather than another tournament's
+> data, and `config/startup_checks.py` refuses to start it at all: `single` against
+> tagged data, or `shared` against untagged data. Checked against the dry run's copies:
+> `rspl` and `Dcpl` start `single` and refuse `shared`; `walle_arena` starts `shared`
+> and refuses `single`. `TOURNAMENT_SLUG` was never needed: there is one backend at the
+> end (row 14), and until then each legacy service is the only tournament in its
+> database.
 
 ```python
-# apps/backend/app/utils/tenant.py  (new)
+# apps/backend/app/utils/tenant.py
 
-async def get_tenant_slug(request: Request) -> str:
-    """Resolve which tournament this request belongs to.
+async def get_tenant(request: Request) -> TenantId:
+    if not settings.shared_tenancy:
+        return None
 
-    A per-tournament deployment is pinned by TOURNAMENT_SLUG. The shared backend
-    takes the slug from the header the frontend forwards and validates it against
-    the registry, so an arbitrary header cannot invent a tenant.
-    """
-    if settings.tournament_slug:
-        return settings.tournament_slug
-
-    slug = (request.headers.get("x-tournament-slug") or "").strip().lower()
-    if not slug or not await Tournament.find_one(Tournament.slug == slug):
-        raise HTTPException(400, detail="Unknown or missing tournament")
-    return slug
+    slug = (request.headers.get(TENANT_HEADER) or "").strip().lower()
+    if not slug:
+        raise HTTPException(400, detail=f"Missing tournament: send the {TENANT_HEADER} header")
+    tournament = await Tournament.find_one(Tournament.slug == slug)
+    if not tournament or tournament.status == TournamentStatus.ARCHIVED:
+        raise HTTPException(400, detail="Unknown tournament")
+    return tournament.id
 ```
+
+`<img>` requests cannot send the header, so the three image routes look up by id
+unscoped (the id names one public image), and the default contest logo carries the
+tournament in its URL: `/api/settings/logo?tournament_id=<id>`.
 
 ### 2.4 New settings
 
@@ -630,6 +644,15 @@ the tournament's row from the platform default on first read. The two call sites
 `app/services/team_composition.py` and `resolve_max_players_per_team` in
 `app/services/auction.py`.
 
+> **Built differently (stage A2):** reads never create a row. `get_for_tournament`
+> falls back to the platform default, so a tournament nobody has customised keeps
+> tracking it. The admin settings routes write through `get_own_for_tournament`, which
+> copies the default into the tournament's own `tournament:<id>` row (the `_id` Phase 3
+> gives one) on the first edit. Saving the fallback would have changed the default
+> for every tournament still tracking it. The call sites are the team routes, both
+> contest responses, the admin contest checks and `/api/settings`; none calls
+> `get_instance()` any more, and a test keeps it that way.
+
 > Flagging this as a call I made rather than one you gave: per-tournament is the
 > behaviour that matches what the field means, and `Contest.max_players_per_team`
 > already exists as a per-contest override, so the hierarchy is natural. Say the word
@@ -657,6 +680,22 @@ def scoped(model: type[Document], tournament_id: PydanticObjectId):
 Enforce it with a test that walks the tenant models and asserts each one's routes go
 through `scoped`, or a lint rule banning bare `.find(` on those models. A test is
 better: it fails for the right reason and cannot be silenced with a comment.
+
+> **Built (stage A2).** Every route and service now reads through `scoped()`,
+> `scoped_one()` or `get_scoped()`, the last for lookups by id, since ids travel in
+> URLs. Every document a route creates carries the request's `tournament_id`.
+> `tests/test_tenant_scoping.py` parses every module under `app/routes`,
+> `app/services` and `app/utils`, and fails on any `.find`, `.get`, `.aggregate` and
+> the like called on a tenant model, under any alias. On `origin/main` it found 165;
+> five remain, each named with its reason: the three image routes, and the two
+> hot-player aggregations, whose pipelines open with `tenant_filter`. A stale exemption
+> fails too. `tests/test_tenant_isolation.py` runs two tournaments side by side: every
+> list endpoint, public and admin, returns only its own tournament's documents;
+> 37 requests for the other tournament's ids return 404; bulk endpoints skip those ids;
+> and after all of it the other tournament's documents compare equal field by field.
+> It also drives each route's other paths under a tenant, among them squad edits,
+> slot migration, delete-all and the leaderboard export. With the filter disabled in
+> `scoped()`, 84 of its 119 tests fail.
 
 ---
 
@@ -1938,7 +1977,7 @@ These block specific phases; everything else can be built without them.
 |---|---|---|
 | A0 | `00_env_audit.py` + boot-time config assertion (§7, Phase 0b) | — |
 | A | Settings, register new models, `scoped()` helper, test fixtures | — |
-| A2 | `tournament_id` on the ten tenant models, index rebuild, per-tournament `Contest.code` and `GlobalSettings` (§3.5) | A |
+| A2 | `tournament_id` on the ten tenant models, index rebuild, per-tournament `Contest.code` and `GlobalSettings` (§3.5) — **done 2026-10-19**, with every route scoped and `TENANCY` (§2.3) | A |
 | B | `User` v2 model, membership model, identity/password services | A |
 | C | Auth route changes (`sub`, login resolution, register, Google) + tests | B |
 | C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a) | — |
@@ -2397,8 +2436,8 @@ reached** by anything their owner knew.
 **Review decisions.** Of the 20 remaining groups, 14 are one person, and 6 hold one
 family member — a spouse or child on the shared phone or address — who stays separate.
 The largest staff group became one account for one staff member's own rows and one
-for the shared `walleadmin` login. The reviewed file is kept with the dry run's outputs, not here: it
-names people.
+for the shared `walleadmin` login. The reviewed links are kept outside the repository,
+not here.
 
 **Results, third pass** (2026-10-18, with the links): 2,222 legacy rows become 1,830
 accounts and 2,122 memberships. 232 groups merge automatically and all 20 flagged
@@ -2410,8 +2449,60 @@ a full Phase 6 delta (no account created, none in conflict).
 
 Still open before cutover:
 
-- [ ] **The platform-admin list** (§13.10). The candidates are the four people behind
+- [x] **The platform-admin list** (§13.10). The candidates are the four people behind
   the legacy admin rows; the shared `walleadmin` login should not be one.
-- [ ] **Keep the reviewed links** for cutover and re-run Phase 1 with them on the
+  *Decided 2026-10-19: the owner's account (`aagamratadia`) and `walleadmin`, against
+  the advice above. Five accounts carried the username `walleadmin`, since their
+  emails and mobiles never joined them: the shared login (epl, jpl, tpl-s11, wtpl),
+  rows named Mohit Singh (cccl, dcpl, rspl), two more (jmcl and tyrant; mjpl), and
+  `Walleevents` (lpcl). The owner confirmed they are one login, so all eleven rows
+  carry the cross-group link `=walleadmin` (#51) and become one account. Planned on
+  the live sources, that turns 1,830 accounts into 1,826 and changes nothing else.
+  The list file names that account and the owner's by their keys, and with it Phase
+  2 makes exactly those two platform admins. It is kept outside the repository with
+  the links, since it holds contact details. Chinmay Rane's account keeps three rows
+  named `walleadmin` (jypl, m11, mtc) on his own phone, as the review decided.*
+- [x] **Keep the reviewed links** for cutover and re-run Phase 1 with them on the
   cutover snapshot. A group that gained a row since the review shows as reviewed, but
-  the new row stays on its own until it is linked.
+  the new row stays on its own until it is linked. *Kept 2026-10-19 outside the
+  repository: `source_db`, `legacy_user_id` and `link` only, the columns `--links`
+  reads. The dry run's local copies are deleted; the re-run on the cutover snapshot is
+  still to do.*
+
+### 13.13 Found scoping the routes (stage A2)
+
+Moving every route onto `scoped()` (2026-10-19) meant reading all of them, and running
+the unified backend for the first time: `TENANCY=shared` against the dry run's
+`walle_arena`. For `dcpl` and `rspl`, every public list matched the database exactly
+(contests 2/2 and 1/1, players 226/226 and 90/90, slots 1/1, sponsors 7/7), and one
+tournament's contest was a 404 under the other's slug.
+
+- [x] **R45 — Any signed-in player could edit sponsors and the carousel.** Every write
+  under `/api/v1/sponsors` and `/api/v1/carousel` said "Admin only" and depended on
+  `get_current_active_user`. Live on both services. *Fixed in #49: `get_admin_user`.*
+- [x] **R46 — Admin enroll-teams could never enroll a team.** It, and unenroll by team,
+  joined Beanie expressions with `&`, which Beanie 1.26 rejects with `TypeError`: a 500
+  for every real team. No test reached it. *Fixed here: separate `find_one` arguments.*
+- [ ] **R47 — `GET /api/players/hot` is unreachable.** `players_router` is included
+  before `players_hot_router` in `main.py`, so `/api/players/{id}` takes the request
+  with `id="hot"` and returns 400 "Invalid player ID". The frontend's hot-player list has
+  never loaded. `/hot/ids` and `/{id}/hot` are unaffected. *Open: the fix is to include
+  the hot router first, which turns a feature on in production, so it is yours to
+  decide. Its aggregation is scoped and tested directly.*
+- [ ] **R48 — Seven retired copies cannot build `uniq_active_user_per_contest`.**
+  `cccl`, `jypl`, `lodha-park`, `melangeindia11`, `tyrant`, `walle_fantasy` and
+  `world_tower` hold users with two active teams in one contest, so `init_beanie`
+  fails against them. Their services are archived, and `walle_arena` builds the index:
+  Phase 3 resolves them on the way in (§13.11's enrolment collisions). Noted so nobody
+  points a service at one of these databases expecting it to start.
+- [x] **R49 — Per-contest hot counts were a 500.** `count_in_contest`, behind
+  `GET /api/players/{id}/hot?contest_id=`, projected onto
+  `TeamContestEnrollment.team_id`. Beanie projects onto a model class, not a field,
+  and raised `TypeError`. *Fixed here: it reads whole enrolment documents.*
+- [ ] **Under `TENANCY=shared`, admin is closed until stage D.** The admin routes still
+  check the global `is_admin`, and Phase 2 sets it false on every unified account,
+  moving admin to the membership role (§4.7): the dry run's `walle_arena` has no
+  `is_admin` user. So `get_admin_user` refuses everyone. That fails closed, since no
+  tournament's admin can reach another's through the header, but it makes D (apex
+  admin, slug in the path, checked against the membership role or the platform-admin
+  list) a gate for stage I rather than a refinement.

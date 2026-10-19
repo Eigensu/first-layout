@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from app.models.admin.player import Player
 from app.models.admin.slot import Slot
+from app.utils.tenant import TenantId, scoped_one
 
 # Status normalization
 STATUS_MAPPINGS = {
@@ -84,7 +85,11 @@ def validate_number(value: Any, field: str, min_val: float = 0) -> float:
 
 
 async def resolve_slot(
-    slot_code: Optional[str], slot_name: Optional[str], strategy: str = "lookup"
+    slot_code: Optional[str],
+    slot_name: Optional[str],
+    strategy: str = "lookup",
+    *,
+    tournament_id: TenantId,
 ) -> Optional[str]:
     """
     Resolve slot to ObjectId string
@@ -108,8 +113,10 @@ async def resolve_slot(
         # When comparing, we should normalize the input the same way
         normalized_code = slot_code.strip().upper().replace(" ", "_")
 
-        slot_doc = await Slot.find_one(
-            {"code": {"$regex": f"^{normalized_code}$", "$options": "i"}}
+        slot_doc = await scoped_one(
+            Slot,
+            tournament_id,
+            {"code": {"$regex": f"^{normalized_code}$", "$options": "i"}},
         )
 
         if not slot_doc and strategy == "create":
@@ -117,6 +124,7 @@ async def resolve_slot(
             from datetime import datetime
 
             slot_doc = Slot(
+                tournament_id=tournament_id,
                 code=slugify_code(slot_code),
                 name=slot_code.strip(),
                 min_select=4,
@@ -129,8 +137,10 @@ async def resolve_slot(
     # Try slot_name
     if not slot_doc and slot_name:
         # Search case-insensitively
-        slot_doc = await Slot.find_one(
-            {"name": {"$regex": f"^{slot_name.strip()}$", "$options": "i"}}
+        slot_doc = await scoped_one(
+            Slot,
+            tournament_id,
+            {"name": {"$regex": f"^{slot_name.strip()}$", "$options": "i"}},
         )
 
         if not slot_doc and strategy == "create":
@@ -138,6 +148,7 @@ async def resolve_slot(
             from datetime import datetime
 
             slot_doc = Slot(
+                tournament_id=tournament_id,
                 code=slugify_code(slot_name),
                 name=slot_name.strip(),
                 min_select=4,
@@ -166,7 +177,7 @@ def extract_stats(row: Dict[str, Any], known_fields: set) -> Optional[Dict[str, 
 
 
 async def validate_player_row(
-    row: Dict[str, Any], slot_strategy: str = "lookup"
+    row: Dict[str, Any], slot_strategy: str = "lookup", *, tournament_id: TenantId
 ) -> Tuple[Dict[str, Any], Optional[ValidationError]]:
     """
     Validate and normalize a single player row
@@ -213,7 +224,10 @@ async def validate_player_row(
 
         # Resolve slot
         slot = await resolve_slot(
-            row.get("slot_code"), row.get("slot_name"), slot_strategy
+            row.get("slot_code"),
+            row.get("slot_name"),
+            slot_strategy,
+            tournament_id=tournament_id,
         )
         data["slot"] = slot
 
@@ -223,6 +237,6 @@ async def validate_player_row(
         return {}, e
 
 
-async def check_conflict(name: str) -> Optional[Player]:
-    """Check if player with name already exists"""
-    return await Player.find_one(Player.name == name)
+async def check_conflict(name: str, *, tournament_id: TenantId) -> Optional[Player]:
+    """Check if player with name already exists in this tournament"""
+    return await scoped_one(Player, tournament_id, Player.name == name)

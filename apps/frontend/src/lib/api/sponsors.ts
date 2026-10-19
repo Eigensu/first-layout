@@ -1,6 +1,7 @@
 import { API_V1_BASE } from "@/config/constants";
 import { Sponsor, SponsorsResponse, SponsorFilters } from "@/types/sponsor";
 import { buildApiUrl } from "@/common/utils/url";
+import { tenantHeaders } from "@/common/consts";
 
 /**
  * Fetch all sponsors with optional filters
@@ -25,6 +26,7 @@ export async function getSponsors(
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...tenantHeaders(),
       },
       // Add cache options as needed
       next: { revalidate: 3600 }, // Revalidate every hour
@@ -70,6 +72,7 @@ export async function getSponsorById(id: string): Promise<Sponsor> {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...tenantHeaders(),
       },
     });
 

@@ -31,6 +31,7 @@ from app.routes.slots import router as slots_router
 from app.routes.teams import router as teams_router
 from config.database import close_mongo_connection, connect_to_mongo
 from config.settings import settings
+from config.startup_checks import assert_tenancy_matches_data
 
 # Logging configuration
 logging.basicConfig(
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
     # Startup: Connect to MongoDB
     await connect_to_mongo()
+    await assert_tenancy_matches_data()
     yield
     # Shutdown: Close MongoDB connection
     await close_mongo_connection()

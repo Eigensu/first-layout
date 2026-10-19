@@ -27,6 +27,7 @@ from app.schemas.sponsor import (
 from app.utils.cloudinary import delete_image, upload_image
 from app.utils.dependencies import get_admin_user
 from app.utils.gridfs import delete_sponsor_logo_from_gridfs, open_sponsor_logo_stream
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
 router = APIRouter(prefix="/api/v1/sponsors", tags=["sponsors"])
 
@@ -44,11 +45,12 @@ def sponsor_to_response(sponsor: Sponsor) -> dict:
     return sponsor_dict
 
 
-async def _get_next_priority(featured: bool) -> int:
+async def _get_next_priority(featured: bool, *, tournament_id: TenantId) -> int:
     """Find next available priority (max + 1) within the featured group."""
     # Find max priority in the group; skip zeroes (legacy default)
     sponsors = (
-        await Sponsor.find({"featured": featured, "priority": {"$gt": 0}})
+        await scoped(Sponsor, tournament_id)
+        .find({"featured": featured, "priority": {"$gt": 0}})
         .sort("-priority")
         .limit(1)
         .to_list()
@@ -58,12 +60,16 @@ async def _get_next_priority(featured: bool) -> int:
     return int((sponsors[0].priority or 0) + 1)
 
 
-async def _get_available_priorities(featured: bool, limit_gaps: int = 20) -> dict:
+async def _get_available_priorities(
+    featured: bool, limit_gaps: int = 20, *, tournament_id: TenantId
+) -> dict:
     """Compute available priorities: list of lowest gaps and the next available value."""
     # Gather used priorities > 0
-    used_docs = await Sponsor.find(
-        {"featured": featured, "priority": {"$gt": 0}}
-    ).to_list()
+    used_docs = (
+        await scoped(Sponsor, tournament_id)
+        .find({"featured": featured, "priority": {"$gt": 0}})
+        .to_list()
+    )
     used_set = sorted(
         {int(getattr(s, "priority", 0)) for s in used_docs if getattr(s, "priority", 0)}
     )
@@ -88,9 +94,10 @@ async def get_available_priorities(
         description="Whether to compute priorities for featured or non-featured group",
     ),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Return available priority suggestions (gaps and next) within a group for admin UI."""
-    result = await _get_available_priorities(featured)
+    result = await _get_available_priorities(featured, tournament_id=tournament_id)
     return result
 
 
@@ -106,9 +113,10 @@ async def get_sponsors(
     active: Optional[bool] = Query(True, description="Filter by active status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(100, ge=1, le=100, description="Items per page"),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
-    Get all sponsors with optional filters
+    Get all of this tournament's sponsors with optional filters
 
     - **tier**: Filter by sponsor tier (platinum, gold, silver, bronze)
     - **featured**: Filter by featured status (true/false)
@@ -135,11 +143,12 @@ async def get_sponsors(
         query["active"] = active
 
     # Get total count
-    total = await Sponsor.find(query).count()
+    total = await scoped(Sponsor, tournament_id).find(query).count()
 
     # Get sponsors with pagination, sorted by priority and created_at
     sponsors = (
-        await Sponsor.find(query)
+        await scoped(Sponsor, tournament_id)
+        .find(query)
         .sort("+priority", "-created_at")
         .skip((page - 1) * page_size)
         .limit(page_size)
@@ -164,20 +173,26 @@ async def get_sponsors_no_slash(
     active: Optional[bool] = Query(True, description="Filter by active status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(100, ge=1, le=100, description="Items per page"),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     return await get_sponsors(
-        tier=tier, featured=featured, active=active, page=page, page_size=page_size
+        tier=tier,
+        featured=featured,
+        active=active,
+        page=page,
+        page_size=page_size,
+        tournament_id=tournament_id,
     )
 
 
 @router.get("/{sponsor_id}", response_model=SponsorDetailResponse)
-async def get_sponsor(sponsor_id: str):
+async def get_sponsor(sponsor_id: str, tournament_id: TenantId = Depends(get_tenant)):
     """
     Get a single sponsor by ID
 
     - **sponsor_id**: The ID of the sponsor to retrieve
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(
@@ -194,9 +209,11 @@ async def get_sponsor(sponsor_id: str):
     "", response_model=SponsorDetailResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_sponsor_no_slash(
-    sponsor_data: SponsorCreate, current_user: User = Depends(get_admin_user)
+    sponsor_data: SponsorCreate,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    return await create_sponsor(sponsor_data, current_user)
+    return await create_sponsor(sponsor_data, current_user, tournament_id)
 
 
 # Admin endpoints (authentication required)
@@ -206,7 +223,9 @@ async def create_sponsor_no_slash(
     "/", response_model=SponsorDetailResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_sponsor(
-    sponsor_data: SponsorCreate, current_user: User = Depends(get_admin_user)
+    sponsor_data: SponsorCreate,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Create a new sponsor (Admin only)
@@ -214,7 +233,9 @@ async def create_sponsor(
     Requires authentication. Creates a new sponsor with the provided data.
     """
     # Check if sponsor with same name already exists
-    existing_sponsor = await Sponsor.find_one(Sponsor.name == sponsor_data.name)
+    existing_sponsor = await scoped_one(
+        Sponsor, tournament_id, Sponsor.name == sponsor_data.name
+    )
     if existing_sponsor:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -226,11 +247,11 @@ async def create_sponsor(
     desired_priority = data.get("priority")
     if not isinstance(desired_priority, int) or desired_priority <= 0:
         data["priority"] = await _get_next_priority(
-            featured=data.get("featured", False)
+            featured=data.get("featured", False), tournament_id=tournament_id
         )
 
     # Create new sponsor
-    sponsor = Sponsor(**data)
+    sponsor = Sponsor(**data, tournament_id=tournament_id)
     try:
         await sponsor.insert()
     except DuplicateKeyError:
@@ -250,6 +271,7 @@ async def update_sponsor(
     sponsor_id: str,
     sponsor_data: SponsorUpdate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Update sponsor information (Admin only)
@@ -257,7 +279,7 @@ async def update_sponsor(
     Requires authentication. Updates the specified sponsor with the provided data.
     Only fields that are provided will be updated.
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(
@@ -266,7 +288,9 @@ async def update_sponsor(
 
     # Check if new name conflicts with existing sponsor
     if sponsor_data.name and sponsor_data.name != sponsor.name:
-        existing_sponsor = await Sponsor.find_one(Sponsor.name == sponsor_data.name)
+        existing_sponsor = await scoped_one(
+            Sponsor, tournament_id, Sponsor.name == sponsor_data.name
+        )
         if existing_sponsor:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -283,14 +307,15 @@ async def update_sponsor(
             and update_data["featured"] != sponsor.featured
         )
         if featured_changing and "priority" not in update_data:
-            update_data["priority"] = await _get_next_priority(update_data["featured"])  # type: ignore[arg-type]
+            update_data["priority"] = await _get_next_priority(update_data["featured"], tournament_id=tournament_id)  # type: ignore[arg-type]
 
         # If priority not set or invalid but other fields change, keep existing
         if "priority" in update_data:
             pr = update_data["priority"]
             if not isinstance(pr, int) or pr <= 0:
                 update_data["priority"] = await _get_next_priority(
-                    update_data.get("featured", sponsor.featured)
+                    update_data.get("featured", sponsor.featured),
+                    tournament_id=tournament_id,
                 )
 
         update_data["updated_at"] = datetime.utcnow()
@@ -310,14 +335,18 @@ async def update_sponsor(
 
 
 @router.delete("/{sponsor_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_sponsor(sponsor_id: str, current_user: User = Depends(get_admin_user)):
+async def delete_sponsor(
+    sponsor_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
+):
     """
     Delete a sponsor (Admin only)
 
     Requires authentication. Permanently deletes the specified sponsor.
     Also attempts to delete the associated logo file.
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(
@@ -339,6 +368,7 @@ async def upload_sponsor_logo(
     sponsor_id: str,
     file: UploadFile = File(..., description="Sponsor logo image"),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Upload sponsor logo image (Admin only)
@@ -349,7 +379,7 @@ async def upload_sponsor_logo(
     - **Maximum size**: 5MB
     - **Recommended size**: 400x400px or larger
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(
@@ -390,6 +420,8 @@ async def upload_sponsor_logo(
 
 @router.get("/{sponsor_id}/logo")
 async def get_sponsor_logo(sponsor_id: str):
+    # Not tenant-scoped, like the other image routes: an <img> cannot send the
+    # tenant header, and the id names one public image.
     sponsor = await Sponsor.get(sponsor_id)
     if not sponsor:
         raise HTTPException(
@@ -415,14 +447,16 @@ async def get_sponsor_logo(sponsor_id: str):
 
 @router.patch("/{sponsor_id}/toggle-featured", response_model=SponsorDetailResponse)
 async def toggle_featured(
-    sponsor_id: str, current_user: User = Depends(get_admin_user)
+    sponsor_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Toggle sponsor featured status (Admin only)
 
     Requires authentication. Toggles the featured status of the specified sponsor.
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(
@@ -432,7 +466,9 @@ async def toggle_featured(
     sponsor.featured = not sponsor.featured
     # When moving groups, assign next available priority if current priority conflicts or is zero
     if not sponsor.priority or sponsor.priority <= 0:
-        sponsor.priority = await _get_next_priority(sponsor.featured)
+        sponsor.priority = await _get_next_priority(
+            sponsor.featured, tournament_id=tournament_id
+        )
     sponsor.updated_at = datetime.utcnow()
     await sponsor.save()
 
@@ -442,14 +478,18 @@ async def toggle_featured(
 
 
 @router.patch("/{sponsor_id}/toggle-active", response_model=SponsorDetailResponse)
-async def toggle_active(sponsor_id: str, current_user: User = Depends(get_admin_user)):
+async def toggle_active(
+    sponsor_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
+):
     """
     Toggle sponsor active status (Admin only)
 
     Requires authentication. Toggles the active status of the specified sponsor.
     Inactive sponsors can be hidden from public view.
     """
-    sponsor = await Sponsor.get(sponsor_id)
+    sponsor = await get_scoped(Sponsor, tournament_id, sponsor_id)
 
     if not sponsor:
         raise HTTPException(

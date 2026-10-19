@@ -12,42 +12,117 @@ Every collection is one of two kinds:
 
 There is no third kind. See ``docs/UNIFIED_AUTH_SPEC.md`` §2.1 and §3.5.
 
-``tournament_id`` is declared ``Optional`` on the models today, and that is a
-migration artifact rather than the intended shape: no existing document has the
-field until the backfill runs (§7, Phase 3). Until then, ``None`` means "written
-before the backfill", not "belongs to no tournament". Once the backfill has run
-and the routes go through :func:`scoped`, the field becomes required and this
-paragraph goes away.
+Every read of a tenant collection goes through :func:`scoped`,
+:func:`scoped_one` or :func:`get_scoped`, and every write sets
+``tournament_id`` from the request's tenant. ``tests/test_tenant_scoping.py``
+walks the routes and services and fails on a query that does not.
 
-Nothing in the app filters on ``tournament_id`` yet. Adding the field and the
-filter in the same change would have meant deploying a query that matches
-nothing -- every contest, team and player would vanish for the live
-tournaments, whose data has no ``tournament_id`` until it is backfilled.
+Which tournament a request belongs to depends on ``TENANCY``:
+
+  * ``shared`` -- the one backend serving every tournament from
+    ``walle_arena``. The frontend sends the subdomain's slug in
+    ``X-Tournament-Slug``; :func:`get_tenant` resolves it through the
+    registry, so a header cannot invent a tenant.
+  * ``single`` (the default) -- a legacy per-tournament service, whose
+    database holds one tournament and none of whose documents has a
+    ``tournament_id``. The tenant is ``None``, and ``{"tournament_id": null}``
+    matches exactly the documents that lack the field: every one of them.
+
+So the same filter serves both, and a service started in the wrong mode shows
+nothing rather than another tournament's data. ``config/startup_checks.py``
+refuses to start it at all.
+
+``tournament_id`` stays ``Optional`` on the models for the legacy databases.
+Once they are retired the field becomes required and ``single`` goes away.
 """
 
 from typing import Optional, Type, TypeVar
 
 from beanie import Document, PydanticObjectId
+from fastapi import HTTPException, Request, status
+
+from app.common.enums.tournaments import TournamentStatus
+from app.models.admin.audit_log import AdminActionLog
+from app.models.admin.import_log import ImportLog
+from app.models.admin.player import Player as AdminPlayer
+from app.models.admin.slot import Slot
+from app.models.carousel import CarouselImage
+from app.models.contest import Contest
+from app.models.player import Player as PublicPlayer
+from app.models.player_contest_points import PlayerContestPoints
+from app.models.sponsor import Sponsor
+from app.models.team import Team
+from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.models.tournament import Tournament
+from config.settings import settings
 
 TDoc = TypeVar("TDoc", bound=Document)
 
+# The request's tournament: its registry id under TENANCY=shared, None on a
+# legacy single-tournament service.
+TenantId = Optional[PydanticObjectId]
 
-def scoped(model: Type[TDoc], tournament_id: PydanticObjectId):
+TENANT_HEADER = "X-Tournament-Slug"
+
+# Every model whose collection belongs to one tournament. GlobalSettings is
+# not here: it keeps one untagged document, the platform default, beside the
+# per-tournament rows (app/models/settings.py).
+TENANT_MODELS = (
+    Contest,
+    Team,
+    TeamContestEnrollment,
+    AdminPlayer,
+    PublicPlayer,
+    Slot,
+    PlayerContestPoints,
+    Sponsor,
+    CarouselImage,
+    ImportLog,
+    AdminActionLog,
+)
+
+
+async def get_tenant(request: Request) -> TenantId:
+    """FastAPI dependency: which tournament this request belongs to.
+
+    On the shared backend the slug comes from the header the frontend sets
+    from its subdomain, and must name a tournament in the registry. An
+    archived tournament no longer resolves, as its subdomain does not
+    (``GET /api/tournaments/by-slug``).
+    """
+    if not settings.shared_tenancy:
+        return None
+
+    slug = (request.headers.get(TENANT_HEADER) or "").strip().lower()
+    if not slug:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Missing tournament: send the {TENANT_HEADER} header",
+        )
+    tournament = await Tournament.find_one(Tournament.slug == slug)
+    if not tournament or tournament.status == TournamentStatus.ARCHIVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown tournament"
+        )
+    return tournament.id
+
+
+def scoped(model: Type[TDoc], tournament_id: TenantId):
     """Start a query against a tenant-scoped collection.
 
-    Routes are expected to go through this rather than calling ``model.find()``
-    on a tenant collection directly. The filter is the only thing standing
-    between one tournament's data and another's, and a filter that every route
-    has to remember is a filter some route will forget. One function is one
-    place to review, and one place to test.
+    Routes go through this rather than calling ``model.find()`` on a tenant
+    collection directly. The filter is the only thing standing between one
+    tournament's data and another's, and a filter that every route has to
+    remember is a filter some route will forget. One function is one place to
+    review, and one place to test.
 
-    Returns a Beanie ``FindMany``, so the usual ``.sort()``, ``.limit()``,
-    ``.to_list()`` and friends all chain off it as normal.
+    Returns a Beanie ``FindMany``, so ``.find()``, ``.sort()``, ``.count()``,
+    ``.update_many()``, ``.delete()`` and the rest all chain off it as normal.
     """
     return model.find(model.tournament_id == tournament_id)
 
 
-def scoped_one(model: Type[TDoc], tournament_id: PydanticObjectId, *args):
+def scoped_one(model: Type[TDoc], tournament_id: TenantId, *args):
     """``scoped`` for a single document, with extra query expressions.
 
     ``await scoped_one(Contest, tid, Contest.code == "FINAL")`` reads better at
@@ -56,7 +131,23 @@ def scoped_one(model: Type[TDoc], tournament_id: PydanticObjectId, *args):
     return model.find_one(model.tournament_id == tournament_id, *args)
 
 
-def tenant_filter(tournament_id: Optional[PydanticObjectId]) -> dict:
+async def get_scoped(
+    model: Type[TDoc], tournament_id: TenantId, document_id
+) -> Optional[TDoc]:
+    """``model.get(document_id)``, if that document belongs to this tournament.
+
+    Ids are guessable and travel in URLs, so a lookup by id is a cross-tenant
+    read unless it is scoped like any other. An id that is not an ObjectId
+    finds nothing, which the caller already turns into its 404.
+    """
+    try:
+        oid = PydanticObjectId(document_id)
+    except Exception:
+        return None
+    return await scoped_one(model, tournament_id, model.id == oid)
+
+
+def tenant_filter(tournament_id: TenantId) -> dict:
     """The raw Mongo filter, for aggregation pipelines and Motor calls.
 
     Beanie's query builder does not reach into ``aggregate()``, and the

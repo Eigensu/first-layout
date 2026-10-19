@@ -1,4 +1,5 @@
 import { LeaderboardResponse } from '@/types/leaderboard';
+import { tenantHeaders } from '@/common/consts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -8,6 +9,7 @@ export const leaderboardApi = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        ...tenantHeaders(),
       },
     });
 

@@ -29,6 +29,7 @@ from app.utils.gridfs import (
     open_carousel_image_stream,
     upload_carousel_image_to_gridfs,
 )
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped
 
 router = APIRouter(prefix="/api/v1/carousel", tags=["carousel"])
 
@@ -51,9 +52,10 @@ async def get_carousel_images(
     active: Optional[bool] = Query(True, description="Filter by active status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(100, ge=1, le=100, description="Items per page"),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
-    Get carousel images with optional filters (Public endpoint)
+    Get this tournament's carousel images with optional filters (Public endpoint)
 
     - **active**: Filter by active status (default: true, only active images)
     - **page**: Page number for pagination
@@ -66,11 +68,12 @@ async def get_carousel_images(
         query["active"] = active
 
     # Get total count
-    total = await CarouselImage.find(query).count()
+    total = await scoped(CarouselImage, tournament_id).find(query).count()
 
     # Get carousel images with pagination, sorted by display_order and created_at
     images = (
-        await CarouselImage.find(query)
+        await scoped(CarouselImage, tournament_id)
+        .find(query)
         .sort("+display_order", "+created_at")
         .skip((page - 1) * page_size)
         .limit(page_size)
@@ -87,7 +90,11 @@ async def get_carousel_images(
 
 @router.get("/{carousel_id}/image")
 async def get_carousel_image(carousel_id: str):
-    """Serve the carousel image file (Public endpoint)"""
+    """Serve the carousel image file (Public endpoint)
+
+    Not tenant-scoped, like the other image routes: an ``<img>`` cannot send
+    the tenant header, and the id names one public image.
+    """
     carousel = await CarouselImage.get(carousel_id)
     if not carousel or not carousel.image_file_id:
         raise HTTPException(
@@ -107,6 +114,7 @@ async def get_carousel_image(carousel_id: str):
 async def create_carousel_image(
     carousel_data: CarouselImageCreate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Create a new carousel image entry (Admin only)
@@ -118,11 +126,16 @@ async def create_carousel_image(
     data = carousel_data.model_dump()
     if data.get("display_order") is None:
         # Find max display_order and add 1
-        existing = await CarouselImage.find().sort("-display_order").limit(1).to_list()
+        existing = (
+            await scoped(CarouselImage, tournament_id)
+            .sort("-display_order")
+            .limit(1)
+            .to_list()
+        )
         data["display_order"] = (existing[0].display_order + 1) if existing else 0
 
     # Create new carousel image
-    carousel = CarouselImage(**data)
+    carousel = CarouselImage(**data, tournament_id=tournament_id)
     await carousel.insert()
 
     return CarouselImageResponse(**carousel_to_response(carousel))
@@ -130,14 +143,16 @@ async def create_carousel_image(
 
 @router.get("/{carousel_id}", response_model=CarouselImageResponse)
 async def get_carousel_image_detail(
-    carousel_id: str, current_user: User = Depends(get_admin_user)
+    carousel_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Get a single carousel image by ID (Admin only)
 
     - **carousel_id**: The ID of the carousel image to retrieve
     """
-    carousel = await CarouselImage.get(carousel_id)
+    carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
 
     if not carousel:
         raise HTTPException(
@@ -152,6 +167,7 @@ async def update_carousel_image(
     carousel_id: str,
     carousel_data: CarouselImageUpdate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Update carousel image metadata (Admin only)
@@ -159,7 +175,7 @@ async def update_carousel_image(
     Requires authentication. Updates the specified carousel image with the provided data.
     Only fields that are provided will be updated.
     """
-    carousel = await CarouselImage.get(carousel_id)
+    carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
 
     if not carousel:
         raise HTTPException(
@@ -179,7 +195,9 @@ async def update_carousel_image(
 
 @router.delete("/{carousel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_carousel_image(
-    carousel_id: str, current_user: User = Depends(get_admin_user)
+    carousel_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Delete a carousel image (Admin only)
@@ -187,7 +205,7 @@ async def delete_carousel_image(
     Requires authentication. Permanently deletes the specified carousel image.
     Also attempts to delete the associated image file from GridFS.
     """
-    carousel = await CarouselImage.get(carousel_id)
+    carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
 
     if not carousel:
         raise HTTPException(
@@ -207,6 +225,7 @@ async def upload_carousel_image(
     carousel_id: str,
     file: UploadFile = File(..., description="Carousel image"),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Upload carousel image file (Admin only)
@@ -217,7 +236,7 @@ async def upload_carousel_image(
     - **Maximum size**: 5MB
     - **Recommended dimensions**: 1920x500px or similar wide aspect ratio
     """
-    carousel = await CarouselImage.get(carousel_id)
+    carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
 
     if not carousel:
         raise HTTPException(
@@ -251,13 +270,17 @@ async def upload_carousel_image(
 
 
 @router.patch("/{carousel_id}/toggle-active", response_model=CarouselImageResponse)
-async def toggle_active(carousel_id: str, current_user: User = Depends(get_admin_user)):
+async def toggle_active(
+    carousel_id: str,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
+):
     """
     Toggle carousel image active status (Admin only)
 
     Requires authentication. Toggles the active status of the specified carousel image.
     """
-    carousel = await CarouselImage.get(carousel_id)
+    carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
 
     if not carousel:
         raise HTTPException(
@@ -273,7 +296,9 @@ async def toggle_active(carousel_id: str, current_user: User = Depends(get_admin
 
 @router.patch("/reorder", status_code=status.HTTP_200_OK)
 async def reorder_carousel_images(
-    reorder_data: ReorderRequest, current_user: User = Depends(get_admin_user)
+    reorder_data: ReorderRequest,
+    current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Batch update display order of carousel images (Admin only)
@@ -286,7 +311,7 @@ async def reorder_carousel_images(
         new_order = item.get("display_order")
 
         if carousel_id and new_order is not None:
-            carousel = await CarouselImage.get(carousel_id)
+            carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
             if carousel:
                 carousel.display_order = new_order
                 carousel.updated_at = datetime.utcnow()

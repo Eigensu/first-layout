@@ -17,6 +17,7 @@ from app.schemas.admin.slot import (
     SlotUpdate,
 )
 from app.utils.dependencies import get_admin_user
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
 router = APIRouter(prefix="/api/admin/slots", tags=["Admin - Slots"])
 
@@ -26,7 +27,11 @@ class PlayerIds(BaseModel):
 
 
 async def build_slot_response(slot: Slot) -> SlotResponse:
-    player_count = await AdminPlayer.find(AdminPlayer.slot == str(slot.id)).count()
+    player_count = (
+        await scoped(AdminPlayer, slot.tournament_id)
+        .find(AdminPlayer.slot == str(slot.id))
+        .count()
+    )
     return SlotResponse(
         id=str(slot.id),
         code=slot.code,
@@ -47,6 +52,7 @@ async def get_slots(
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by code or name"),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """List slots from the DB with computed player_count."""
     conditions = []
@@ -58,10 +64,9 @@ async def get_slots(
             )
         )
 
+    query = scoped(Slot, tournament_id)
     if conditions:
-        query = Slot.find(And(*conditions))
-    else:
-        query = Slot.find_all()
+        query = query.find(And(*conditions))
 
     total = await query.count()
     skip = (page - 1) * page_size
@@ -85,6 +90,7 @@ async def migrate_slots_from_players(
         False, description="When true, does not write changes; returns a plan only."
     ),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Backfill Slot documents from distinct AdminPlayer.slot values and normalize players to reference Slot ObjectIds.
 
@@ -92,7 +98,11 @@ async def migrate_slots_from_players(
     - Updates players whose `slot` equals the legacy value to the new Slot ObjectId string.
     - Returns a summary of created slots and updated players counts.
     """
-    players_with_slots = await AdminPlayer.find(AdminPlayer.slot != None).to_list()
+    players_with_slots = (
+        await scoped(AdminPlayer, tournament_id)
+        .find(AdminPlayer.slot != None)
+        .to_list()
+    )
     legacy_values = set()
     for p in players_with_slots:
         if p.slot:
@@ -107,7 +117,7 @@ async def migrate_slots_from_players(
         # Treat as id only if it's a valid ObjectId
         try:
             oid = PydanticObjectId(val)  # may raise
-            slot_doc = await Slot.get(oid)
+            slot_doc = await get_scoped(Slot, tournament_id, oid)
         except Exception:
             slot_doc = None
         if not slot_doc:
@@ -115,16 +125,19 @@ async def migrate_slots_from_players(
             code = f"SLOT_{str(val).upper()}"
             name = f"Slot {val}"
             # Ensure uniqueness for code/name variants
-            existing_by_code = await Slot.find_one(Slot.code == code)
+            existing_by_code = await scoped_one(Slot, tournament_id, Slot.code == code)
             if existing_by_code:
                 slot_doc = existing_by_code
             else:
-                existing_by_name = await Slot.find_one(Slot.name == name)
+                existing_by_name = await scoped_one(
+                    Slot, tournament_id, Slot.name == name
+                )
                 if existing_by_name:
                     slot_doc = existing_by_name
                 else:
                     if not dry_run:
                         slot_doc = Slot(
+                            tournament_id=tournament_id,
                             code=code,
                             name=name,
                             min_select=4,
@@ -149,9 +162,11 @@ async def migrate_slots_from_players(
                 if numeric_alt is not None:
                     conditions.append(AdminPlayer.slot == numeric_alt)
                 query = (
-                    AdminPlayer.find(Or(*conditions))
+                    scoped(AdminPlayer, tournament_id).find(Or(*conditions))
                     if len(conditions) > 1
-                    else AdminPlayer.find(AdminPlayer.slot == val)
+                    else scoped(AdminPlayer, tournament_id).find(
+                        AdminPlayer.slot == val
+                    )
                 )
                 players_to_update = await query.to_list()
 
@@ -164,9 +179,11 @@ async def migrate_slots_from_players(
                 if numeric_alt is not None:
                     conditions.append(AdminPlayer.slot == numeric_alt)
                 query = (
-                    AdminPlayer.find(Or(*conditions))
+                    scoped(AdminPlayer, tournament_id).find(Or(*conditions))
                     if len(conditions) > 1
-                    else AdminPlayer.find(AdminPlayer.slot == val)
+                    else scoped(AdminPlayer, tournament_id).find(
+                        AdminPlayer.slot == val
+                    )
                 )
                 count = await query.count()
                 updated_counts[str(val)] = count
@@ -182,6 +199,7 @@ async def migrate_slots_from_players(
 async def create_slot(
     data: SlotCreate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Create and persist a new slot."""
     if (
@@ -194,13 +212,14 @@ async def create_slot(
         )
 
     # Uniqueness checks
-    if await Slot.find_one(Slot.code == data.code):
+    if await scoped_one(Slot, tournament_id, Slot.code == data.code):
         raise HTTPException(status_code=400, detail="Slot code already exists")
-    if await Slot.find_one(Slot.name == data.name):
+    if await scoped_one(Slot, tournament_id, Slot.name == data.name):
         raise HTTPException(status_code=400, detail="Slot name already exists")
 
     now = datetime.utcnow()
     slot = Slot(
+        tournament_id=tournament_id,
         code=data.code,
         name=data.name,
         min_select=data.min_select,
@@ -218,8 +237,9 @@ async def create_slot(
 async def get_slot(
     slot_id: str,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     return await build_slot_response(slot)
@@ -230,8 +250,9 @@ async def update_slot(
     slot_id: str,
     data: SlotUpdate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
 
@@ -261,13 +282,18 @@ async def delete_slot(
         False, description="Force delete: unassign players then delete"
     ),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Delete a slot. By default blocks if players are assigned; with force=true unassigns all then deletes."""
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
 
-    players_in_slot = await AdminPlayer.find(AdminPlayer.slot == slot_id).to_list()
+    players_in_slot = (
+        await scoped(AdminPlayer, tournament_id)
+        .find(AdminPlayer.slot == slot_id)
+        .to_list()
+    )
     if players_in_slot and not force:
         raise HTTPException(
             status_code=409,
@@ -293,8 +319,9 @@ async def get_slot_players(
     search: Optional[str] = Query(None),
     team: Optional[str] = Query(None),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
 
@@ -305,9 +332,9 @@ async def get_slot_players(
         conditions.append(AdminPlayer.team == team)
 
     query = (
-        AdminPlayer.find(And(*conditions))
+        scoped(AdminPlayer, tournament_id).find(And(*conditions))
         if len(conditions) > 1
-        else AdminPlayer.find(AdminPlayer.slot == slot_id)
+        else scoped(AdminPlayer, tournament_id).find(AdminPlayer.slot == slot_id)
     )
     total = await query.count()
     skip = (page - 1) * page_size
@@ -341,13 +368,14 @@ async def assign_players_to_slot(
     slot_id: str,
     body: PlayerIds,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     assigned = 0
     for pid in body.player_ids:
-        player = await AdminPlayer.get(pid)
+        player = await get_scoped(AdminPlayer, tournament_id, pid)
         if player:
             player.slot = str(slot.id)
             await player.save()
@@ -360,11 +388,12 @@ async def unassign_player_from_slot(
     slot_id: str,
     player_id: str,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
-    player = await AdminPlayer.get(player_id)
+    player = await get_scoped(AdminPlayer, tournament_id, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     if player.slot != slot_id:
@@ -379,13 +408,14 @@ async def bulk_unassign_players_from_slot(
     slot_id: str,
     body: PlayerIds,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    slot = await Slot.get(slot_id)
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     count = 0
     for pid in body.player_ids:
-        player = await AdminPlayer.get(pid)
+        player = await get_scoped(AdminPlayer, tournament_id, pid)
         if player and player.slot == slot_id:
             player.slot = None
             await player.save()

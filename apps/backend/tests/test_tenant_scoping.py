@@ -1,10 +1,13 @@
 """tournament_id: the field, the scoped() helper, and per-tournament settings.
 
-Nothing in the app filters on tournament_id yet -- the field is added ahead of
-the backfill, so the routes keep behaving exactly as before (see
-app/utils/tenant.py for why the two cannot land together). These tests cover
-the foundation rather than any route.
+Also the one structural guarantee the scoping rests on: no route or service
+queries a tenant collection except through app/utils/tenant.py. What the
+routes then do with a tenant is in tests/test_tenant_isolation.py.
 """
+
+import ast
+import importlib
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -24,6 +27,7 @@ from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.user import RefreshToken, User, UserProfile
+from app.utils import tenant
 from app.utils.tenant import scoped, scoped_one, tenant_filter
 
 # Every collection that belongs to exactly one tournament. A new tenant model
@@ -178,7 +182,127 @@ async def test_a_tournaments_own_settings_win(db):
 
 @pytest.mark.asyncio
 async def test_get_instance_still_works_for_existing_callers(db):
-    """team_composition and auction still call this; it must not change."""
+    """The platform default, and a legacy service's only settings document."""
     instance = await GlobalSettings.get_instance()
     assert instance.id == PLATFORM_DEFAULTS_ID
     assert instance.tournament_id is None
+
+
+# --- every query goes through app/utils/tenant.py ---------------------------
+
+APP = Path(__file__).resolve().parent.parent / "app"
+SCANNED = sorted(
+    p
+    for folder in ("routes", "services", "utils")
+    for p in (APP / folder).rglob("*.py")
+    if p != APP / "utils" / "tenant.py"
+)
+
+# Methods that read or write a whole collection when called on the model.
+QUERY_METHODS = {
+    "aggregate",
+    "count",
+    "delete_all",
+    "distinct",
+    "find",
+    "find_all",
+    "find_many",
+    "find_one",
+    "get",
+    "get_motor_collection",
+    "get_pymongo_collection",
+    "insert_many",
+    "update_all",
+}
+
+# (file, function): why it may query a tenant model directly.
+UNSCOPED_ON_PURPOSE = {
+    ("routes/contests.py", "get_contest_logo"): "an <img> sends no tenant header",
+    ("routes/sponsors.py", "get_sponsor_logo"): "an <img> sends no tenant header",
+    ("routes/carousel.py", "get_carousel_image"): "an <img> sends no tenant header",
+    ("services/hot_players.py", "aggregate_hot_global"): "$match on tenant_filter",
+    ("services/hot_players.py", "aggregate_hot_in_contest"): "$match on tenant_filter",
+}
+
+
+def _direct_queries(source: str, namespace: dict, label: str):
+    """Each `<TenantModel>.<query method>(` call in a module, by function.
+
+    Names are resolved through the module's own namespace, so an alias such
+    as `Player as AdminPlayer` is caught as surely as the class name.
+    """
+    tenant_names = {name for name, value in namespace.items() if value in TENANT_MODELS}
+    found = []
+
+    class Visitor(ast.NodeVisitor):
+        function = "<module>"
+
+        def visit_FunctionDef(self, node):
+            outer, self.function = self.function, node.name
+            self.generic_visit(node)
+            self.function = outer
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Call(self, node):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id in tenant_names
+                and func.attr in QUERY_METHODS
+            ):
+                found.append((label, self.function, node.lineno, func.attr))
+            self.generic_visit(node)
+
+    Visitor().visit(ast.parse(source))
+    return found
+
+
+def _scan(path: Path):
+    relative = path.relative_to(APP.parent).with_suffix("")
+    module = importlib.import_module(".".join(relative.parts))
+    return _direct_queries(path.read_text(), vars(module), str(path.relative_to(APP)))
+
+
+def test_the_canonical_tenant_model_list_matches():
+    assert set(tenant.TENANT_MODELS) == set(TENANT_MODELS)
+
+
+def test_no_route_or_service_queries_a_tenant_collection_directly():
+    """The tenant filter has one home; a query that skips it can see every
+    tournament. Fails with the file, function and line of each one that does.
+    """
+    queries = [q for path in SCANNED for q in _scan(path)]
+    offenders = [q for q in queries if (q[0], q[1]) not in UNSCOPED_ON_PURPOSE]
+
+    assert offenders == [], "\n".join(
+        f"{file}:{line} {function}() calls .{method}() on a tenant model; "
+        f"use scoped(), scoped_one() or get_scoped()"
+        for file, function, line, method in offenders
+    )
+
+    # An exemption whose query has gone is one nobody re-reviews.
+    assert set(UNSCOPED_ON_PURPOSE) <= {(q[0], q[1]) for q in queries}
+
+
+def test_the_scan_catches_a_direct_query_under_an_alias():
+    source = (
+        "async def every_player():\n"
+        "    return await AdminPlayer.find_all().to_list()\n"
+        "async def fine():\n"
+        "    return await scoped(AdminPlayer, None).to_list()\n"
+    )
+    found = _direct_queries(source, {"AdminPlayer": AdminPlayer}, "probe.py")
+    assert [(f[1], f[3]) for f in found] == [("every_player", "find_all")]
+
+
+def test_no_route_or_service_reads_the_platform_settings_directly():
+    """get_instance() is the platform default. A tournament's rules come from
+    get_for_tournament(), and its admin edits get_own_for_tournament()."""
+    callers = [
+        str(path.relative_to(APP))
+        for path in SCANNED
+        if "GlobalSettings.get_instance(" in path.read_text()
+    ]
+    assert callers == []

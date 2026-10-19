@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE_URL, LS_KEYS } from "@/common/consts";
+import { API_BASE_URL, LS_KEYS, tenantHeaders } from "@/common/consts";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
 import { getImageUrl } from "@/lib/utils";
 import {
@@ -241,6 +241,7 @@ function DashboardContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...tenantHeaders(),
         },
         body: JSON.stringify({
           current_password: currentPassword,
