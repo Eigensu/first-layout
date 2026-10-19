@@ -5,6 +5,7 @@ import { NEXT_PUBLIC_API_URL } from "@/config/env";
 import Image from "next/image";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
+import { tenantHeaders } from "@/common/consts";
 
 export default function ForgotPasswordRequestPage() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function ForgotPasswordRequestPage() {
         `${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/request`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...tenantHeaders() },
           body: JSON.stringify({ phone }),
         },
       );

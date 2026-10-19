@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
-import { API_BASE_URL, CONTENT_TYPES, AUTH, API, ROUTES, LS_KEYS } from '@/common/consts';
+import { API_BASE_URL, CONTENT_TYPES, AUTH, API, ROUTES, LS_KEYS, tenantHeaders } from '@/common/consts';
 import { extractErrorMessage } from '@/utils/errors';
 
 // Create axios instance
@@ -28,6 +28,13 @@ apiClient.interceptors.request.use(
     const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
     if (token && config.headers) {
       config.headers[AUTH.HEADER] = `${AUTH.BEARER_PREFIX}${token}`;
+    }
+
+    // Which tournament this request belongs to, from the subdomain.
+    if (config.headers) {
+      for (const [name, value] of Object.entries(tenantHeaders())) {
+        config.headers[name] = value;
+      }
     }
     return config;
   },
@@ -65,7 +72,8 @@ apiClient.interceptors.response.use(
             `${API_BASE_URL}${API.PREFIX}/auth/refresh`,
             null,
             {
-              params: { refresh_token: refreshToken }
+              params: { refresh_token: refreshToken },
+              headers: tenantHeaders(),
             }
           );
 

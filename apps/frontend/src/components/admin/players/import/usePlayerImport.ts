@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_BASE_URL, AUTH, LS_KEYS } from "@/common/consts";
+import { API_BASE_URL, AUTH, LS_KEYS, tenantHeaders } from "@/common/consts";
 
 interface ImportOptions {
   dry_run: boolean;
@@ -80,6 +80,7 @@ export function usePlayerImport(onSuccess?: () => void) {
       const response = await fetch(url, {
         headers: {
           [AUTH.HEADER]: `${AUTH.BEARER_PREFIX}${localStorage.getItem(LS_KEYS.ACCESS_TOKEN) || ""}`,
+          ...tenantHeaders(),
         },
       });
 
@@ -130,6 +131,7 @@ export function usePlayerImport(onSuccess?: () => void) {
         method: "POST",
         headers: {
           [AUTH.HEADER]: `${AUTH.BEARER_PREFIX}${token}`,
+          ...tenantHeaders(),
         },
         body: formData,
       });

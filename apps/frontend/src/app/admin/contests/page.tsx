@@ -20,6 +20,7 @@ import {
   CONTEST_FORMAT,
   CONTEST_TYPE_OPTIONS,
   CONTEST_VISIBILITY_OPTIONS,
+  tenantHeaders,
 } from "@/common/consts";
 import { parseApiError } from "@/utils/errors";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -98,7 +99,9 @@ export default function AdminContestsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/players?limit=1000`);
+        const res = await fetch(`${API_BASE_URL}/api/players?limit=1000`, {
+          headers: tenantHeaders(),
+        });
         if (!res.ok) return;
         const data: Array<{ team?: string | null }> = await res.json();
         const uniq = Array.from(

@@ -6,6 +6,7 @@ import { extractErrorMessage } from "@/utils/errors";
 import Image from "next/image";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
+import { tenantHeaders } from "@/common/consts";
 
 export default function ForgotPasswordResetPage() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function ForgotPasswordResetPage() {
         `${NEXT_PUBLIC_API_URL}/api/auth/forgot-password/reset`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...tenantHeaders() },
           body: JSON.stringify({ reset_token: token, new_password: password }),
         }
       );

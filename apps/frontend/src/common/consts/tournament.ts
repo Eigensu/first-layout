@@ -101,3 +101,19 @@ export function getTournamentSlugFromHost(rawHost: string | null): string | null
   if (!TOURNAMENT_SLUG_REGEX.test(label)) return null;
   return label;
 }
+
+// Names the tournament an API request belongs to. The shared backend scopes
+// every tenant query by it (apps/backend/app/utils/tenant.py); a legacy
+// per-tournament backend ignores it.
+export const TENANT_HEADER = "X-Tournament-Slug";
+
+/**
+ * The tenant header for the subdomain this page is served on, to spread into
+ * a request's headers. Empty off a tournament host (apex, previews) and during
+ * server rendering, where there is no window to read the host from.
+ */
+export function tenantHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const slug = getTournamentSlugFromHost(window.location.host);
+  return slug ? { [TENANT_HEADER]: slug } : {};
+}
