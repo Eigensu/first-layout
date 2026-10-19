@@ -18,7 +18,8 @@ Phase 2 refuses to run if two databases share user ids and neither is declared,
 because which one is the original decides who gets a membership.
 
 --links applies the review: merge_review.csv from phase 1 with its link column
-filled in. Rows of one flagged group given the same link become one account.
+filled in. Rows of one flagged group given the same link become one account; a
+link starting with "=" joins rows across groups (join_across_groups).
 Pass it from the first run on: an account a run has already written is never
 merged by a later one (it is reported as a conflict instead), and phase 6 must
 be given the same file.
@@ -43,6 +44,7 @@ from scripts.unified_auth.identity_graph import build_components  # noqa: E402
 from scripts.unified_auth.loader import load_rows, load_team_owners  # noqa: E402
 from scripts.unified_auth.merge_apply import (  # noqa: E402
     copies_without_activity,
+    join_across_groups,
     load_links,
     plan_accounts,
     point_copied_avatars_at_originals,
@@ -143,6 +145,7 @@ async def main() -> None:
         if unknown:
             listed = ", ".join(f"{db}:{uid}" for db, uid in unknown)
             raise SystemExit(f"--links names rows no source holds: {listed}")
+        components, planned_links = join_across_groups(components, links)
 
         tournament_ids = {
             t["slug"]: t["_id"] async for t in dest["tournaments"].find({}, {"slug": 1})
@@ -156,7 +159,10 @@ async def main() -> None:
             )
 
         planned = [
-            (group_id(c), plan_accounts(c, group_id(c), admin_keys, junk, links))
+            (
+                group_id(c),
+                plan_accounts(c, group_id(c), admin_keys, junk, planned_links),
+            )
             for c in components
         ]
         point_copied_avatars_at_originals(

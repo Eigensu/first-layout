@@ -1604,6 +1604,17 @@ passed as `--links` to Phases 1, 2 and 6, and each linked set becomes one accoun
 across the resulting accounts goes to the one holding the most recently active row,
 as for any split (R8). Phases 1 and 2 stop on a link to a row no source holds.
 
+**Links across groups.** A link starting with `=` reaches across groups: every row
+given it, in any group, is one person (`join_across_groups`). This is for a
+login whose rows share no key that is not junk. The shared `walleadmin` staff login
+has a different phone in each tournament, and an address withheld as too widely
+shared, so Phase 1 leaves it as five accounts in five groups. The groups a
+cross-group link spans are planned as one, flagged `joined`. Inside them, an
+ordinary link still means one person only within the group it was written in, and
+a clean group, already one person by its keys, goes whole to the cross-group link
+any of its rows carries. A clean group whose rows carry two different cross-group
+links is refused.
+
 Pass it from the **first** Phase 2 run: a run never merges accounts an earlier run
 wrote (it reports a conflict), so links added later do nothing. The file names
 people; keep it with the migration's outputs, not in this repository.

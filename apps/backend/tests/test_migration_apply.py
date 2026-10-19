@@ -15,6 +15,7 @@ from scripts.unified_auth.merge_apply import (
     UNCLAIMED_EMAIL_DOMAIN,
     build_unified_account,
     copies_without_activity,
+    join_across_groups,
     load_links,
     plan_accounts,
     plan_memberships,
@@ -805,3 +806,166 @@ def test_links_to_rows_no_source_holds_are_reported():
     links = {("walle_lpcl", "1"): "a", ("walle_fifth", "9"): "a"}
 
     assert unknown_links([present], links) == [("walle_fifth", "9")]
+
+
+# --------------------------------------------------------------------------
+# links across groups ("=label")
+# --------------------------------------------------------------------------
+
+
+def _accounts(components, links, admin_keys=None):
+    """Join, then plan every component, as phase 2 does."""
+    joined, planned = join_across_groups(components, links)
+    accounts = []
+    for i, c in enumerate(joined):
+        accounts += plan_accounts(c, f"g{i}", admin_keys, (), planned).accounts
+    return joined, {frozenset(r.key for r in a.source_rows): a for a in accounts}
+
+
+def test_a_cross_group_link_joins_one_login_its_keys_kept_apart():
+    """The shared staff login: a different phone in each tournament, and an
+    address too widely shared to join anything, so three groups."""
+    rows = [
+        row(
+            "epl", "1", username="walleadmin", mobile="9000000001", hashed_password="h1"
+        ),
+        row(
+            "jmcl",
+            "2",
+            username="walleadmin",
+            mobile="9000000002",
+            hashed_password="h2",
+        ),
+        row(
+            "mjpl",
+            "3",
+            username="walleadmin",
+            mobile="9000000003",
+            hashed_password="h3",
+            last_login=RECENT,
+        ),
+    ]
+    links = {r.key: "=walleadmin" for r in rows}
+
+    joined, by_rows = _accounts([component(r) for r in rows], links)
+
+    assert len(joined) == 1 and "joined" in joined[0].flags
+    [walleadmin] = by_rows.values()
+    assert set(by_rows) == {frozenset(r.key for r in rows)}
+    assert walleadmin.merge_state == "reviewed"
+    # Every phone it was registered with, the most recently used first.
+    assert walleadmin.mobiles[0] == "9000000003"
+    assert set(walleadmin.mobiles) == {"9000000001", "9000000002", "9000000003"}
+    # Every password the login ever had still opens it.
+    assert walleadmin.hashed_password == "h3"
+    assert {h["hashed_password"] for h in walleadmin.legacy_hashes} == {"h1", "h2"}
+
+
+def test_a_clean_group_joins_whole_from_one_labelled_row():
+    """A clean group is one person already; the link need not name every row."""
+    pair = [
+        row("Dcpl", "1", email="staff@corp.com"),
+        row("rspl", "2", email="staff@corp.com"),
+    ]
+    other = row("epl", "3", mobile="9000000003")
+    links = {pair[0].key: "=staff", other.key: "=staff"}
+
+    _, by_rows = _accounts([component(*pair), component(other)], links)
+
+    assert set(by_rows) == {frozenset({pair[0].key, pair[1].key, other.key})}
+
+
+def test_plain_labels_stay_apart_inside_a_joined_group():
+    """Each group labels its own people "a"; joining them must not merge them."""
+    first = [row("Dcpl", "1"), row("epl", "2")]
+    second = [row("jmcl", "3"), row("mjpl", "4")]
+    links = {
+        first[0].key: "a",
+        first[1].key: "=walleadmin",
+        second[0].key: "a",
+        second[1].key: "=walleadmin",
+    }
+
+    _, by_rows = _accounts(
+        [component(*first, flags=["chained"]), component(*second, flags=["chained"])],
+        links,
+    )
+
+    assert set(by_rows) == {
+        frozenset({first[0].key}),
+        frozenset({second[0].key}),
+        frozenset({first[1].key, second[1].key}),
+    }
+
+
+def test_an_unlabelled_row_of_a_flagged_group_stays_on_its_own():
+    flagged = [row("Dcpl", "1"), row("epl", "2")]
+    clean = row("jmcl", "3")
+    links = {flagged[0].key: "=w", clean.key: "=w"}
+
+    _, by_rows = _accounts(
+        [component(*flagged, flags=["chained"]), component(clean)], links
+    )
+
+    assert set(by_rows) == {
+        frozenset({flagged[0].key, clean.key}),
+        frozenset({flagged[1].key}),
+    }
+
+
+def test_groups_without_a_cross_group_link_are_left_alone():
+    untouched = component(row("cccl", "9"))
+    pair = [component(row("epl", "1")), component(row("jmcl", "2"))]
+    links = {("epl", "1"): "=w", ("jmcl", "2"): "=w", ("cccl", "9"): "a"}
+
+    joined, planned = join_across_groups([untouched, *pair], links)
+
+    assert untouched in joined
+    assert planned[("cccl", "9")] == "a"
+    plain = [component(row("Dcpl", "1"))]
+    assert join_across_groups(plain, {("Dcpl", "1"): "a"}) == (
+        plain,
+        {("Dcpl", "1"): "a"},
+    )
+
+
+def test_one_person_cannot_carry_two_cross_group_links():
+    pair = [row("Dcpl", "1", email="x@corp.com"), row("rspl", "2", email="x@corp.com")]
+
+    with pytest.raises(ValueError, match="one cross-group link"):
+        join_across_groups(
+            [component(*pair)], {pair[0].key: "=one", pair[1].key: "=two"}
+        )
+
+
+def test_the_join_is_recorded_as_link_edges():
+    rows = [row("epl", "1"), row("jmcl", "2"), row("mjpl", "3")]
+
+    [joined], _ = join_across_groups(
+        [component(r) for r in rows], {r.key: "=w" for r in rows}
+    )
+
+    assert [(e.a, e.b, e.via) for e in joined.edges] == [
+        (rows[0].key, rows[1].key, "link"),
+        (rows[0].key, rows[2].key, "link"),
+    ]
+
+
+def test_a_joined_login_is_a_platform_admin_through_any_part():
+    rows = [row("epl", "1", mobile="9000000001"), row("jmcl", "2", mobile="9000000002")]
+
+    _, by_rows = _accounts(
+        [component(r) for r in rows],
+        {r.key: "=walleadmin" for r in rows},
+        admin_keys={"9000000002"},
+    )
+
+    [walleadmin] = by_rows.values()
+    assert walleadmin.is_platform_admin
+
+
+def test_cross_group_labels_are_read_as_written(tmp_path):
+    path = tmp_path / "links.csv"
+    path.write_text("source_db,legacy_user_id,link\nepl,1, =walleadmin \n")
+
+    assert load_links(path) == {("epl", "1"): "=walleadmin"}
