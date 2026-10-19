@@ -11,7 +11,7 @@ one now, and a member who has played is marked as having played.
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from beanie import PydanticObjectId
 from beanie.operators import In
@@ -52,10 +52,9 @@ class _Activity:
     total_points: Dict[UserId, float] = field(
         default_factory=lambda: defaultdict(float)
     )
-
-    @property
-    def played(self) -> set:
-        return set(self.teams_count) | set(self.contests_count)
+    # Everyone with a team or an entry. Filled once the counts are in, and read
+    # once per member, so it is built once rather than on every read.
+    played: Set[UserId] = field(default_factory=set)
 
     def saw(self, user_id: UserId, when) -> None:
         if when is not None:
@@ -147,6 +146,7 @@ async def _activity(tid: TenantId) -> _Activity:
             )
             activity.total_points[user.id] += points
 
+    activity.played = set(activity.teams_count) | set(activity.contests_count)
     return activity
 
 
