@@ -16,7 +16,7 @@ from app.schemas.admin.slot import (
     SlotResponse,
     SlotUpdate,
 )
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
 router = APIRouter(prefix="/api/admin/slots", tags=["Admin - Slots"])
@@ -51,7 +51,7 @@ async def get_slots(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by code or name"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """List slots from the DB with computed player_count."""
@@ -89,7 +89,7 @@ async def migrate_slots_from_players(
     dry_run: bool = Query(
         False, description="When true, does not write changes; returns a plan only."
     ),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Backfill Slot documents from distinct AdminPlayer.slot values and normalize players to reference Slot ObjectIds.
@@ -198,7 +198,7 @@ async def migrate_slots_from_players(
 @router.post("", response_model=SlotResponse, status_code=201)
 async def create_slot(
     data: SlotCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Create and persist a new slot."""
@@ -236,7 +236,7 @@ async def create_slot(
 @router.get("/{slot_id}", response_model=SlotResponse)
 async def get_slot(
     slot_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)
@@ -249,7 +249,7 @@ async def get_slot(
 async def update_slot(
     slot_id: str,
     data: SlotUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)
@@ -281,7 +281,7 @@ async def delete_slot(
     force: bool = Query(
         False, description="Force delete: unassign players then delete"
     ),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Delete a slot. By default blocks if players are assigned; with force=true unassigns all then deletes."""
@@ -318,7 +318,7 @@ async def get_slot_players(
     page_size: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None),
     team: Optional[str] = Query(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)
@@ -367,7 +367,7 @@ async def get_slot_players(
 async def assign_players_to_slot(
     slot_id: str,
     body: PlayerIds,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)
@@ -387,7 +387,7 @@ async def assign_players_to_slot(
 async def unassign_player_from_slot(
     slot_id: str,
     player_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)
@@ -407,7 +407,7 @@ async def unassign_player_from_slot(
 async def bulk_unassign_players_from_slot(
     slot_id: str,
     body: PlayerIds,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     slot = await get_scoped(Slot, tournament_id, slot_id)

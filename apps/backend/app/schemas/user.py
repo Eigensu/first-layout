@@ -19,7 +19,11 @@ class UserResponse(BaseModel):
     mobile: Optional[str]
     is_active: bool
     is_verified: bool
+    # Admin of the tournament the request named in X-Tournament-Slug, or of
+    # the one tournament a legacy service serves.
     is_admin: bool
+    # May manage the tournament registry (app/utils/dependencies.py).
+    is_platform_admin: bool = False
     created_at: datetime
     avatar_url: Optional[str]
     auth_provider: str = "password"

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.models.settings import GlobalSettings, default_logo_path
 from app.models.user import User
 from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.gridfs import (
     delete_contest_logo_from_gridfs,
     open_contest_logo_stream,
@@ -31,7 +31,7 @@ def _to_settings_response(settings: GlobalSettings) -> GlobalSettingsResponse:
 
 @router.get("", response_model=GlobalSettingsResponse)
 async def get_settings(
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Get this tournament's settings, or the defaults it still tracks."""
@@ -42,7 +42,7 @@ async def get_settings(
 @router.put("", response_model=GlobalSettingsResponse)
 async def update_settings(
     data: GlobalSettingsUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Update this tournament's team-composition settings."""
@@ -76,7 +76,7 @@ async def update_settings(
 @router.post("/logo", response_model=UploadResponse)
 async def upload_default_logo(
     file: UploadFile = File(..., description="Default contest logo image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     settings = await GlobalSettings.get_own_for_tournament(tournament_id)

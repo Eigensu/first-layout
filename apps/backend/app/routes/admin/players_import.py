@@ -14,7 +14,7 @@ from app.schemas.admin.player_import import (
     ImportResponse,
 )
 from app.services.player_import.import_service import PlayerImportService
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.import_players.import_template import (
     generate_csv_template,
     generate_xlsx_template,
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/admin/players/import", tags=["Admin - Players Im
 @router.get("/template")
 async def get_template(
     format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -73,7 +73,7 @@ async def import_players(
     slot_strategy: str = Form("lookup", pattern="^(lookup|create|ignore)$"),
     header_row: int = Form(1),
     idempotency_key: Optional[str] = Form(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -113,7 +113,7 @@ async def import_players(
 async def get_import_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Get this admin's import history in this tournament"""

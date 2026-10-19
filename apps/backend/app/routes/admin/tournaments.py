@@ -14,7 +14,7 @@ from app.schemas.tournament import (
     TournamentUpdate,
     validate_slug,
 )
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_platform_admin
 from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
@@ -50,7 +50,7 @@ async def _get_or_404(tournament_id: str) -> Tournament:
 
 
 @router.get("/check-slug/{slug}", response_model=SlugAvailabilityResponse)
-async def check_slug(slug: str, current_user: User = Depends(get_admin_user)):
+async def check_slug(slug: str, current_user: User = Depends(get_platform_admin)):
     """Live availability check used by the create form."""
     try:
         normalized = validate_slug(slug)
@@ -68,7 +68,7 @@ async def check_slug(slug: str, current_user: User = Depends(get_admin_user)):
 @router.post("", response_model=TournamentResponse, status_code=201)
 async def create_tournament(
     data: TournamentCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_platform_admin),
 ):
     if data.start_at and data.end_at and data.start_at >= data.end_at:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
@@ -102,7 +102,7 @@ async def list_tournaments(
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[TournamentStatus] = Query(None),
     search: Optional[str] = Query(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_platform_admin),
 ):
     conditions = []
     if status:
@@ -137,7 +137,7 @@ async def list_tournaments(
 @router.get("/{tournament_id}", response_model=TournamentResponse)
 async def get_tournament(
     tournament_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_platform_admin),
 ):
     tournament = await _get_or_404(tournament_id)
     return to_response(tournament)
@@ -147,7 +147,7 @@ async def get_tournament(
 async def update_tournament(
     tournament_id: str,
     data: TournamentUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_platform_admin),
 ):
     tournament = await _get_or_404(tournament_id)
 
@@ -187,7 +187,7 @@ async def update_tournament(
 async def delete_tournament(
     tournament_id: str,
     force: bool = Query(False, description="Permanently delete instead of archiving"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_platform_admin),
 ):
     tournament = await _get_or_404(tournament_id)
 

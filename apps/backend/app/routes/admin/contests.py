@@ -43,7 +43,7 @@ from app.services.contest_status import (
     contest_status_filter_clauses,
     sync_contest_status,
 )
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.gridfs import (
     delete_contest_logo_from_gridfs,
     upload_contest_logo_to_gridfs,
@@ -90,7 +90,7 @@ async def to_response(contest: Contest) -> ContestResponse:
 @router.post("", response_model=ContestResponse, status_code=201)
 async def create_contest(
     data: ContestCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     if data.start_at >= data.end_at:
@@ -145,7 +145,7 @@ async def list_contests(
     page_size: int = Query(10, ge=1, le=100),
     status: Optional[ContestStatus] = Query(None),
     search: Optional[str] = Query(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     conditions = []
@@ -180,7 +180,7 @@ async def list_contests(
 @router.get("/{contest_id}", response_model=ContestResponse)
 async def get_contest(
     contest_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -209,7 +209,7 @@ async def update_contest(
     contest_id: str,
     data: ContestUpdate,
     force: bool = Query(False),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -323,7 +323,7 @@ async def update_contest(
 async def delete_contest(
     contest_id: str,
     force: bool = Query(False),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -367,7 +367,7 @@ async def delete_contest(
 async def enroll_teams(
     contest_id: str,
     body: EnrollmentBulkRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -455,7 +455,7 @@ async def enroll_teams(
 async def unenroll(
     contest_id: str,
     body: UnenrollBulkRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -557,7 +557,7 @@ class PlayerPointsResponseItem(BaseModel):
 )
 async def get_player_points(
     contest_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -601,7 +601,7 @@ async def get_player_points(
 async def upsert_player_points(
     contest_id: str,
     body: PlayerPointsBulkUpsertRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -706,7 +706,7 @@ class UploadResponse(BaseModel):
 async def upload_contest_logo(
     contest_id: str,
     file: UploadFile = File(..., description="Contest logo image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -745,7 +745,7 @@ async def upload_contest_logo(
 )
 async def export_contest_leaderboard_excel(
     contest_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """

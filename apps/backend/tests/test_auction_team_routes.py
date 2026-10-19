@@ -16,7 +16,7 @@ from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.user import User
-from app.utils.dependencies import get_admin_user, get_current_active_user
+from app.utils.dependencies import get_current_active_user, get_tournament_admin
 from app.utils.timezone import now_ist
 
 
