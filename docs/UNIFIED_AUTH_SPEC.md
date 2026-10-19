@@ -1566,7 +1566,7 @@ across the resulting accounts goes to the one holding the most recently active r
 as for any split (R8). Phases 1 and 2 stop on a link to a row no source holds.
 
 **Links across groups.** A link starting with `=` reaches across groups: every row
-given it, in any group, is one person (`join_across_groups`, R50). This is for a
+given it, in any group, is one person (`join_across_groups`). This is for a
 login whose rows share no key that is not junk. The shared `walleadmin` staff login
 has a different phone in each tournament, and an address withheld as too widely
 shared, so Phase 1 leaves it as five accounts in five groups. The groups a

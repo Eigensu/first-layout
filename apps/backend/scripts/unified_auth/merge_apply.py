@@ -449,7 +449,7 @@ def join_across_groups(
     to plan them with. Inside a joined group, a plain label is prefixed with
     the id of the group it came from, so "a" from two groups stays two people.
     A clean group is already one person, so it goes whole to the cross-group
-    link any of its rows carries, or else stays one account of its own.
+    link that one of its rows carries -- which is how it came to be joined.
     """
     cross = {k: v for k, v in links.items() if v.startswith(CROSS_GROUP_PREFIX)}
     if not cross:
@@ -494,7 +494,7 @@ def join_across_groups(
                         f"{origin} is one person but its rows carry "
                         f"{', '.join(sorted(labels))}: give them one cross-group link"
                     )
-                whole = labels.pop() if labels else origin
+                [whole] = labels
                 for r in part.rows:
                     planned[r.key] = whole
             else:
