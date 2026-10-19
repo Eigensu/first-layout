@@ -15,6 +15,8 @@ export const backendEnvSchema = z.object({
   SECRET_KEY: z.string().min(32, 'Secret key must be at least 32 characters'),
   DATABASE_URL: z.string().default('sqlite:///./fantasy11.db'),
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000'),
+  // single: a legacy per-tournament service; shared: the one backend on walle_arena
+  TENANCY: z.enum(['single', 'shared']).default('single'),
   JWT_SECRET_KEY: z.string().min(32, 'JWT secret key must be at least 32 characters'),
   JWT_ALGORITHM: z.string().default('HS256'),
   JWT_EXPIRE_MINUTES: z.number().default(1440),
@@ -58,6 +60,7 @@ export const defaultBackendEnv: Partial<BackendEnv> = {
   DEBUG: true,
   DATABASE_URL: 'sqlite:///./fantasy11.db',
   CORS_ORIGINS: 'http://localhost:3000,http://127.0.0.1:3000',
+  TENANCY: 'single',
   JWT_ALGORITHM: 'HS256',
   JWT_EXPIRE_MINUTES: 1440,
   API_HOST: '0.0.0.0',
