@@ -26,6 +26,8 @@ from app.services.contest_status import (
     contest_status_filter_clauses,
     sync_contest_status,
 )
+from app.services.membership import record_play
+from app.services.standings import contest_standings
 from app.utils.dependencies import get_current_active_user, get_optional_current_user
 from app.utils.gridfs import open_contest_logo_stream
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
@@ -213,98 +215,9 @@ async def contest_leaderboard(
     if not contest or contest.visibility != ContestVisibility.PUBLIC:
         raise HTTPException(status_code=404, detail="Contest not found")
 
-    # fetch active enrollments
-    enrollments = (
-        await scoped(TeamContestEnrollment, tournament_id)
-        .find(
-            {
-                "contest_id": contest.id,
-                "status": EnrollmentStatus.ACTIVE,
-            }
-        )
-        .to_list()
-    )
-
-    if not enrollments:
+    computed = await contest_standings(contest.id, tournament_id)
+    if not computed:
         return LeaderboardResponseSchema(entries=[], currentUserEntry=None)
-
-    team_ids = [enr.team_id for enr in enrollments]
-
-    # fetch teams in batch
-    teams = await scoped(Team, tournament_id).find({"_id": {"$in": team_ids}}).to_list()
-    teams_by_id: Dict[str, Team] = {str(t.id): t for t in teams}
-
-    # fetch users in batch
-    user_ids = list({t.user_id for t in teams})
-    users = await User.find({"_id": {"$in": user_ids}}).to_list()
-    users_by_id: Dict[str, User] = {str(u.id): u for u in users}
-
-    # compute points and build entries using per-contest player points
-    # 1) Collect all player ObjectIds across enrolled teams
-    from bson import ObjectId as _OID
-
-    all_player_ids: set[PydanticObjectId] = set()
-    team_player_oids_map: Dict[str, list[PydanticObjectId]] = {}
-    for enr in enrollments:
-        team = teams_by_id.get(str(enr.team_id))
-        if not team:
-            continue
-        oids: list[PydanticObjectId] = []
-        for pid in team.player_ids:
-            if _OID.is_valid(pid):
-                try:
-                    oids.append(PydanticObjectId(pid))
-                except Exception:
-                    continue
-        team_player_oids_map[str(enr.team_id)] = oids
-        all_player_ids.update(oids)
-
-    # 2) Fetch all PlayerContestPoints for this contest once
-    pcp_docs = []
-    if all_player_ids:
-        pcp_docs = (
-            await scoped(PlayerContestPoints, tournament_id)
-            .find(
-                {
-                    "contest_id": contest.id,
-                    "player_id": {"$in": list(all_player_ids)},
-                }
-            )
-            .to_list()
-        )
-
-    # 3) Build lookup: player_id(str) -> points(float)
-    pcp_points_map: Dict[str, float] = {
-        str(doc.player_id): float(doc.points or 0.0) for doc in pcp_docs
-    }
-
-    # 4) Sum per team and build computed list (apply C/VC multipliers)
-    computed = []
-    for enr in enrollments:
-        team = teams_by_id.get(str(enr.team_id))
-        if not team:
-            continue
-        user = users_by_id.get(str(team.user_id))
-        if not user:
-            continue
-        oids = team_player_oids_map.get(str(enr.team_id), [])
-        # Sum using string form to match map keys, with captain/vice multipliers
-        total = 0.0
-        captain_id = str(team.captain_id) if team.captain_id else None
-        vice_id = str(team.vice_captain_id) if team.vice_captain_id else None
-        for oid in oids:
-            pid = str(oid)
-            base = float(pcp_points_map.get(pid, 0.0))
-            if captain_id and pid == captain_id:
-                base *= 2.0
-            elif vice_id and pid == vice_id:
-                base *= 1.5
-            total += base
-        points = float(total)
-        computed.append((team, user, float(points)))
-
-    # sort by points desc
-    computed.sort(key=lambda tup: tup[2], reverse=True)
 
     # pagination
     sliced = computed[skip : skip + limit]
@@ -475,6 +388,7 @@ async def enroll_in_contest(
             status_code=409,
             detail="You can enroll only one team in this contest",
         ) from exc
+    await record_play(current_user, tournament_id)
 
     return EnrollmentResponse(
         id=str(enr.id),

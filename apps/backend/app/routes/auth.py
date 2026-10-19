@@ -42,6 +42,7 @@ from app.services.auth.password_reset import start_session as pr_start_session
 from app.services.auth.password_reset import (
     verify_otp_and_issue_token as pr_verify_and_issue,
 )
+from app.services.membership import record_sign_in
 from app.utils.dependencies import get_current_active_user, subject_claims
 from app.utils.gridfs import upload_avatar_to_gridfs
 from app.utils.security import (
@@ -51,6 +52,7 @@ from app.utils.security import (
     get_password_hash,
     verify_password,
 )
+from app.utils.tenant import TenantId, get_optional_tenant
 from config.settings import get_settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -66,6 +68,7 @@ async def register(
     full_name: Optional[str] = Form(None),
     mobile: str = Form(...),
     avatar: Optional[UploadFile] = File(None),
+    tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Register a new user"""
 
@@ -157,6 +160,7 @@ async def register(
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(new_user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -166,7 +170,10 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin):
+async def login(
+    user_data: UserLogin,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Login with username (or mobile) and password"""
 
     identifier = (user_data.username or "").strip()
@@ -224,6 +231,7 @@ async def login(user_data: UserLogin):
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -233,7 +241,10 @@ async def login(user_data: UserLogin):
 
 
 @router.post("/google", response_model=Token)
-async def google_auth(payload: GoogleAuth):
+async def google_auth(
+    payload: GoogleAuth,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Sign up or log in using a Google Identity Services ID token."""
     try:
         token_payload = verify_google_id_token(payload.id_token)
@@ -259,6 +270,7 @@ async def google_auth(payload: GoogleAuth):
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -268,7 +280,10 @@ async def google_auth(payload: GoogleAuth):
 
 
 @router.post("/apple", response_model=Token)
-async def apple_auth(payload: AppleAuth):
+async def apple_auth(
+    payload: AppleAuth,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Sign up or log in using an Apple identity token from expo-apple-authentication."""
     try:
         token_payload = await verify_apple_identity_token(payload.identity_token)
@@ -294,6 +309,7 @@ async def apple_auth(payload: AppleAuth):
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
 
     return {
         "access_token": access_token,

@@ -20,6 +20,7 @@ from app.services.auction import (
     validate_auction_squad,
 )
 from app.services.contest_status import compute_contest_status
+from app.services.membership import record_play
 from app.services.team_composition import validate_team_composition
 from app.utils.dependencies import get_current_active_user
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
@@ -344,6 +345,7 @@ async def create_team(
     )
 
     await team.insert()  # type: ignore[misc]
+    await record_play(current_user, tournament_id)
 
     return TeamResponse(
         id=str(team.id),

@@ -1,10 +1,18 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
+from beanie.operators import In
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
 
+from app.models.tournament import Tournament
+from app.models.tournament_membership import STATUS_PLAYED, TournamentMembership
 from app.models.user import RefreshToken, User
+from app.schemas.membership import (
+    MyTournamentsResponse,
+    PlayedTournament,
+    RegisteredTournament,
+)
 from app.schemas.user import (
     ASCII_DIGITS,
     DeleteAccountRequest,
@@ -22,6 +30,7 @@ from app.utils.dependencies import (
 from app.utils.gridfs import open_avatar_stream
 from app.utils.security import verify_password
 from app.utils.tenant import TenantId, get_optional_tenant
+from app.utils.timezone import to_ist
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -92,6 +101,59 @@ async def get_current_user_info(
 ):
     """Get current user information"""
     return await _user_response(current_user, tournament_id)
+
+
+@router.get("/me/tournaments", response_model=MyTournamentsResponse)
+async def get_my_tournaments(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Every tournament this account has joined, played or not (spec §6.1).
+
+    Archived tournaments are included: a profile is a history. Most recently
+    active first, falling back to when they joined.
+    """
+    memberships = await TournamentMembership.find(
+        TournamentMembership.user_id == current_user.id
+    ).to_list()
+    tournaments = {
+        t.id: t
+        for t in await Tournament.find(
+            In(Tournament.id, [m.tournament_id for m in memberships])
+        ).to_list()
+    }
+
+    played, registered_only = [], []
+    for m in sorted(
+        memberships,
+        key=lambda m: to_ist(m.last_active_at or m.joined_at),
+        reverse=True,
+    ):
+        tournament = tournaments.get(m.tournament_id)
+        if tournament is None:
+            continue
+        common = {
+            "slug": tournament.slug,
+            "name": tournament.name,
+            "logo_url": tournament.logo_url,
+            "status": tournament.status,
+            "joined_at": m.joined_at,
+        }
+        if m.status == STATUS_PLAYED:
+            played.append(
+                PlayedTournament(
+                    **common,
+                    display_name=m.display_name,
+                    first_played_at=m.first_played_at,
+                    last_active_at=m.last_active_at,
+                    teams_count=m.stats.teams_count,
+                    contests_count=m.stats.contests_count,
+                    best_rank=m.stats.best_rank,
+                    total_points=m.stats.total_points,
+                )
+            )
+        else:
+            registered_only.append(RegisteredTournament(**common))
+    return MyTournamentsResponse(played=played, registered_only=registered_only)
 
 
 @router.put("/me", response_model=UserResponse)
