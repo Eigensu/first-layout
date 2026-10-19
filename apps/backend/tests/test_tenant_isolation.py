@@ -773,6 +773,48 @@ async def test_settings_are_per_tournament(world, client, user_client):
     assert caps == {3}
 
 
+@pytest.fixture
+def logo_store(monkeypatch):
+    """GridFS stand-in for the admin settings routes: what was deleted."""
+    from app.routes.admin import settings as admin_settings
+
+    deleted, counter = [], iter(range(1, 100))
+
+    async def _upload(file, filename_prefix):
+        return f"uploaded-{next(counter)}"
+
+    async def _delete(file_id):
+        deleted.append(file_id)
+
+    monkeypatch.setattr(admin_settings, "upload_contest_logo_to_gridfs", _upload)
+    monkeypatch.setattr(admin_settings, "delete_contest_logo_from_gridfs", _delete)
+    return deleted
+
+
+async def test_a_tournaments_logo_upload_keeps_the_platform_default(
+    world, client, logo_store
+):
+    """Its own row starts as a copy of the default, logo file and all."""
+    platform = await GlobalSettings.get_instance()
+    platform.default_contest_logo_file_id = "platform-logo"
+    await platform.save()
+    logo = {"file": ("logo.png", b"\x89PNG", "image/png")}
+
+    first = await client.post("/api/admin/settings/logo", headers=ALPHA, files=logo)
+    second = await client.post("/api/admin/settings/logo", headers=ALPHA, files=logo)
+
+    assert first.status_code == second.status_code == 200, first.text
+    assert first.json()["url"] == f"/api/settings/logo?tournament_id={world.alpha.id}"
+    # The default stays, for bravo and anyone else tracking it; alpha's own
+    # first upload, referenced by nothing else, is replaced.
+    assert logo_store == ["uploaded-1"]
+    assert (await GlobalSettings.get_instance()).default_contest_logo_file_id == (
+        "platform-logo"
+    )
+    alpha = await GlobalSettings.get_for_tournament(world.alpha.id)
+    assert alpha.default_contest_logo_file_id == "uploaded-2"
+
+
 async def test_a_second_edit_updates_the_same_row(world, client):
     await client.put(
         "/api/admin/settings", headers=ALPHA, json={"max_players_per_team": 3}

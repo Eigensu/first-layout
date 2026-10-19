@@ -85,8 +85,16 @@ async def upload_default_logo(
 
     logger = logging.getLogger(__name__)
 
-    # Delete old logo if it exists
-    if settings.default_contest_logo_file_id:
+    # Delete old logo if it exists -- unless another settings document still
+    # shows it. A tournament's own row starts as a copy of the platform
+    # default, logo included, so its "old" logo can be the default every other
+    # tournament is still using.
+    old_logo = settings.default_contest_logo_file_id
+    shared = old_logo and await GlobalSettings.find_one(
+        GlobalSettings.default_contest_logo_file_id == old_logo,
+        GlobalSettings.id != settings.id,
+    )
+    if old_logo and not shared:
         try:
             await delete_contest_logo_from_gridfs(settings.default_contest_logo_file_id)
         except Exception as e:
