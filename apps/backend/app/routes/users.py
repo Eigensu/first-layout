@@ -87,8 +87,8 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_active_user),
-    tournament_id: TenantId = Depends(get_optional_tenant),
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    tournament_id: Annotated[TenantId, Depends(get_optional_tenant)],
 ):
     """Get current user information"""
     return await _user_response(current_user, tournament_id)
@@ -96,11 +96,11 @@ async def get_current_user_info(
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    tournament_id: Annotated[TenantId, Depends(get_optional_tenant)],
     full_name: str = None,
     mobile: str = None,
     avatar_url: str = None,
-    current_user: User = Depends(get_current_active_user),
-    tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Update current user information"""
 
