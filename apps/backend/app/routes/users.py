@@ -14,16 +14,25 @@ from app.schemas.user import (
 from app.services.auth.apple import AppleTokenError, verify_apple_identity_token
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
 from app.services.auth.identity import set_profile_mobile
-from app.utils.dependencies import get_current_active_user
+from app.utils.dependencies import (
+    get_current_active_user,
+    is_platform_admin,
+    is_tournament_admin,
+)
 from app.utils.gridfs import open_avatar_stream
 from app.utils.security import verify_password
+from app.utils.tenant import TenantId, get_optional_tenant
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
 
-def _user_response(user: User) -> UserResponse:
+async def _user_response(user: User, tournament_id: TenantId) -> UserResponse:
     """Build the public view of a user, pointing avatar_url at the streaming
-    endpoint when the avatar lives in GridFS rather than at an external URL."""
+    endpoint when the avatar lives in GridFS rather than at an external URL.
+
+    is_admin is about the tournament the request came from, which is the site
+    the frontend shows or hides its admin pages on.
+    """
     avatar_url = user.avatar_url
     if user.avatar_file_id and not avatar_url:
         avatar_url = f"/api/users/{user.id}/avatar"
@@ -36,7 +45,8 @@ def _user_response(user: User) -> UserResponse:
         mobile=user.mobile,
         is_active=user.is_active,
         is_verified=user.is_verified,
-        is_admin=user.is_admin,
+        is_admin=await is_tournament_admin(user, tournament_id),
+        is_platform_admin=is_platform_admin(user),
         created_at=user.created_at,
         avatar_url=avatar_url,
         auth_provider=user.auth_provider,
@@ -76,9 +86,12 @@ async def _mobile_taken_by_other(mobile: str, current_user: User) -> bool:
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Get current user information"""
-    return _user_response(current_user)
+    return await _user_response(current_user, tournament_id)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -87,6 +100,7 @@ async def update_current_user(
     mobile: str = None,
     avatar_url: str = None,
     current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Update current user information"""
 
@@ -123,13 +137,14 @@ async def update_current_user(
             detail="Mobile already registered",
         )
 
-    return _user_response(current_user)
+    return await _user_response(current_user, tournament_id)
 
 
 @router.patch("/me", response_model=UserResponse)
 async def patch_current_user(
     payload: UserUpdateRequest,
     current_user: Annotated[User, Depends(get_current_active_user)],
+    tournament_id: Annotated[TenantId, Depends(get_optional_tenant)],
 ):
     """Partially update the current user's own profile.
 
@@ -162,7 +177,7 @@ async def patch_current_user(
             detail="This mobile number is already linked to another account",
         )
 
-    return _user_response(current_user)
+    return await _user_response(current_user, tournament_id)
 
 
 def _linked(ids: list, scalar) -> set:

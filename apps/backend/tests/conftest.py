@@ -27,7 +27,7 @@ from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.tournament_membership import TournamentMembership
 from app.models.user import RefreshToken, User, UserProfile
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_platform_admin, get_tournament_admin
 
 DOCUMENT_MODELS = [
     User,
@@ -125,11 +125,13 @@ async def client(db, admin_user):
     async def _fake_admin_user():
         return admin_user
 
-    app.dependency_overrides[get_admin_user] = _fake_admin_user
+    app.dependency_overrides[get_tournament_admin] = _fake_admin_user
+    app.dependency_overrides[get_platform_admin] = _fake_admin_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.pop(get_admin_user, None)
+    app.dependency_overrides.pop(get_tournament_admin, None)
+    app.dependency_overrides.pop(get_platform_admin, None)
 
 
 @pytest_asyncio.fixture

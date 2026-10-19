@@ -23,7 +23,7 @@ from app.schemas.carousel import (
     ReorderRequest,
     UploadResponse,
 )
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.gridfs import (
     delete_carousel_image_from_gridfs,
     open_carousel_image_stream,
@@ -113,7 +113,7 @@ async def get_carousel_image(carousel_id: str):
 )
 async def create_carousel_image(
     carousel_data: CarouselImageCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -144,7 +144,7 @@ async def create_carousel_image(
 @router.get("/{carousel_id}", response_model=CarouselImageResponse)
 async def get_carousel_image_detail(
     carousel_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -166,7 +166,7 @@ async def get_carousel_image_detail(
 async def update_carousel_image(
     carousel_id: str,
     carousel_data: CarouselImageUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -196,7 +196,7 @@ async def update_carousel_image(
 @router.delete("/{carousel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_carousel_image(
     carousel_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -224,7 +224,7 @@ async def delete_carousel_image(
 async def upload_carousel_image(
     carousel_id: str,
     file: UploadFile = File(..., description="Carousel image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -272,7 +272,7 @@ async def upload_carousel_image(
 @router.patch("/{carousel_id}/toggle-active", response_model=CarouselImageResponse)
 async def toggle_active(
     carousel_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -297,7 +297,7 @@ async def toggle_active(
 @router.patch("/reorder", status_code=status.HTTP_200_OK)
 async def reorder_carousel_images(
     reorder_data: ReorderRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """

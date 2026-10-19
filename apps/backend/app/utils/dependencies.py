@@ -6,8 +6,11 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
+from app.models.tournament_membership import ROLE_ADMIN, TournamentMembership
 from app.models.user import User
 from app.utils.security import decode_token
+from app.utils.tenant import TenantId, get_tenant
+from config.settings import settings
 
 # Marks a token whose `sub` is a user id. Tokens minted before ids became the
 # subject carry a username there and no such claim, and the two must never be
@@ -125,9 +128,63 @@ async def get_current_active_user(
     return current_user
 
 
-async def get_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
-    """Ensure user is admin."""
-    if not getattr(current_user, "is_admin", False):
+def is_platform_admin(user: User) -> bool:
+    """Whether this user runs the whole platform, which is the tournament registry.
+
+    A single-tournament service is its own platform, and its admins have always
+    run its registry. Under shared tenancy it is the allowlisted flag the
+    migration sets (spec §4.7). The legacy is_admin, which the migration clears,
+    says nothing about anyone else's tournament.
+    """
+    if not settings.shared_tenancy:
+        return user.is_admin
+    return user.is_platform_admin
+
+
+async def is_tournament_admin(user: User, tournament_id: TenantId) -> bool:
+    """Whether this user administers the tournament a request is for.
+
+    Under shared tenancy that means a platform admin, or a member whose role in
+    this tournament is admin. Being admin in one tournament is nothing in
+    another. The global is_admin is not consulted at all: every legacy admin
+    held it, and honouring it would hand each of them every tournament.
+    """
+    if is_platform_admin(user):
+        return True
+    if not settings.shared_tenancy or tournament_id is None:
+        return False
+    membership = await TournamentMembership.find_one(
+        TournamentMembership.user_id == user.id,
+        TournamentMembership.tournament_id == tournament_id,
+        TournamentMembership.role == ROLE_ADMIN,
+    )
+    return membership is not None
+
+
+async def get_platform_admin(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """Ensure the user runs the platform: the routes that manage the registry."""
+    if not is_platform_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform admin access required",
+        )
+    return current_user
+
+
+async def get_tournament_admin(
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
+) -> User:
+    """Ensure the user administers the tournament this request is for.
+
+    Admin pages are served on each tournament's own subdomain, and the frontend
+    takes X-Tournament-Slug from that host, so the page being edited and the
+    tournament being checked are the same one. The user is resolved first so
+    that being signed out answers 401 before a missing tournament answers 400.
+    """
+    if not await is_tournament_admin(current_user, tournament_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

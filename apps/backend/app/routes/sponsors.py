@@ -25,7 +25,7 @@ from app.schemas.sponsor import (
     UploadResponse,
 )
 from app.utils.cloudinary import delete_image, upload_image
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.gridfs import delete_sponsor_logo_from_gridfs, open_sponsor_logo_stream
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
@@ -93,7 +93,7 @@ async def get_available_priorities(
         True,
         description="Whether to compute priorities for featured or non-featured group",
     ),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """Return available priority suggestions (gaps and next) within a group for admin UI."""
@@ -210,7 +210,7 @@ async def get_sponsor(sponsor_id: str, tournament_id: TenantId = Depends(get_ten
 )
 async def create_sponsor_no_slash(
     sponsor_data: SponsorCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     return await create_sponsor(sponsor_data, current_user, tournament_id)
@@ -224,7 +224,7 @@ async def create_sponsor_no_slash(
 )
 async def create_sponsor(
     sponsor_data: SponsorCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -270,7 +270,7 @@ async def create_sponsor(
 async def update_sponsor(
     sponsor_id: str,
     sponsor_data: SponsorUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -337,7 +337,7 @@ async def update_sponsor(
 @router.delete("/{sponsor_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sponsor(
     sponsor_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -367,7 +367,7 @@ async def delete_sponsor(
 async def upload_sponsor_logo(
     sponsor_id: str,
     file: UploadFile = File(..., description="Sponsor logo image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -448,7 +448,7 @@ async def get_sponsor_logo(sponsor_id: str):
 @router.patch("/{sponsor_id}/toggle-featured", response_model=SponsorDetailResponse)
 async def toggle_featured(
     sponsor_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -480,7 +480,7 @@ async def toggle_featured(
 @router.patch("/{sponsor_id}/toggle-active", response_model=SponsorDetailResponse)
 async def toggle_active(
     sponsor_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """

@@ -1,8 +1,5 @@
-from .dependencies import (
-    get_current_active_user,
-    get_current_user,
-    get_current_verified_user,
-)
+# app.utils.dependencies is not re-exported here. It imports the models, and the
+# models import app.utils.timezone, so loading it with this package is a cycle.
 from .security import (
     create_access_token,
     create_refresh_token,
@@ -17,7 +14,4 @@ __all__ = [
     "create_access_token",
     "create_refresh_token",
     "decode_token",
-    "get_current_user",
-    "get_current_active_user",
-    "get_current_verified_user",
 ]

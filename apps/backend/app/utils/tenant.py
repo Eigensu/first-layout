@@ -107,6 +107,21 @@ async def get_tenant(request: Request) -> TenantId:
     return tournament.id
 
 
+async def get_optional_tenant(request: Request) -> TenantId:
+    """FastAPI dependency: the tournament a request names, if it names one.
+
+    For routes that serve every site, the apex included, and only use the
+    tournament to say something about it: ``/api/users/me`` reports whether
+    its caller is admin there. A missing, unknown or archived slug therefore
+    reads as no tournament rather than as an error. The frontend signs people
+    out when that route fails.
+    """
+    try:
+        return await get_tenant(request)
+    except HTTPException:
+        return None
+
+
 def scoped(model: Type[TDoc], tournament_id: TenantId):
     """Start a query against a tenant-scoped collection.
 

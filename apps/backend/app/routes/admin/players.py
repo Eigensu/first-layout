@@ -17,7 +17,7 @@ from app.schemas.admin.player import (
     PlayerResponse,
     PlayerUpdate,
 )
-from app.utils.dependencies import get_admin_user
+from app.utils.dependencies import get_tournament_admin
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
 router = APIRouter(prefix="/api/admin/players", tags=["Admin - Players"])
@@ -28,7 +28,7 @@ async def delete_all_players(
     confirm: str = Query(
         ..., description="Safety confirmation phrase. Must be DELETE_ALL_PLAYERS"
     ),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -81,7 +81,7 @@ async def get_players(
     status: Optional[str] = Query(None, description="Filter by status"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -147,7 +147,7 @@ async def get_players(
 @router.get("/{player_id}", response_model=PlayerResponse)
 async def get_player(
     player_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -177,7 +177,7 @@ async def get_player(
 @router.post("", response_model=PlayerResponse, status_code=201)
 async def create_player(
     player_data: PlayerCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -230,7 +230,7 @@ async def create_player(
 async def update_player(
     player_id: str,
     player_data: PlayerUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
@@ -322,7 +322,7 @@ async def delete_player(
             "then delete"
         ),
     ),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
     tournament_id: TenantId = Depends(get_tenant),
 ):
     """
