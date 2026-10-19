@@ -2,10 +2,12 @@
 
     python scripts/refresh_membership_stats.py --all-live
     python scripts/refresh_membership_stats.py --tournament rspl
+    python scripts/refresh_membership_stats.py --all
 
 --all-live is the scheduled run. Run --tournament once more after a
 tournament completes: its numbers are final from then on, and --all-live
-stops touching it.
+stops touching it. --all is for cutover: the migration writes every
+membership with zeros, and this fills them in, past tournaments included.
 
 Shared backend only (TENANCY=shared). A legacy single-tournament database
 has no memberships to refresh.
@@ -33,6 +35,9 @@ def parse_args() -> argparse.Namespace:
         "--all-live", action="store_true", help="every tournament that is live"
     )
     which.add_argument(
+        "--all", action="store_true", help="every tournament, archived included"
+    )
+    which.add_argument(
         "--tournament",
         action="append",
         metavar="SLUG",
@@ -52,6 +57,8 @@ async def main(args: argparse.Namespace) -> int:
             tournaments = await Tournament.find(
                 Tournament.status == TournamentStatus.LIVE
             ).to_list()
+        elif args.all:
+            tournaments = await Tournament.find_all().to_list()
         else:
             tournaments = []
             for slug in args.tournament:
@@ -68,7 +75,7 @@ async def main(args: argparse.Namespace) -> int:
                 f"{report.created} missing rows created"
             )
         if not tournaments:
-            print("No live tournaments.")
+            print("No tournaments to refresh.")
     finally:
         await close_mongo_connection()
     return 0
