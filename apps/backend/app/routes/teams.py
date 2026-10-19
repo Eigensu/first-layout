@@ -22,30 +22,34 @@ from app.services.auction import (
 from app.services.contest_status import compute_contest_status
 from app.services.team_composition import validate_team_composition
 from app.utils.dependencies import get_current_active_user
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 from app.utils.timezone import now_ist
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
-async def _get_dynamic_max_players_from_slots() -> Optional[int]:
+async def _get_dynamic_max_players_from_slots(
+    *, tournament_id: TenantId
+) -> Optional[int]:
     """Compute maximum team size from slot configuration using total min_select."""
-    slots = await Slot.find_all().to_list()
+    slots = await scoped(Slot, tournament_id).to_list()
     if not slots:
         return None
     return sum(max(0, slot.min_select) for slot in slots)
 
 
-async def _resolve_contest(contest_id: Optional[str]) -> Optional[Contest]:
-    """Load a contest by id, or None when no contest is attached."""
+async def _resolve_contest(
+    contest_id: Optional[str], *, tournament_id: TenantId
+) -> Optional[Contest]:
+    """Load this tournament's contest by id, or None when none is attached."""
     if not contest_id:
         return None
-    try:
-        return await Contest.get(PydanticObjectId(contest_id))
-    except Exception:
-        return None
+    return await get_scoped(Contest, tournament_id, contest_id)
 
 
-async def _compute_slot_violations(players: List[Player]) -> List[dict]:
+async def _compute_slot_violations(
+    players: List[Player], *, tournament_id: TenantId
+) -> List[dict]:
     """
     The single definition of what makes a slot-based squad valid.
 
@@ -68,11 +72,15 @@ async def _compute_slot_violations(players: List[Player]) -> List[dict]:
             # If slot id is malformed, skip; it won't be validated
             continue
     slots_present = (
-        await Slot.find({"_id": {"$in": present_slot_oids}}).to_list()
+        await scoped(Slot, tournament_id)
+        .find({"_id": {"$in": present_slot_oids}})
+        .to_list()
         if present_slot_oids
         else []
     )
-    slots_with_min = await Slot.find(Slot.min_select > 0).to_list()
+    slots_with_min = (
+        await scoped(Slot, tournament_id).find(Slot.min_select > 0).to_list()
+    )
 
     # Merge unique slots by id
     slots_by_id: Dict[str, Slot] = {str(s.id): s for s in slots_present}
@@ -96,7 +104,9 @@ async def _compute_slot_violations(players: List[Player]) -> List[dict]:
     return violations
 
 
-async def _validate_slot_constraints(players: List[Player]) -> None:
+async def _validate_slot_constraints(
+    players: List[Player], *, tournament_id: TenantId
+) -> None:
     """
     Enforce per-slot min/max selection rules on a squad.
 
@@ -104,7 +114,7 @@ async def _validate_slot_constraints(players: List[Player]) -> None:
     open pool and have no slot structure. Shared by the create and update
     paths so the two stay in sync.
     """
-    violations = await _compute_slot_violations(players)
+    violations = await _compute_slot_violations(players, tournament_id=tournament_id)
     if violations:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -115,7 +125,9 @@ async def _validate_slot_constraints(players: List[Player]) -> None:
         )
 
 
-async def find_teams_breaking_slot_rules(contest_id: str) -> List[str]:
+async def find_teams_breaking_slot_rules(
+    contest_id: str, *, tournament_id: TenantId
+) -> List[str]:
     """
     Existing squads in this contest that current slot rules would invalidate.
 
@@ -124,7 +136,11 @@ async def find_teams_breaking_slot_rules(contest_id: str) -> List[str]:
     otherwise leave squads built under the old rules enrolled and scoring
     without ever being checked against slot composition.
     """
-    teams = await Team.find(Team.contest_id == str(contest_id)).to_list()
+    teams = (
+        await scoped(Team, tournament_id)
+        .find(Team.contest_id == str(contest_id))
+        .to_list()
+    )
     if not teams:
         return []
 
@@ -136,7 +152,9 @@ async def find_teams_breaking_slot_rules(contest_id: str) -> List[str]:
             except Exception:
                 continue
     players = (
-        await Player.find({"_id": {"$in": list(referenced)}}).to_list()
+        await scoped(Player, tournament_id)
+        .find({"_id": {"$in": list(referenced)}})
+        .to_list()
         if referenced
         else []
     )
@@ -145,7 +163,7 @@ async def find_teams_breaking_slot_rules(contest_id: str) -> List[str]:
     broken: List[str] = []
     for team in teams:
         squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
-        violations = await _compute_slot_violations(squad)
+        violations = await _compute_slot_violations(squad, tournament_id=tournament_id)
         if len(squad) != len(team.player_ids) or violations:
             reasons = [
                 f"{v['slot']['name']}: has {v['actual']}, needs "
@@ -182,7 +200,9 @@ def _assert_allowed_teams(players: List[Player], contest: Optional[Contest]) -> 
 
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 async def create_team(
-    team_data: TeamCreate, current_user: User = Depends(get_current_active_user)
+    team_data: TeamCreate,
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Create a new fantasy team for the current user
@@ -191,7 +211,9 @@ async def create_team(
     # differently, so the format has to be known before any slot rule runs.
     contest = None
     if team_data.contest_id:
-        contest = await _resolve_contest(team_data.contest_id)
+        contest = await _resolve_contest(
+            team_data.contest_id, tournament_id=tournament_id
+        )
         if not contest:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contest_id"
@@ -210,7 +232,9 @@ async def create_team(
     # Squad size comes from the contest in auction mode, from slots otherwise.
     max_players_allowed = None
     if not auction_mode:
-        max_players_allowed = await _get_dynamic_max_players_from_slots()
+        max_players_allowed = await _get_dynamic_max_players_from_slots(
+            tournament_id=tournament_id
+        )
         if (
             max_players_allowed is not None
             and len(team_data.player_ids) > max_players_allowed
@@ -251,7 +275,11 @@ async def create_team(
                 detail=f"Invalid player ID: {pid}",
             )
 
-    players = await Player.find({"_id": {"$in": player_object_ids}}).to_list()
+    players = (
+        await scoped(Player, tournament_id)
+        .find({"_id": {"$in": player_object_ids}})
+        .to_list()
+    )
 
     # Verify all player IDs are valid
     if len(players) != len(team_data.player_ids):
@@ -264,7 +292,7 @@ async def create_team(
     _assert_allowed_teams(players, contest)
 
     if auction_mode:
-        settings = await GlobalSettings.get_instance()
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
         total_value = await validate_auction_squad(
             players=players,
             contest=contest,
@@ -273,13 +301,14 @@ async def create_team(
         )
     else:
         total_value = sum(player.price for player in players)
-        await _validate_slot_constraints(players)
+        await _validate_slot_constraints(players, tournament_id=tournament_id)
         # Enforce per-real-world-team composition limits
         await validate_team_composition(
             players=players,
             contest=contest,
             squad_size=len(team_data.player_ids),
             max_players_allowed=max_players_allowed,
+            tournament_id=tournament_id,
         )
 
     user_id = current_user.id
@@ -290,8 +319,11 @@ async def create_team(
         )
 
     if team_data.contest_id:
-        existing_contest_team = await Team.find_one(
-            Team.user_id == user_id, Team.contest_id == team_data.contest_id
+        existing_contest_team = await scoped_one(
+            Team,
+            tournament_id,
+            Team.user_id == user_id,
+            Team.contest_id == team_data.contest_id,
         )
         if existing_contest_team:
             raise HTTPException(
@@ -301,6 +333,7 @@ async def create_team(
 
     # Create team document
     team = Team(
+        tournament_id=tournament_id,
         user_id=user_id,
         team_name=team_data.team_name,
         player_ids=team_data.player_ids,
@@ -334,19 +367,17 @@ async def get_user_teams(
     current_user: User = Depends(get_current_active_user),
     skip: int = 0,
     limit: int = 100,
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
-    Get all teams created by the current user
+    Get the teams the current user created in this tournament
     """
-    teams = (
-        await Team.find(Team.user_id == current_user.id)
-        .sort("-created_at")
-        .skip(skip)
-        .limit(limit)
-        .to_list()
-    )
+    mine = scoped(Team, tournament_id).find(Team.user_id == current_user.id)
+    teams = await mine.sort("-created_at").skip(skip).limit(limit).to_list()
 
-    total = await Team.find(Team.user_id == current_user.id).count()
+    total = (
+        await scoped(Team, tournament_id).find(Team.user_id == current_user.id).count()
+    )
 
     team_responses = [
         TeamResponse(
@@ -371,16 +402,15 @@ async def get_user_teams(
 
 
 @router.get("/{team_id}", response_model=TeamResponse)
-async def get_team(team_id: str, current_user: User = Depends(get_current_active_user)):
+async def get_team(
+    team_id: str,
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
+):
     """
     Get a specific team by ID
     """
-    try:
-        team = await Team.get(PydanticObjectId(team_id))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
-        )
+    team = await get_scoped(Team, tournament_id, team_id)
 
     if not team:
         raise HTTPException(
@@ -416,16 +446,12 @@ async def update_team(
     team_id: str,
     team_data: TeamUpdate,
     current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Update a team
     """
-    try:
-        team = await Team.get(PydanticObjectId(team_id))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
-        )
+    team = await get_scoped(Team, tournament_id, team_id)
 
     if not team:
         raise HTTPException(
@@ -440,23 +466,31 @@ async def update_team(
         )
 
     # Lock edits only if team is enrolled in a contest that is currently ongoing
-    active_enrs = await TeamContestEnrollment.find(
-        {
-            "team_id": team.id,
-            "status": "active",
-        }
-    ).to_list()
+    active_enrs = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "team_id": team.id,
+                "status": "active",
+            }
+        )
+        .to_list()
+    )
     if active_enrs:
         contest_ids = [enr.contest_id for enr in active_enrs]
         now = now_ist()
-        active_contest_count = await Contest.find(
-            {
-                "_id": {"$in": contest_ids},
-                "status": {"$ne": ContestStatus.ARCHIVED},
-                "start_at": {"$lte": now},
-                "end_at": {"$gt": now},
-            }
-        ).count()
+        active_contest_count = (
+            await scoped(Contest, tournament_id)
+            .find(
+                {
+                    "_id": {"$in": contest_ids},
+                    "status": {"$ne": ContestStatus.ARCHIVED},
+                    "start_at": {"$lte": now},
+                    "end_at": {"$gt": now},
+                }
+            )
+            .count()
+        )
         if active_contest_count > 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -497,13 +531,17 @@ async def update_team(
 
             # Recalculate total value and re-validate the squad if players changed
             if "player_ids" in update_data:
-                contest = await _resolve_contest(team.contest_id)
+                contest = await _resolve_contest(
+                    team.contest_id, tournament_id=tournament_id
+                )
                 auction_mode = is_auction_contest(contest)
 
                 # Squad size comes from the contest in auction mode, from slots otherwise.
                 max_players_allowed = None
                 if not auction_mode:
-                    max_players_allowed = await _get_dynamic_max_players_from_slots()
+                    max_players_allowed = await _get_dynamic_max_players_from_slots(
+                        tournament_id=tournament_id
+                    )
                     if (
                         max_players_allowed is not None
                         and len(player_ids) > max_players_allowed
@@ -523,9 +561,11 @@ async def update_team(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"Invalid player ID: {pid}",
                         )
-                players = await Player.find(
-                    {"_id": {"$in": player_object_ids}}
-                ).to_list()
+                players = (
+                    await scoped(Player, tournament_id)
+                    .find({"_id": {"$in": player_object_ids}})
+                    .to_list()
+                )
 
                 # An id that resolves to nothing would otherwise silently shrink
                 # the squad and understate its cost against the purse.
@@ -538,7 +578,7 @@ async def update_team(
                 _assert_allowed_teams(players, contest)
 
                 if auction_mode:
-                    settings = await GlobalSettings.get_instance()
+                    settings = await GlobalSettings.get_for_tournament(tournament_id)
                     update_data["total_value"] = await validate_auction_squad(
                         players=players,
                         contest=contest,
@@ -553,8 +593,11 @@ async def update_team(
                         contest=contest,
                         squad_size=len(player_ids),
                         max_players_allowed=max_players_allowed,
+                        tournament_id=tournament_id,
                     )
-                    await _validate_slot_constraints(players)
+                    await _validate_slot_constraints(
+                        players, tournament_id=tournament_id
+                    )
 
         update_data["updated_at"] = datetime.utcnow()
 
@@ -582,7 +625,10 @@ async def update_team(
 
 @router.patch("/{team_id}/rename", response_model=TeamResponse)
 async def rename_team(
-    team_id: str, team_name: str, current_user: User = Depends(get_current_active_user)
+    team_id: str,
+    team_name: str,
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Rename a team
@@ -598,12 +644,7 @@ async def rename_team(
             detail="Team name cannot exceed 100 characters",
         )
 
-    try:
-        team = await Team.get(PydanticObjectId(team_id))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
-        )
+    team = await get_scoped(Team, tournament_id, team_id)
 
     if not team:
         raise HTTPException(
@@ -618,25 +659,33 @@ async def rename_team(
         )
 
     # Lock edits only if team is enrolled in a contest that is currently ongoing
-    active_enrs = await TeamContestEnrollment.find(
-        {
-            "team_id": team.id,
-            "status": "active",
-        }
-    ).to_list()
+    active_enrs = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "team_id": team.id,
+                "status": "active",
+            }
+        )
+        .to_list()
+    )
     if active_enrs:
         from datetime import datetime as _dt
 
         contest_ids = [enr.contest_id for enr in active_enrs]
         now = _dt.utcnow()
-        active_contest_count = await Contest.find(
-            {
-                "_id": {"$in": contest_ids},
-                "status": "ongoing",
-                "start_at": {"$lte": now},
-                "end_at": {"$gt": now},
-            }
-        ).count()
+        active_contest_count = (
+            await scoped(Contest, tournament_id)
+            .find(
+                {
+                    "_id": {"$in": contest_ids},
+                    "status": "ongoing",
+                    "start_at": {"$lte": now},
+                    "end_at": {"$gt": now},
+                }
+            )
+            .count()
+        )
         if active_contest_count > 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -667,17 +716,14 @@ async def rename_team(
 
 @router.delete("/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_team(
-    team_id: str, current_user: User = Depends(get_current_active_user)
+    team_id: str,
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Delete a team
     """
-    try:
-        team = await Team.get(PydanticObjectId(team_id))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
-        )
+    team = await get_scoped(Team, tournament_id, team_id)
 
     if not team:
         raise HTTPException(
@@ -692,12 +738,16 @@ async def delete_team(
         )
 
     # Soft-remove any active enrollments for this team to keep referential consistency
-    active_enrollments = await TeamContestEnrollment.find(
-        {
-            "team_id": team.id,
-            "status": "active",
-        }
-    ).to_list()
+    active_enrollments = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "team_id": team.id,
+                "status": "active",
+            }
+        )
+        .to_list()
+    )
 
     if active_enrollments:
         now = datetime.utcnow()

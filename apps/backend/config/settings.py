@@ -2,7 +2,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # MongoDB Database
     mongodb_url: str = Field(default="mongodb://localhost:27017", alias="MONGODB_URL")
     mongodb_db_name: str = Field(default="world-tower", alias="MONGODB_DB_NAME")
+
+    # Tenancy (app/utils/tenant.py). "single" is a legacy per-tournament
+    # service: one database holds one tournament, whose documents carry no
+    # tournament_id. "shared" is the one backend serving every tournament from
+    # walle_arena, where each request names its tournament. The default keeps
+    # the live services unchanged; the unified backend sets "shared".
+    tenancy: Literal["single", "shared"] = Field(default="single", alias="TENANCY")
 
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
@@ -115,6 +122,11 @@ class Settings(BaseSettings):
 
         combined = "^(?:" + "|".join(patterns) + ")$"
         return combined
+
+    @property
+    def shared_tenancy(self) -> bool:
+        """True on the one backend that serves every tournament."""
+        return self.tenancy == "shared"
 
     @property
     def is_production(self) -> bool:

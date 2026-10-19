@@ -81,3 +81,45 @@ class GlobalSettings(Document):
         if instance:
             return instance
         return await cls.get_instance()
+
+    @classmethod
+    async def get_own_for_tournament(
+        cls, tournament_id: Optional[PydanticObjectId]
+    ) -> "GlobalSettings":
+        """The document an admin of this tournament edits.
+
+        Not :meth:`get_for_tournament`: that falls back to the platform
+        default, and saving the fallback would change the rules of every
+        tournament still tracking it. The tournament's own row starts as a
+        copy of the default, under the ``_id`` the migration gives one
+        (scripts/unified_auth/tenant_import.py), so the two never make two
+        rows for one tournament.
+
+        On a legacy single-tournament service (``tournament_id`` None) the
+        default *is* that tournament's settings, as before.
+        """
+        if tournament_id is None:
+            return await cls.get_instance()
+
+        instance = await cls.find_one(cls.tournament_id == tournament_id)
+        if instance:
+            return instance
+        default = await cls.get_instance()
+        instance = cls(
+            **default.model_dump(exclude={"id", "tournament_id", "revision_id"}),
+            id=f"tournament:{tournament_id}",
+            tournament_id=tournament_id,
+        )
+        await instance.insert()
+        return instance
+
+
+def default_logo_path(tournament_id: Optional[PydanticObjectId]) -> str:
+    """Where a contest without its own logo finds its tournament's default.
+
+    Rendered straight into an ``<img src>``, which cannot send the tenant
+    header, so the tournament travels in the URL instead.
+    """
+    if tournament_id is None:
+        return "/api/settings/logo"
+    return f"/api/settings/logo?tournament_id={tournament_id}"

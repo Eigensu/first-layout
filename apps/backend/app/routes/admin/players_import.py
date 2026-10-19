@@ -19,6 +19,7 @@ from app.utils.import_players.import_template import (
     generate_csv_template,
     generate_xlsx_template,
 )
+from app.utils.tenant import TenantId, get_tenant, scoped
 
 router = APIRouter(prefix="/api/admin/players/import", tags=["Admin - Players Import"])
 
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/admin/players/import", tags=["Admin - Players Im
 async def get_template(
     format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Download import template file
@@ -39,7 +41,7 @@ async def get_template(
     """
     if format == "xlsx":
         # Get current slot codes for dropdown
-        slots = await Slot.find_all().limit(50).to_list()
+        slots = await scoped(Slot, tournament_id).limit(50).to_list()
         slot_codes = [slot.code for slot in slots]
 
         template_file = await generate_xlsx_template(slot_codes)
@@ -72,6 +74,7 @@ async def import_players(
     header_row: int = Form(1),
     idempotency_key: Optional[str] = Form(None),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Import players from Excel or CSV file
@@ -97,6 +100,7 @@ async def import_players(
             slot_strategy=slot_strategy,
             header_row=header_row,
             idempotency_key=idempotency_key,
+            tournament_id=tournament_id,
         )
         return result
     except ValueError as e:
@@ -110,9 +114,12 @@ async def get_import_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    """Get import history logs"""
-    query = ImportLog.find(ImportLog.user_id == str(current_user.id))
+    """Get this admin's import history in this tournament"""
+    query = scoped(ImportLog, tournament_id).find(
+        ImportLog.user_id == str(current_user.id)
+    )
     total = await query.count()
 
     skip = (page - 1) * page_size

@@ -13,12 +13,14 @@ from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
+from app.models.settings import GlobalSettings, default_logo_path
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.user import User
 from app.schemas.contest import ContestListResponse, ContestResponse
 from app.schemas.enrollment import EnrollmentResponse
 from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
+from app.services.auction import resolve_max_players_per_team
 from app.services.contest_status import (
     compute_contest_status,
     contest_status_filter_clauses,
@@ -26,6 +28,7 @@ from app.services.contest_status import (
 )
 from app.utils.dependencies import get_current_active_user, get_optional_current_user
 from app.utils.gridfs import open_contest_logo_stream
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/contests", tags=["contests"])
@@ -61,14 +64,11 @@ async def to_contest_response(
 ) -> ContestResponse:
     # Keep stored status in sync with real-time lifecycle.
     computed = await sync_contest_status(contest, persist=not skip_save)
-    from app.models.settings import GlobalSettings
-    from app.services.auction import resolve_max_players_per_team
-
-    settings = await GlobalSettings.get_instance()
+    settings = await GlobalSettings.get_for_tournament(contest.tournament_id)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         if settings.default_contest_logo_file_id:
-            logo_url = "/api/settings/logo"
+            logo_url = default_logo_path(contest.tournament_id)
 
     return ContestResponse(
         id=str(contest.id),
@@ -100,23 +100,22 @@ async def list_public_contests(
     page_size: Annotated[int, Query(ge=1, le=100)] = 10,
     status: Annotated[ContestStatus | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     conditions = [Contest.visibility == ContestVisibility.PUBLIC]
 
     if status:
         conditions.extend(contest_status_filter_clauses(status))
 
-    query = Contest.find(conditions[0]) if conditions else Contest.find_all()
-    for cond in conditions[1:]:
-        query = query.find(cond)
-
     if q:
-        # Text search on code or name, then re-apply filters
-        query = Contest.find(
+        # Text search on code or name, alongside the filters
+        conditions.append(
             Or(RegEx(Contest.code, q, options="i"), RegEx(Contest.name, q, options="i"))
         )
-        for cond in conditions:
-            query = query.find(cond)
+
+    query = scoped(Contest, tournament_id)
+    for cond in conditions:
+        query = query.find(cond)
 
     total = await query.count()
     skip = (page - 1) * page_size
@@ -133,14 +132,21 @@ async def list_public_contests(
 
 
 @router.get("/enrollments/me", response_model=List[EnrollmentResponse])
-async def list_my_enrollments(current_user: User = Depends(get_current_active_user)):
-    """Return active contest enrollments for the authenticated user."""
-    enrollments = await TeamContestEnrollment.find(
-        {
-            "user_id": current_user.id,
-            "status": "active",
-        }
-    ).to_list()
+async def list_my_enrollments(
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
+):
+    """Return the authenticated user's active enrollments in this tournament."""
+    enrollments = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "user_id": current_user.id,
+                "status": "active",
+            }
+        )
+        .to_list()
+    )
 
     results: List[EnrollmentResponse] = []
     for enr in enrollments:
@@ -159,8 +165,10 @@ async def list_my_enrollments(current_user: User = Depends(get_current_active_us
 
 
 @router.get("/{contest_id}", response_model=ContestResponse)
-async def get_public_contest(contest_id: str):
-    contest = await Contest.get(contest_id)
+async def get_public_contest(
+    contest_id: str, tournament_id: TenantId = Depends(get_tenant)
+):
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest or contest.visibility != ContestVisibility.PUBLIC:
         raise HTTPException(status_code=404, detail="Contest not found")
     return await to_contest_response(contest)
@@ -168,21 +176,25 @@ async def get_public_contest(contest_id: str):
 
 @router.get("/{contest_id}/me", response_model=ContestResponse)
 async def get_contest_if_enrolled(
-    contest_id: str, current_user: User = Depends(get_current_active_user)
+    contest_id: str,
+    current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Return contest details if it's public OR the current user is enrolled (active)."""
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
     if contest.visibility == ContestVisibility.PUBLIC:
         return await to_contest_response(contest)
     # Check enrollment for private contests
-    enr = await TeamContestEnrollment.find_one(
+    enr = await scoped_one(
+        TeamContestEnrollment,
+        tournament_id,
         {
             "contest_id": contest.id,
             "user_id": current_user.id,
             "status": EnrollmentStatus.ACTIVE,
-        }
+        },
     )
     if not enr:
         raise HTTPException(status_code=404, detail="Contest not found")
@@ -195,18 +207,23 @@ async def contest_leaderboard(
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=1000),
     current_user: Optional[User] = Depends(get_optional_current_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest or contest.visibility != ContestVisibility.PUBLIC:
         raise HTTPException(status_code=404, detail="Contest not found")
 
     # fetch active enrollments
-    enrollments = await TeamContestEnrollment.find(
-        {
-            "contest_id": contest.id,
-            "status": EnrollmentStatus.ACTIVE,
-        }
-    ).to_list()
+    enrollments = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "contest_id": contest.id,
+                "status": EnrollmentStatus.ACTIVE,
+            }
+        )
+        .to_list()
+    )
 
     if not enrollments:
         return LeaderboardResponseSchema(entries=[], currentUserEntry=None)
@@ -214,7 +231,7 @@ async def contest_leaderboard(
     team_ids = [enr.team_id for enr in enrollments]
 
     # fetch teams in batch
-    teams = await Team.find({"_id": {"$in": team_ids}}).to_list()
+    teams = await scoped(Team, tournament_id).find({"_id": {"$in": team_ids}}).to_list()
     teams_by_id: Dict[str, Team] = {str(t.id): t for t in teams}
 
     # fetch users in batch
@@ -245,12 +262,16 @@ async def contest_leaderboard(
     # 2) Fetch all PlayerContestPoints for this contest once
     pcp_docs = []
     if all_player_ids:
-        pcp_docs = await PlayerContestPoints.find(
-            {
-                "contest_id": contest.id,
-                "player_id": {"$in": list(all_player_ids)},
-            }
-        ).to_list()
+        pcp_docs = (
+            await scoped(PlayerContestPoints, tournament_id)
+            .find(
+                {
+                    "contest_id": contest.id,
+                    "player_id": {"$in": list(all_player_ids)},
+                }
+            )
+            .to_list()
+        )
 
     # 3) Build lookup: player_id(str) -> points(float)
     pcp_points_map: Dict[str, float] = {
@@ -330,6 +351,7 @@ async def enroll_in_contest(
     contest_id: str,
     body: EnrollRequest,
     current_user: User = Depends(get_current_active_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Enroll the authenticated user's team into a public contest.
 
@@ -339,7 +361,7 @@ async def enroll_in_contest(
     - Team must belong to the current user
     - Idempotent: if already enrolled and active, return existing enrollment
     """
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest or contest.visibility != "public":
         raise HTTPException(status_code=404, detail="Contest not found")
 
@@ -352,9 +374,7 @@ async def enroll_in_contest(
     # validate team ownership (avoid exceptions for validation)
     if not ObjectId.is_valid(body.team_id):
         raise HTTPException(status_code=400, detail="Invalid team id")
-    tid = PydanticObjectId(body.team_id)
-
-    team = await Team.get(tid)
+    team = await get_scoped(Team, tournament_id, body.team_id)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
@@ -378,7 +398,11 @@ async def enroll_in_contest(
             PydanticObjectId(pid) for pid in team.player_ids if _OID.is_valid(pid)
         ]
         if pid_oids:
-            player_docs = await Player.find({"_id": {"$in": pid_oids}}).to_list()
+            player_docs = (
+                await scoped(Player, tournament_id)
+                .find({"_id": {"$in": pid_oids}})
+                .to_list()
+            )
             disallowed = [
                 p.name
                 for p in player_docs
@@ -395,12 +419,14 @@ async def enroll_in_contest(
                 )
 
     # Idempotent check
-    existing = await TeamContestEnrollment.find_one(
+    existing = await scoped_one(
+        TeamContestEnrollment,
+        tournament_id,
         {
             "team_id": team.id,
             "contest_id": contest.id,
             "status": EnrollmentStatus.ACTIVE,
-        }
+        },
     )
     if existing:
         return EnrollmentResponse(
@@ -413,12 +439,14 @@ async def enroll_in_contest(
             removed_at=existing.removed_at,
         )
 
-    existing_user_enrollment = await TeamContestEnrollment.find_one(
+    existing_user_enrollment = await scoped_one(
+        TeamContestEnrollment,
+        tournament_id,
         {
             "user_id": current_user.id,
             "contest_id": contest.id,
             "status": EnrollmentStatus.ACTIVE,
-        }
+        },
     )
     if existing_user_enrollment:
         raise HTTPException(
@@ -431,6 +459,7 @@ async def enroll_in_contest(
     assert contest.id is not None, "Contest ID should not be None"
     assert current_user.id is not None, "User ID should not be None"
     enr = TeamContestEnrollment(
+        tournament_id=tournament_id,
         team_id=team.id,
         contest_id=contest.id,
         user_id=current_user.id,
@@ -463,15 +492,13 @@ async def get_team_in_contest(
     contest_id: str,
     team_id: str,
     current_user: Optional[User] = Depends(get_optional_current_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
-    try:
-        team = await Team.get(PydanticObjectId(team_id))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Team not found")
+    team = await get_scoped(Team, tournament_id, team_id)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
@@ -487,12 +514,14 @@ async def get_team_in_contest(
             detail="Team details visible when contest is ongoing or completed",
         )
 
-    enr = await TeamContestEnrollment.find_one(
+    enr = await scoped_one(
+        TeamContestEnrollment,
+        tournament_id,
         {
             "team_id": team.id,
             "contest_id": contest.id,
             "status": EnrollmentStatus.ACTIVE,
-        }
+        },
     )
     if not enr:
         raise HTTPException(
@@ -503,19 +532,27 @@ async def get_team_in_contest(
     player_ids_valid = [
         PydanticObjectId(pid) for pid in team.player_ids if ObjectId.is_valid(pid)
     ]
-    players = await Player.find({"_id": {"$in": player_ids_valid}}).to_list()
+    players = (
+        await scoped(Player, tournament_id)
+        .find({"_id": {"$in": player_ids_valid}})
+        .to_list()
+    )
 
     players_by_id: Dict[str, Player] = {str(p.id): p for p in players}
 
     # Fetch per-contest points for these players
     pcp_docs = []
     if player_ids_valid:
-        pcp_docs = await PlayerContestPoints.find(
-            {
-                "contest_id": contest.id,
-                "player_id": {"$in": player_ids_valid},
-            }
-        ).to_list()
+        pcp_docs = (
+            await scoped(PlayerContestPoints, tournament_id)
+            .find(
+                {
+                    "contest_id": contest.id,
+                    "player_id": {"$in": player_ids_valid},
+                }
+            )
+            .to_list()
+        )
     pcp_points_map: Dict[str, float] = {
         str(doc.player_id): float(doc.points or 0.0) for doc in pcp_docs
     }
@@ -561,7 +598,11 @@ async def get_team_in_contest(
 
 @router.get("/{contest_id}/logo")
 async def get_contest_logo(contest_id: str):
-    """Serve the contest logo file"""
+    """Serve the contest logo file
+
+    Not tenant-scoped, like the other image routes: an ``<img>`` cannot send
+    the tenant header, and the id names one public image.
+    """
     contest = await Contest.get(contest_id)
     if not contest or not contest.logo_file_id:
         raise HTTPException(

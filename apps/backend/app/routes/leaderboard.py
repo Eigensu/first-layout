@@ -9,11 +9,12 @@ from app.models.team import Team
 from app.models.user import User
 from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
 from app.utils.dependencies import get_optional_current_user
+from app.utils.tenant import TenantId, get_tenant, scoped
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
 
-async def _compute_team_points(team: Team) -> float:
+async def _compute_team_points(team: Team, *, tournament_id: TenantId) -> float:
     """Sum current points of all players in a team."""
     player_object_ids = []
     for pid in team.player_ids:
@@ -23,21 +24,26 @@ async def _compute_team_points(team: Team) -> float:
             continue
     if not player_object_ids:
         return 0.0
-    players = await PublicPlayer.find({"_id": {"$in": player_object_ids}}).to_list()
+    players = (
+        await scoped(PublicPlayer, tournament_id)
+        .find({"_id": {"$in": player_object_ids}})
+        .to_list()
+    )
     return float(sum(float(p.points or 0.0) for p in players))
 
 
 @router.get("", response_model=LeaderboardResponseSchema)
 async def get_leaderboard(
     current_user: Optional[User] = Depends(get_optional_current_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ) -> LeaderboardResponseSchema:
     """
-    Get the global leaderboard with all teams ranked by total points.
+    Get this tournament's leaderboard with all its teams ranked by total points.
     If user is authenticated, also returns their position.
     """
     try:
-        # Fetch all teams
-        teams = await Team.find_all().to_list()
+        # Fetch all of this tournament's teams
+        teams = await scoped(Team, tournament_id).to_list()
 
         # If no teams exist, return mock data for development
         if not teams:
@@ -64,9 +70,11 @@ async def get_leaderboard(
         # 2) Fetch all needed players once
         players = []
         if all_player_ids:
-            players = await PublicPlayer.find(
-                {"_id": {"$in": list(all_player_ids)}}
-            ).to_list()
+            players = (
+                await scoped(PublicPlayer, tournament_id)
+                .find({"_id": {"$in": list(all_player_ids)}})
+                .to_list()
+            )
 
         # 3) Build a points lookup
         player_points_map = {str(p.id): float(p.points or 0.0) for p in players}

@@ -18,6 +18,7 @@ from app.schemas.admin.player import (
     PlayerUpdate,
 )
 from app.utils.dependencies import get_admin_user
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
 
 router = APIRouter(prefix="/api/admin/players", tags=["Admin - Players"])
 
@@ -28,9 +29,11 @@ async def delete_all_players(
         ..., description="Safety confirmation phrase. Must be DELETE_ALL_PLAYERS"
     ),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
-    Delete all players with strict safety confirmation and team cleanup.
+    Delete all of this tournament's players, with strict safety confirmation
+    and team cleanup.
     Requires authentication.
     """
     if confirm != "DELETE_ALL_PLAYERS":
@@ -39,10 +42,10 @@ async def delete_all_players(
             detail="Invalid confirmation phrase. Use DELETE_ALL_PLAYERS",
         )
 
-    existing_players = await Player.find_all().count()
+    existing_players = await scoped(Player, tournament_id).count()
 
     # Clear team references to removed players to keep data consistent.
-    team_update = await Team.find_all().update_many(
+    team_update = await scoped(Team, tournament_id).update_many(
         {
             "$set": {
                 "player_ids": [],
@@ -56,8 +59,8 @@ async def delete_all_players(
     )
 
     # Remove contest points as they are tied to players that are being deleted.
-    contest_points_deleted = await PlayerContestPoints.find_all().delete()
-    players_deleted = await Player.find_all().delete()
+    contest_points_deleted = await scoped(PlayerContestPoints, tournament_id).delete()
+    players_deleted = await scoped(Player, tournament_id).delete()
 
     return {
         "message": "All players deleted successfully",
@@ -79,6 +82,7 @@ async def get_players(
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Get all players with pagination, search, and filters.
@@ -99,10 +103,9 @@ async def get_players(
         query_conditions.append(Player.status == status)
 
     # Execute query with filters
+    query = scoped(Player, tournament_id)
     if query_conditions:
-        query = Player.find(And(*query_conditions))
-    else:
-        query = Player.find_all()
+        query = query.find(And(*query_conditions))
 
     # Get total count
     total = await query.count()
@@ -145,12 +148,13 @@ async def get_players(
 async def get_player(
     player_id: str,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Get a specific player by ID.
     Requires authentication.
     """
-    player = await Player.get(player_id)
+    player = await get_scoped(Player, tournament_id, player_id)
 
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -174,13 +178,16 @@ async def get_player(
 async def create_player(
     player_data: PlayerCreate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Create a new player.
     Requires authentication.
     """
     # Check if player with same name already exists
-    existing_player = await Player.find_one(Player.name == player_data.name)
+    existing_player = await scoped_one(
+        Player, tournament_id, Player.name == player_data.name
+    )
     if existing_player:
         raise HTTPException(
             status_code=400,
@@ -189,6 +196,7 @@ async def create_player(
 
     # Create player
     player = Player(
+        tournament_id=tournament_id,
         name=player_data.name,
         team=player_data.team,
         points=player_data.points,
@@ -223,12 +231,13 @@ async def update_player(
     player_id: str,
     player_data: PlayerUpdate,
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Update a player.
     Requires authentication.
     """
-    player = await Player.get(player_id)
+    player = await get_scoped(Player, tournament_id, player_id)
 
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -246,7 +255,11 @@ async def update_player(
         # If points changed, recompute totals for all impacted teams
         if "points" in update_data:
             # Teams store player_ids as strings of ObjectId
-            impacted_teams = await Team.find({"player_ids": player_id}).to_list()
+            impacted_teams = (
+                await scoped(Team, tournament_id)
+                .find({"player_ids": player_id})
+                .to_list()
+            )
 
             # Collect all needed player ObjectIds in one pass
             all_player_ids = set()
@@ -265,9 +278,11 @@ async def update_player(
             # Fetch all players needed across all teams in a single query
             players = []
             if all_player_ids:
-                players = await PublicPlayer.find(
-                    {"_id": {"$in": list(all_player_ids)}}
-                ).to_list()
+                players = (
+                    await scoped(PublicPlayer, tournament_id)
+                    .find({"_id": {"$in": list(all_player_ids)}})
+                    .to_list()
+                )
 
             # Build lookup of player -> points
             player_points_map = {p.id: float(p.points or 0.0) for p in players}
@@ -308,6 +323,7 @@ async def delete_player(
         ),
     ),
     current_user: User = Depends(get_admin_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Delete a player. Blocks by default while squads still reference them.
@@ -320,12 +336,14 @@ async def delete_player(
 
     Requires authentication.
     """
-    player = await Player.get(player_id)
+    player = await get_scoped(Player, tournament_id, player_id)
 
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    referencing_teams = await Team.find({"player_ids": player_id}).to_list()
+    referencing_teams = (
+        await scoped(Team, tournament_id).find({"player_ids": player_id}).to_list()
+    )
 
     if referencing_teams and not force:
         shown = [t.team_name for t in referencing_teams[:5]]
@@ -365,6 +383,7 @@ async def delete_player(
     # trail of who deleted it or what it was — capture that here rather than
     # leaving it unanswerable later (see PR #28 discussion).
     await AdminActionLog(
+        tournament_id=tournament_id,
         admin_id=str(current_user.id),
         action="player.delete",
         target_type="player",
