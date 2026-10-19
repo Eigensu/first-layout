@@ -1362,7 +1362,9 @@ differs from the pipeline above:
   rank is always the rank its leaderboard showed. `total_points` sums each contest's
   entry; there is one active entry per person per contest.
 - It **repairs** as it goes. Anyone with a team but no row gets one, dated from their
-  first team, and a member who has played is marked `played`.
+  first team, and a member who has played is marked `played`. `last_active_at` is
+  rebuilt from their latest team or entry, but only ever moved forward, so a later
+  play written inline is kept. The profile orders tournaments by it.
 - Flags are `--all-live`, `--tournament <slug>` (repeatable) and `--all`, which takes
   every tournament, archived included, for the cutover fill below. `--since` is not
   built: a pass over one live tournament is cheap.

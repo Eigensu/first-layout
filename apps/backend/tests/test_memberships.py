@@ -8,7 +8,7 @@ Only the shared backend has memberships. A legacy single-tournament service
 writes none.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -38,7 +38,7 @@ from app.services.membership_stats import refresh_tournament
 from app.utils.dependencies import get_current_active_user
 from app.utils.security import get_password_hash
 from app.utils.tenant import TENANT_HEADER
-from app.utils.timezone import now_ist
+from app.utils.timezone import now_ist, to_ist
 from config.settings import settings
 
 ALPHA = {TENANT_HEADER: "alpha"}
@@ -398,6 +398,43 @@ async def test_a_failed_write_does_not_fail_the_sign_in(
     assert "membership write failed" in caplog.text
 
 
+async def test_a_failed_first_play_date_does_not_fail_the_entry(
+    shared, tournaments, squad, http, monkeypatch, caplog
+):
+    """The entry is saved before the membership is touched, so an error from
+    the set-once write must not reach the player either."""
+    alpha, _ = tournaments
+    contest, player_ids = squad
+    user = await _user("rahul")
+    await record_sign_in(user, alpha.id)
+    team = Team(
+        tournament_id=alpha.id, user_id=user.id, team_name="t", player_ids=player_ids
+    )
+    await team.insert()
+    real = TournamentMembership.get_motor_collection()
+
+    class FailsOnSetOnce:
+        async def update_one(self, query, update, **kwargs):
+            if "first_played_at" in query:
+                raise PyMongoError("primary stepped down")
+            return await real.update_one(query, update, **kwargs)
+
+    monkeypatch.setattr(membership_service, "_collection", lambda: FailsOnSetOnce())
+
+    as_user(user)
+    response = await http.post(
+        f"/api/contests/{contest.id}/enroll",
+        headers=ALPHA,
+        json={"team_id": str(team.id)},
+    )
+
+    assert response.status_code == 200, response.text
+    assert "membership write failed" in caplog.text
+    row = await _row(user, alpha)
+    assert row.status == STATUS_PLAYED
+    assert row.first_played_at is None  # left for the job
+
+
 async def test_a_row_created_concurrently_still_gets_this_write(
     shared, tournaments, monkeypatch
 ):
@@ -556,6 +593,7 @@ async def season(shared, tournaments):
             user_id=owner.id,
             contest_id=contest.id,
             status=status,
+            enrolled_at=made_at + timedelta(hours=1),
         ).insert()
 
     active = EnrollmentStatus.ACTIVE
@@ -623,6 +661,35 @@ async def test_the_job_dates_first_play_for_a_registered_member(season):
     await refresh_tournament(alpha)
     ann = await _row(people["ann"], alpha)
     assert ann.first_played_at.replace(tzinfo=None) == datetime(2026, 10, 1, 9, 0)
+
+
+def _utc(value):
+    """Naive UTC, whatever zone a date was read back with."""
+    return to_ist(value).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+async def test_the_job_rebuilds_latest_activity(season):
+    """The inline writes never recorded ann's or bob's play: the job does."""
+    alpha, _, _, people = season
+    await refresh_tournament(alpha)
+
+    # ann's second team, entered an hour after it was made; bob's first entry.
+    ann = await _row(people["ann"], alpha)
+    bob = await _row(people["bob"], alpha)
+    assert _utc(ann.last_active_at) == datetime(2026, 10, 2, 10, 0)
+    assert _utc(bob.last_active_at) == datetime(2026, 10, 1, 10, 0)
+
+
+async def test_the_job_keeps_later_activity_written_inline(season):
+    alpha, _, _, people = season
+    cat = await _row(people["cat"], alpha)
+    cat.last_active_at = datetime(2026, 10, 15, 12, 0)
+    await cat.save()
+
+    await refresh_tournament(alpha)
+
+    cat = await _row(people["cat"], alpha)
+    assert _utc(cat.last_active_at) == datetime(2026, 10, 15, 12, 0)
 
 
 async def test_the_job_leaves_other_tournaments_alone(season):

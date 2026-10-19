@@ -10,6 +10,7 @@ one now, and a member who has played is marked as having played.
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict
 
 from beanie import PydanticObjectId
@@ -26,7 +27,7 @@ from app.models.tournament_membership import STATUS_PLAYED, TournamentMembership
 from app.models.user import User
 from app.services.standings import contest_standings
 from app.utils.tenant import scoped
-from app.utils.timezone import now_ist
+from app.utils.timezone import now_ist, to_ist
 
 
 @dataclass
@@ -56,6 +57,7 @@ async def refresh_tournament(tournament: Tournament) -> RefreshReport:
                         "_id": "$user_id",
                         "count": {"$sum": 1},
                         "first": {"$min": "$created_at"},
+                        "last": {"$max": "$created_at"},
                     }
                 }
             ]
@@ -69,11 +71,27 @@ async def refresh_tournament(tournament: Tournament) -> RefreshReport:
         scoped(TeamContestEnrollment, tid)
         .find({"status": EnrollmentStatus.ACTIVE})
         .aggregate(
-            [{"$group": {"_id": "$user_id", "contests": {"$addToSet": "$contest_id"}}}]
+            [
+                {
+                    "$group": {
+                        "_id": "$user_id",
+                        "contests": {"$addToSet": "$contest_id"},
+                        "last": {"$max": "$enrolled_at"},
+                    }
+                }
+            ]
         )
         .to_list()
     )
     contests_count = {row["_id"]: len(row["contests"]) for row in entries}
+
+    # Latest team or entry, for rows whose inline write missed it: the profile
+    # orders tournaments by it.
+    last_active: Dict[PydanticObjectId, datetime] = {}
+    for row in teams + entries:
+        if row["last"] is not None:
+            seen = to_ist(row["last"])
+            last_active[row["_id"]] = max(last_active.get(row["_id"], seen), seen)
 
     best_rank: Dict[PydanticObjectId, int] = {}
     total_points: Dict[PydanticObjectId, float] = defaultdict(float)
@@ -135,6 +153,22 @@ async def refresh_tournament(tournament: Tournament) -> RefreshReport:
         if user_id in played:
             update["status"] = STATUS_PLAYED
         writes.append(UpdateOne({"_id": row.id}, {"$set": update}))
+        if user_id in last_active:
+            # Only forward: a later play written inline since this job read
+            # is kept. The condition is in the query, so it holds even then.
+            latest = last_active[user_id]
+            writes.append(
+                UpdateOne(
+                    {
+                        "_id": row.id,
+                        "$or": [
+                            {"last_active_at": None},
+                            {"last_active_at": {"$lt": latest}},
+                        ],
+                    },
+                    {"$set": {"last_active_at": latest}},
+                )
+            )
         if user_id in played and row.first_played_at is None:
             writes.append(
                 UpdateOne(
