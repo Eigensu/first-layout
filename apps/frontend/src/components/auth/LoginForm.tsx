@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -11,22 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
 import { GoogleSignInButton } from "./GoogleSignInButton";
-
-// Sign in with a mobile number or email. A username still works while people
-// move over (the backend tries it last, and asks for a mobile or email when two
-// accounts share it), so anything of three characters or more is accepted.
-// The field stays `username`: that is the key POST /api/auth/login reads.
-const loginSchema = z.object({
-  username: z
-    .string()
-    .min(1, "Enter your mobile number or email")
-    .refine((v) => v.trim().length >= 3, {
-      message: "Enter a valid mobile number or email",
-    }),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
+import { loginSchema, type LoginFormData } from "./loginSchema";
 
 export function LoginForm() {
   const router = useRouter();

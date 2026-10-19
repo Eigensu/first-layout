@@ -21,7 +21,7 @@ function currentSlug(): string | null {
     : getTournamentSlugFromHost(window.location.host);
 }
 
-function Logo({ tournament }: { tournament: AnyTournament }) {
+function Logo({ tournament }: Readonly<{ tournament: AnyTournament }>) {
   return (
     <div className="h-11 w-11 rounded-xl overflow-hidden bg-slate-200 flex items-center justify-center text-base font-bold text-slate-700 shrink-0">
       {tournament.logo_url ? (
@@ -37,7 +37,10 @@ function Logo({ tournament }: { tournament: AnyTournament }) {
   );
 }
 
-function Name({ tournament, here }: { tournament: AnyTournament; here: string | null }) {
+function Name({
+  tournament,
+  here,
+}: Readonly<{ tournament: AnyTournament; here: string | null }>) {
   const link = tournamentLink(tournament, here);
   if (!link) {
     return <>{tournament.name}</>;
@@ -60,10 +63,10 @@ function Name({ tournament, here }: { tournament: AnyTournament; here: string | 
 export function MyTournamentsSection({
   tournaments,
   username,
-}: {
+}: Readonly<{
   tournaments: MyTournaments;
   username?: string;
-}) {
+}>) {
   const { played, registered_only } = tournaments;
   if (played.length === 0 && registered_only.length === 0) {
     return null;
