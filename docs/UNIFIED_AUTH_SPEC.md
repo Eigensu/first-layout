@@ -27,7 +27,7 @@ These sixteen answers drive everything below. Changing one changes the design.
 | 12 | Changing your email | Users can **change their email from their profile**, verified by a code sent to the new address (§5.7). |
 | 13 | Scope | Only **lpcl and fifth** are running tournaments, both on `main`. m11, third and mtc are retired — services archived, but their **user and participation data still migrates** so profiles show full history. |
 | 14 | End state | **One backend, one database.** A tournament is a registry row — not a deployment, not a database, and not a provisioning step. Game data is tagged with `tournament_id` (§3.5). |
-| 15 | Admin | All admin on the **apex** `wallearena.com`, a page per tournament, slug carried in the **API path** (§4.7). |
+| 15 | Admin | **On each tournament's own subdomain** (decided 2026-10-19, in place of the apex console first planned). Being admin is a role in one tournament; platform admins run the registry and every tournament (§4.7). |
 | 16 | Participation stats | **Materialised by a job**, not computed per request and not maintained by write hooks. The membership row is upserted inline on join; all numbers come from the refresh job, which runs for **live tournaments only** and **freezes** a tournament's stats once it is `completed` (§6.2). |
 
 ---
@@ -873,56 +873,74 @@ rather than accidental, and makes a future "sign out everywhere" feasible.
 
 ### 4.7 Admin
 
+**Built (stage D, 2026-10-19), with admin kept on each tournament's subdomain.** It is
+in `app/utils/dependencies.py`:
+
 ```python
-async def get_platform_admin(user: User = Depends(get_current_active_user)) -> User:
-    if not user.is_platform_admin:
-        raise HTTPException(403, detail="Platform admin access required")
-    return user
+def is_platform_admin(user) -> bool:
+    if not settings.shared_tenancy:
+        return user.is_admin            # a legacy service is its own platform
+    return user.is_platform_admin       # the allowlist; legacy is_admin is ignored
 
-async def get_tournament_admin(
-    request: Request, user: User = Depends(get_current_active_user)
-) -> User:
-    if user.is_platform_admin:
-        return user
-    slug = await get_tenant_slug(request)
-    membership = await TournamentMembership.find_one(
+async def is_tournament_admin(user, tournament_id) -> bool:
+    if is_platform_admin(user):
+        return True
+    if not settings.shared_tenancy or tournament_id is None:
+        return False
+    return await TournamentMembership.find_one(
         TournamentMembership.user_id == user.id,
-        TournamentMembership.tournament_slug == slug,
-    )
-    if not membership or membership.role != "admin":
-        raise HTTPException(403, detail="Admin access required for this tournament")
-    return user
+        TournamentMembership.tournament_id == tournament_id,
+        TournamentMembership.role == ROLE_ADMIN,
+    ) is not None
+
+async def get_platform_admin(user = Depends(get_current_active_user)): ...
+async def get_tournament_admin(
+    user = Depends(get_current_active_user), tournament_id = Depends(get_tenant)
+): ...
 ```
 
-**Admin lives on the apex.** All admin is served from `wallearena.com`, which carries
-no tournament subdomain — so `get_tenant_slug` has nothing to read from the host, and
-the tenant has to be explicit in the request.
+**Where admin lives: on the subdomain.** `rspl.wallearena.com/admin` administers rspl.
+The tournament comes from `X-Tournament-Slug`, resolved by `get_tenant` exactly as for
+every other tenant route. The lookup uses `tournament_id`, not the denormalised slug,
+so a renamed slug cannot leave an admin role behind.
 
-It mirrors the admin UI one-to-one: the admin app has a page **per tournament**
-(`wallearena.com/admin/lpcl/players`), so the slug already exists in the browser URL,
-and putting it in the API path keeps the two in agreement:
+The earlier design here put all admin on the apex, with the slug in the API path. Its
+argument against a header was that stale client state could send `fifth` while the
+browser URL says `lpcl`. That does not apply to this header: `tenantHeaders()` reads
+it from `window.location.host` on every request, so the page and the request name the
+same tournament by construction. The apex console remains a later option for platform
+admins who switch tournaments often. Nothing here would need undoing for it.
 
-```
-POST   /api/admin/lpcl/players
-GET    /api/admin/fifth/contests
-PATCH  /api/admin/lpcl/contests/{code}
-```
-
-A header-carried slug would let the browser URL say `lpcl` while stale client state
-sends `fifth` — the exact way an admin edits the wrong tournament without noticing.
-The path also makes `admin_action_logs` unambiguous for free, and reads correctly in
-access logs.
-
-Route mapping:
+Route mapping, enforced by `tests/test_tournament_admin.py`, which fails if any
+`/api/admin` route has a guard other than the one below:
 
 | Routes | Guard |
 |---|---|
-| `/api/admin/tournaments/*` (the registry), `/api/admin/settings/*` | `get_platform_admin` |
-| `/api/admin/{slug}/*` (players, slots, contests, teams/users, imports) | `get_tournament_admin`, slug from the path |
+| `/api/admin/tournaments/*` (the registry) | `get_platform_admin` |
+| every other `/api/admin/*` route (contests, players, imports, slots, teams/users, settings) and the sponsor and carousel writes | `get_tournament_admin` |
 
-`get_tournament_admin` resolves the slug from the path parameter rather than the host,
-validates it against the registry, and then checks the caller's membership role for
-that tournament. A platform admin passes for any slug.
+Settings are a tournament admin's, not a platform admin's, because each tournament
+now has its own (§3.5).
+
+- **Under `shared`:** a platform admin passes for every tournament; anyone else needs
+  an admin membership in the tournament the request names. Admin of one tournament is
+  nothing in another. The global `is_admin` grants nothing: the migration clears it,
+  and honouring a stray one would make every legacy admin an admin of every
+  tournament.
+- **Under `single`:** unchanged. `is_admin` passes both guards, and memberships and
+  `is_platform_admin`, which a legacy database does not have, grant nothing.
+
+`GET/PUT/PATCH /api/users/me` report `is_admin` for the tournament the request names
+(`get_optional_tenant`), plus `is_platform_admin`. The frontend shows its admin pages,
+and the Tournaments tab, from these. That route never fails over the tournament: with
+no slug, or an unknown or archived one, it reports admin of nothing. The frontend
+signs people out when `/me` fails.
+
+**One route changed what it lists.** `GET /api/admin/users-with-teams` paged over
+every account and then dropped those with no team in this tournament. Once all
+tournaments share one `users` collection, most pages came back empty, `total`
+counted the whole platform, and a name search could fill its page with other
+tournaments' players. It now pages over this tournament's team owners only.
 
 Migration sets `role="admin"` on the membership for every legacy row with
 `is_admin: true`; `is_platform_admin` is set **only** from an explicit allowlist you
@@ -1784,7 +1802,8 @@ backend, and the two live tournaments move to it together.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
    redeploy.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
-   `/api/users/me/tournaments`, create a team, enrol in a contest, admin on the apex.
+   `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
+   tournament's subdomain, and the Tournaments tab as a platform admin.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
    `fourth-layout-mtc`, `fifth-layout`.
 
@@ -1995,7 +2014,7 @@ These block specific phases; everything else can be built without them.
 | C2b | ~~Close the reset gate~~ **shipped** — endpoint, schema, orphaned modal and dead API wrapper deleted; `client.ts` structured-error fix (§4.2) | — |
 | C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
-| D | Admin guard split + route mapping + tests | B |
+| D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job | B, R21 (§13.8, fixed in #45) |
 | F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
@@ -2510,10 +2529,12 @@ tournament's contest was a 404 under the other's slug.
   `GET /api/players/{id}/hot?contest_id=`, projected onto
   `TeamContestEnrollment.team_id`. Beanie projects onto a model class, not a field,
   and raised `TypeError`. *Fixed here: it reads whole enrolment documents.*
-- [ ] **Under `TENANCY=shared`, admin is closed until stage D.** The admin routes still
+- [x] **Under `TENANCY=shared`, admin is closed until stage D.** The admin routes still
   check the global `is_admin`, and Phase 2 sets it false on every unified account,
   moving admin to the membership role (§4.7): the dry run's `walle_arena` has no
   `is_admin` user. So `get_admin_user` refuses everyone. That fails closed, since no
   tournament's admin can reach another's through the header, but it makes D (apex
   admin, slug in the path, checked against the membership role or the platform-admin
-  list) a gate for stage I rather than a refinement.
+  list) a gate for stage I rather than a refinement. *Fixed by stage D (§4.7): admin
+  stays on the subdomain, and `get_tournament_admin` checks the membership role for
+  the tournament in the header, or the platform-admin list.*

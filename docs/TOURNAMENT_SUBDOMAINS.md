@@ -43,7 +43,7 @@ Backend pieces:
   one document per tournament, `slug` unique.
 - Admin CRUD: `POST/GET/PUT/DELETE /api/admin/tournaments` plus
   `GET /api/admin/tournaments/check-slug/{slug}` for the live availability
-  check in the create form. Admin-only (`get_admin_user`).
+  check in the create form. Platform admins only (`get_platform_admin`).
 - Public resolution: `GET /api/tournaments/by-slug/{slug}` and
   `GET /api/tournaments` (non-archived list). No auth.
 
@@ -156,10 +156,11 @@ change touches those services. To fold them in over time:
 >   header is ignored and the deployment sees all of its own data, as before.
 >
 > A service whose `TENANCY` does not match its database refuses to start
-> (`config/startup_checks.py`). Admin still lives on each subdomain, guarded
-> by the global `is_admin` flag, which the migration clears on every unified
-> account, so on the shared backend admin is closed until per-tournament roles
-> on the apex land (stage D of `docs/UNIFIED_AUTH_SPEC.md`).
+> (`config/startup_checks.py`). Admin lives on each subdomain. Under `shared`
+> you are admin there if your membership in that tournament has the admin
+> role, or if you are a platform admin; only platform admins see the
+> Tournaments tab. Under `single`, the global `is_admin` flag decides, as
+> before (§4.7 of `docs/UNIFIED_AUTH_SPEC.md`).
 
 ## Local development
 
