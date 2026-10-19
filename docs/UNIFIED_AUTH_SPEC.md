@@ -693,7 +693,9 @@ better: it fails for the right reason and cannot be silenced with a comment.
 > list endpoint, public and admin, returns only its own tournament's documents;
 > 37 requests for the other tournament's ids return 404; bulk endpoints skip those ids;
 > and after all of it the other tournament's documents compare equal field by field.
-> With the filter disabled in `scoped()`, 76 of its 95 tests fail.
+> It also drives each route's other paths under a tenant, among them squad edits,
+> slot migration, delete-all and the leaderboard export. With the filter disabled in
+> `scoped()`, 84 of its 119 tests fail.
 
 ---
 
@@ -2479,6 +2481,10 @@ tournament's contest was a 404 under the other's slug.
   fails against them. Their services are archived, and `walle_arena` builds the index:
   Phase 3 resolves them on the way in (§13.11's enrolment collisions). Noted so nobody
   points a service at one of these databases expecting it to start.
+- [x] **R49 — Per-contest hot counts were a 500.** `count_in_contest`, behind
+  `GET /api/players/{id}/hot?contest_id=`, projected onto
+  `TeamContestEnrollment.team_id`. Beanie projects onto a model class, not a field,
+  and raised `TypeError`. *Fixed here: it reads whole enrolment documents.*
 - [ ] **Under `TENANCY=shared`, admin is closed until stage D.** The admin routes still
   check the global `is_admin`, and Phase 2 sets it false on every unified account,
   moving admin to the membership role (§4.7): the dry run's `walle_arena` has no

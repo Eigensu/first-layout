@@ -30,6 +30,9 @@ async def count_in_contest(
     except Exception:
         return 0
 
+    # Whole documents: this was .project(TeamContestEnrollment.team_id), but
+    # Beanie projects onto a model class, not a field, and raised TypeError --
+    # so every per-contest count was a 500.
     enrollments = (
         await scoped(TeamContestEnrollment, tournament_id)
         .find(
@@ -38,7 +41,6 @@ async def count_in_contest(
                 "status": EnrollmentStatus.ACTIVE,
             }
         )
-        .project(TeamContestEnrollment.team_id)
         .to_list()
     )
 

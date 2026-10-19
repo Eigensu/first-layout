@@ -711,7 +711,13 @@ async def test_points_and_audit_records_land_in_the_tournament(world, client):
 
 
 async def test_an_import_lands_in_the_tournament(world, client):
-    csv = "name,team,price,slot_code\nalpha new,alpha XI,50,BAT\n"
+    csv = (
+        "name,team,price,slot_code,slot_name\n"
+        "alpha new,alpha XI,50,BAT,\n"
+        "alpha other,alpha XI,60,,alpha batters\n"
+        # bravo's slot name, which alpha does not have: no slot, not bravo's.
+        "alpha third,alpha XI,70,,bravo batters\n"
+    )
     response = await client.post(
         "/api/admin/players/import",
         headers=ALPHA,
@@ -720,12 +726,27 @@ async def test_an_import_lands_in_the_tournament(world, client):
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["created"] == 1
-    imported = await AdminPlayer.find_one(AdminPlayer.name == "alpha new")
-    assert imported.tournament_id == world.alpha.id
-    # BAT resolves to alpha's slot, not bravo's of the same code.
-    assert imported.slot == str(world.alpha.slot.id)
+    assert response.json()["created"] == 3
+    imported = {
+        p.name: p
+        for p in await AdminPlayer.find(
+            AdminPlayer.name >= "alpha n", AdminPlayer.name < "alpha u"
+        ).to_list()
+    }
+    assert {p.tournament_id for p in imported.values()} == {world.alpha.id}
+    # BAT, and the name "alpha batters", resolve to alpha's slot; bravo's slot
+    # of the same code is never considered.
+    assert imported["alpha new"].slot == str(world.alpha.slot.id)
+    assert imported["alpha other"].slot == str(world.alpha.slot.id)
+    assert imported["alpha third"].slot is None
     assert await ImportLog.find(ImportLog.tournament_id == world.alpha.id).count() == 2
+
+
+async def test_the_import_template_lists_this_tournaments_slots(world, client):
+    response = await client.get(
+        "/api/admin/players/import/template?format=xlsx", headers=ALPHA
+    )
+    assert response.status_code == 200, response.text
 
 
 # --- settings ---------------------------------------------------------------
@@ -766,7 +787,7 @@ async def test_a_second_edit_updates_the_same_row(world, client):
     assert [(r.min_players_per_team, r.max_players_per_team) for r in rows] == [(2, 3)]
 
 
-async def test_the_default_logo_url_names_the_tournament(world, user_client):
+async def test_the_default_logo_url_names_the_tournament(world, client, user_client):
     await GlobalSettings(
         id=f"tournament:{world.alpha.id}",
         tournament_id=world.alpha.id,
@@ -774,6 +795,315 @@ async def test_the_default_logo_url_names_the_tournament(world, user_client):
     ).insert()
 
     contests = await user_client.get("/api/contests", headers=ALPHA)
+    admin_contests = await client.get("/api/admin/contests", headers=ALPHA)
 
-    logos = {c["logo_url"] for c in contests.json()["contests"]}
-    assert logos == {f"/api/settings/logo?tournament_id={world.alpha.id}"}
+    for body in (contests.json(), admin_contests.json()):
+        logos = {c["logo_url"] for c in body["contests"]}
+        assert logos == {f"/api/settings/logo?tournament_id={world.alpha.id}"}
+
+
+async def test_the_default_logo_route_reads_the_named_tournament(world, user_client):
+    """No logo is uploaded here, so each lookup ends in the same 404 -- but by
+    way of the tournament the URL names."""
+    for query in ("", "?tournament_id=not-an-id", f"?tournament_id={world.alpha.id}"):
+        response = await user_client.get(f"/api/settings/logo{query}")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Default logo not found"
+
+
+async def test_admin_settings_read_the_tournaments_row(world, client):
+    await client.put(
+        "/api/admin/settings", headers=ALPHA, json={"max_players_per_team": 4}
+    )
+
+    alpha = await client.get("/api/admin/settings", headers=ALPHA)
+    bravo = await client.get("/api/admin/settings", headers=BRAVO)
+
+    assert alpha.json()["max_players_per_team"] == 4
+    assert bravo.json()["max_players_per_team"] == 7
+
+
+async def test_a_legacy_service_edits_its_one_settings_document(db):
+    own = await GlobalSettings.get_own_for_tournament(None)
+    assert own.id == PLATFORM_DEFAULTS_ID
+
+
+def test_a_legacy_service_keeps_its_logo_url():
+    from app.models.settings import default_logo_path
+
+    assert default_logo_path(None) == "/api/settings/logo"
+
+
+# --- every path of a route runs under the tenant ------------------------------
+
+
+async def test_a_malformed_id_is_not_found(world, user_client):
+    response = await user_client.get("/api/contests/not-an-id", headers=ALPHA)
+    assert response.status_code == 404
+
+
+async def test_searching_stays_in_the_tournament(world, client, user_client):
+    contests = await user_client.get("/api/contests?q=final", headers=ALPHA)
+    players = await client.get("/api/admin/players?search=star", headers=ALPHA)
+    slots = await client.get("/api/admin/slots?search=batters", headers=ALPHA)
+
+    assert [c["name"] for c in contests.json()["contests"]] == ["alpha final"]
+    assert [p["name"] for p in players.json()["players"]] == ["alpha star"]
+    assert [s["name"] for s in slots.json()["slots"]] == ["alpha batters"]
+
+
+async def test_a_slot_and_its_player_count(world, user_client):
+    response = await user_client.get(f"/api/slots/{world.alpha.slot.id}", headers=ALPHA)
+    assert response.json()["player_count"] == 2
+
+
+async def test_a_private_contest_shows_to_its_entrant(world, user_client, player):
+    a = world.alpha
+    start = now_ist() + timedelta(days=1)
+    private = Contest(
+        tournament_id=a.id,
+        code="INVITE",
+        name="alpha invite",
+        visibility="private",
+        start_at=start,
+        end_at=start + timedelta(days=1),
+    )
+    await private.insert()
+    await TeamContestEnrollment(
+        tournament_id=a.id, team_id=a.team.id, user_id=player.id, contest_id=private.id
+    ).insert()
+
+    response = await user_client.get(f"/api/contests/{private.id}/me", headers=ALPHA)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "alpha invite"
+
+
+async def test_a_daily_contest_checks_the_squad_against_this_tournaments_players(
+    world, user_client
+):
+    a = world.alpha
+    start = now_ist() + timedelta(days=1)
+    daily = Contest(
+        tournament_id=a.id,
+        code="DAY1",
+        name="alpha day one",
+        contest_type="daily",
+        allowed_teams=["alpha XI"],
+        start_at=start,
+        end_at=start + timedelta(days=1),
+    )
+    await daily.insert()
+
+    response = await user_client.post(
+        f"/api/contests/{daily.id}/enroll",
+        headers=ALPHA,
+        json={"team_id": str(a.team.id)},
+    )
+
+    assert response.status_code == 200, response.text
+
+
+async def test_a_team_in_a_contest_shows_its_own_players(world, user_client):
+    """Anyone may look once the contest is under way."""
+    a = world.alpha
+    await Contest.get_motor_collection().update_one(
+        {"_id": a.final.id}, {"$set": {"start_at": now_ist() - timedelta(hours=1)}}
+    )
+    response = await user_client.get(
+        f"/api/contests/{a.final.id}/teams/{a.team.id}", headers=ALPHA
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {p["name"] for p in body["players"]} == {"alpha star", "alpha keeper"}
+    assert body["contest_points"] == 20.0  # the captain's 10, doubled
+
+
+async def test_editing_a_squad_reads_this_tournaments_rules(world, user_client):
+    a = world.alpha
+    swapped = await user_client.put(
+        f"/api/teams/{a.team.id}",
+        headers=ALPHA,
+        json={
+            "player_ids": [str(a.keeper.id), str(a.star.id)],
+            "captain_id": str(a.keeper.id),
+            "vice_captain_id": str(a.star.id),
+        },
+    )
+    renamed = await user_client.patch(
+        f"/api/teams/{a.team.id}/rename?team_name=alpha renamed", headers=ALPHA
+    )
+    poached = await user_client.put(
+        f"/api/teams/{a.team.id}",
+        headers=ALPHA,
+        json={
+            "player_ids": [str(a.star.id), str(world.bravo.keeper.id)],
+            "captain_id": str(a.star.id),
+            "vice_captain_id": str(world.bravo.keeper.id),
+        },
+    )
+
+    assert swapped.status_code == 200, swapped.text
+    assert swapped.json()["captain_id"] == str(a.keeper.id)
+    assert renamed.json()["team_name"] == "alpha renamed"
+    assert poached.status_code == 400
+    assert poached.json()["detail"] == "Some player IDs are invalid"
+
+
+async def test_deleting_a_team_removes_only_its_own_enrollment(world, user_client):
+    a, b = world.alpha, world.bravo
+
+    response = await user_client.delete(f"/api/teams/{a.team.id}", headers=ALPHA)
+
+    assert response.status_code == 204
+    assert (await TeamContestEnrollment.get(a.enrollment.id)).status == "removed"
+    assert (await TeamContestEnrollment.get(b.enrollment.id)).status == "active"
+
+
+async def test_a_rule_change_rechecks_this_tournaments_squads(world, client):
+    response = await client.put(
+        f"/api/admin/contests/{world.alpha.final.id}",
+        headers=ALPHA,
+        json={"max_players_per_team": 5},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["effective_max_players_per_team"] == 5
+
+
+async def test_force_deleting_a_contest_removes_its_enrollments(world, client):
+    a, b = world.alpha, world.bravo
+
+    response = await client.delete(
+        f"/api/admin/contests/{a.final.id}?force=true", headers=ALPHA
+    )
+
+    assert response.status_code == 200, response.text
+    assert await Contest.get(a.final.id) is None
+    assert (await TeamContestEnrollment.get(a.enrollment.id)).status == "removed"
+    assert (await TeamContestEnrollment.get(b.enrollment.id)).status == "active"
+
+
+async def test_the_leaderboard_export_is_this_tournaments(world, client):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    response = await client.get(
+        f"/api/admin/contests/{world.alpha.final.id}/leaderboard/export", headers=ALPHA
+    )
+
+    assert response.status_code == 200, response.text
+    sheet = load_workbook(BytesIO(response.content)).active
+    rows = list(sheet.iter_rows(min_row=2, values_only=True))
+    assert [(r[4], r[5]) for r in rows] == [("alpha team", 20)]
+    assert "alpha star" in rows[0][12] and "bravo" not in rows[0][12]
+
+
+async def test_a_user_teams_view_marks_this_tournaments_enrollment(
+    world, client, player
+):
+    response = await client.get(
+        f"/api/admin/users/{player.id}/teams?contest_id={world.alpha.final.id}",
+        headers=ALPHA,
+    )
+
+    [team] = response.json()["teams"]
+    assert team["team_name"] == "alpha team"
+    assert team["enrolled"] is True
+
+
+async def test_editing_a_players_points_retotals_only_this_tournaments_squads(
+    world, client
+):
+    a, b = world.alpha, world.bravo
+    await Team.get_motor_collection().update_one(
+        {"_id": b.team.id}, {"$push": {"player_ids": str(a.star.id)}}
+    )
+
+    response = await client.put(
+        f"/api/admin/players/{a.star.id}", headers=ALPHA, json={"points": 5}
+    )
+
+    assert response.status_code == 200, response.text
+    assert (await Team.get(a.team.id)).total_points == 5
+    # A bravo squad holding alpha's id (which no route would let it) is not
+    # alpha's to retotal.
+    assert (await Team.get(b.team.id)).total_points == 0
+
+
+async def test_slot_maintenance_stays_in_the_tournament(world, client):
+    a, b = world.alpha, world.bravo
+    await AdminPlayer(
+        tournament_id=a.id, name="alpha legacy", team="alpha XI", slot="7"
+    ).insert()
+    await AdminPlayer(
+        tournament_id=b.id, name="bravo legacy", team="bravo XI", slot="9"
+    ).insert()
+
+    plan = await client.post("/api/admin/slots/migrate?dry_run=true", headers=ALPHA)
+    unassigned = await client.delete(
+        f"/api/admin/slots/{a.slot.id}/players/{a.star.id}", headers=ALPHA
+    )
+    deleted = await client.delete(
+        f"/api/admin/slots/{a.slot.id}?force=true", headers=ALPHA
+    )
+
+    assert [s["legacy"] for s in plan.json()["created_slots"]] == ["7"]
+    assert unassigned.json() == {"unassigned": 1}
+    assert deleted.json()["unassigned_players"] == 1
+    assert (await AdminPlayer.get(b.star.id)).slot == str(b.slot.id)
+
+
+async def test_editing_a_sponsor_orders_it_within_the_tournament(world, client):
+    response = await client.put(
+        f"/api/v1/sponsors/{world.alpha.sponsor.id}",
+        headers=ALPHA,
+        json={"name": "alpha renamed", "featured": True},
+    )
+
+    assert response.status_code == 200, response.text
+    sponsor = response.json()["sponsor"]
+    assert sponsor["name"] == "alpha renamed"
+    assert sponsor["priority"] == 1
+
+
+async def test_a_sponsor_name_is_unique_per_tournament(world, client):
+    taken = await client.put(
+        f"/api/v1/sponsors/{world.alpha.sponsor.id}",
+        headers=ALPHA,
+        json={"name": "bravo sponsor 2"},
+    )
+    assert taken.status_code == 200, taken.text
+
+
+async def test_hot_players_are_counted_in_the_tournament(world, user_client):
+    a = world.alpha
+    ids = await user_client.get(
+        f"/api/players/hot/ids?contest_id={a.final.id}&threshold=1", headers=ALPHA
+    )
+    one = await user_client.get(
+        f"/api/players/{a.star.id}/hot?contest_id={a.final.id}", headers=ALPHA
+    )
+
+    assert set(ids.json()["player_ids"]) == {str(a.star.id), str(a.keeper.id)}
+    assert one.json()["selection_count_global"] == 1
+    assert one.json()["selection_count_contest"] == 1
+
+
+@pytest.mark.parametrize("in_contest", [False, True])
+async def test_the_hot_player_list_is_this_tournaments(world, in_contest):
+    """Called directly: GET /api/players/hot is shadowed by /api/players/{id}."""
+    from app.routes.players_hot import list_hot_players
+
+    a = world.alpha
+    items = await list_hot_players(
+        contest_id=str(a.final.id) if in_contest else None,
+        threshold=None,
+        limit=200,
+        skip=0,
+        sort="name_asc",
+        tournament_id=a.id,
+    )
+
+    assert [i.player.name for i in items] == ["alpha keeper", "alpha star"]
