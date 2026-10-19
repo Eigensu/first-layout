@@ -16,7 +16,9 @@ and without it this plan would not be the one phase 2 applies.
 Reviewing: fill in merge_review.csv's link column -- rows of one group that are
 one person get the same link, anything else stays on its own -- and give the
 file to phase 2 and phase 6 as --links. Given here too, it is checked against
-the sources and carried into the new merge_review.csv.
+the sources and carried into the new merge_review.csv. A link starting with "="
+reaches across groups: every row given it, in any group, is one person, and
+the groups it spans are planned as one ("joined").
 
 Produces:
     merge_plan.json    every component, its rows, its edges and its flags
@@ -48,7 +50,11 @@ from scripts.unified_auth.identity_graph import (  # noqa: E402
     summarise,
 )
 from scripts.unified_auth.loader import load_rows  # noqa: E402
-from scripts.unified_auth.merge_apply import load_links, unknown_links  # noqa: E402
+from scripts.unified_auth.merge_apply import (  # noqa: E402
+    join_across_groups,
+    load_links,
+    unknown_links,
+)
 
 
 def write_junk(rows, junk, out_dir: Path) -> None:
@@ -191,6 +197,9 @@ async def main() -> None:
     if unknown:
         listed = ", ".join(f"{db}:{uid}" for db, uid in unknown)
         raise SystemExit(f"--links names rows no source holds: {listed}")
+    # The plan shows the groups as phase 2 will apply them; the review file
+    # carries the links forward as the reviewer wrote them.
+    components, _ = join_across_groups(components, links)
     write_plan(components, junk, args.out, links)
     write_junk(rows, junk, args.out)
     print(

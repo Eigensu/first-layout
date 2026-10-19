@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from .identity_graph import Component, LegacyRow
+from .identity_graph import Component, Edge, LegacyRow
 from .normalise import normalise_email, normalise_mobile
 
 # Where an account whose only address was given to someone else gets one. The
@@ -426,6 +426,102 @@ def unknown_links(
     """
     present = {r.key for c in components for r in c.rows}
     return sorted(key for key in links if key not in present)
+
+
+# A link that starts with this joins groups: every row given it, in whatever
+# group, is one person. Any other label means nothing outside its own group.
+CROSS_GROUP_PREFIX = "="
+
+
+def join_across_groups(
+    components: List[Component], links: Dict[Tuple[str, str], str]
+) -> Tuple[List[Component], Dict[Tuple[str, str], str]]:
+    """Join the groups a cross-group link spans, ready for plan_accounts.
+
+    Phase 1 groups rows only through a key they share. One login whose rows
+    share none -- its address withheld as junk, each tournament's row on a
+    different phone -- stays several accounts in several groups, and a plain
+    link, compared within one group, cannot reach across them. A label that
+    starts with "=" can: the groups holding its rows become one, flagged
+    "joined", and the rows given that label become one account.
+
+    Returns the components, joined ones in place of their parts, and the links
+    to plan them with. Inside a joined group, a plain label is prefixed with
+    the id of the group it came from, so "a" from two groups stays two people.
+    A clean group is already one person, so it goes whole to the cross-group
+    link any of its rows carries, or else stays one account of its own.
+    """
+    cross = {k: v for k, v in links.items() if v.startswith(CROSS_GROUP_PREFIX)}
+    if not cross:
+        return components, links
+
+    index_of = {r.key: i for i, c in enumerate(components) for r in c.rows}
+    parent = list(range(len(components)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    first_with: Dict[str, int] = {}
+    for key, label in sorted(cross.items()):
+        if key not in index_of:
+            continue  # unknown_links reports it
+        i = index_of[key]
+        if label in first_with:
+            parent[find(i)] = find(first_with[label])
+        else:
+            first_with[label] = i
+
+    members: Dict[int, List[int]] = defaultdict(list)
+    for i in sorted({index_of[k] for k in cross if k in index_of}):
+        members[find(i)].append(i)
+
+    planned = dict(links)
+    replaced: Dict[int, Component] = {}
+    for root, parts in members.items():
+        rows: List[LegacyRow] = []
+        edges = []
+        flags: Set[str] = {"joined"}
+        for i in parts:
+            part = components[i]
+            origin = f"{part.rows[0].source_db}:{part.rows[0].legacy_user_id}"
+            if part.should_merge:
+                labels = {cross[r.key] for r in part.rows if r.key in cross}
+                if len(labels) > 1:
+                    raise ValueError(
+                        f"{origin} is one person but its rows carry "
+                        f"{', '.join(sorted(labels))}: give them one cross-group link"
+                    )
+                whole = labels.pop() if labels else origin
+                for r in part.rows:
+                    planned[r.key] = whole
+            else:
+                for r in part.rows:
+                    label = links.get(r.key)
+                    if label and r.key not in cross:
+                        planned[r.key] = f"{origin}:{label}"
+            rows.extend(part.rows)
+            edges.extend(part.edges)
+            flags.update(part.flags)
+
+        # Record the reviewer's join the way Phase 1 records any other edge.
+        for label in sorted({planned[r.key] for r in rows if r.key in cross}):
+            linked = sorted(r.key for r in rows if planned.get(r.key) == label)
+            edges.extend(
+                Edge(a=linked[0], b=k, via="link", value=label) for k in linked[1:]
+            )
+
+        replaced[root] = Component(
+            rows=sorted(rows, key=lambda r: r.key), edges=edges, flags=sorted(flags)
+        )
+
+    swallowed = {i for parts in members.values() for i in parts}
+    result = [c for i, c in enumerate(components) if i not in swallowed]
+    result.extend(replaced.values())
+    result.sort(key=lambda c: (-c.size, c.rows[0].key))
+    return result, planned
 
 
 def copies_without_activity(
