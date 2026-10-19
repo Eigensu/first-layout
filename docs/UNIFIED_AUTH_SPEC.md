@@ -2436,8 +2436,8 @@ reached** by anything their owner knew.
 **Review decisions.** Of the 20 remaining groups, 14 are one person, and 6 hold one
 family member — a spouse or child on the shared phone or address — who stays separate.
 The largest staff group became one account for one staff member's own rows and one
-for the shared `walleadmin` login. The reviewed file is kept with the dry run's outputs, not here: it
-names people.
+for the shared `walleadmin` login. The reviewed links are kept outside the repository,
+not here.
 
 **Results, third pass** (2026-10-18, with the links): 2,222 legacy rows become 1,830
 accounts and 2,122 memberships. 232 groups merge automatically and all 20 flagged
@@ -2451,9 +2451,21 @@ Still open before cutover:
 
 - [ ] **The platform-admin list** (§13.10). The candidates are the four people behind
   the legacy admin rows; the shared `walleadmin` login should not be one.
-- [ ] **Keep the reviewed links** for cutover and re-run Phase 1 with them on the
+  *Decided 2026-10-19: the owner's account (`aagamratadia`) and `walleadmin`, against
+  the advice above. Five accounts carry the username `walleadmin`, since their emails
+  and mobiles never joined them: the shared login (epl, jpl, tpl-s11, wtpl), Mohit
+  Singh's own rows (cccl, dcpl, rspl), two more (jmcl and tyrant; mjpl), and the
+  `Walleevents` login, which has no email or mobile and so cannot be listed. Which of
+  them is still to be chosen. The list file holds the owner's keys, and each
+  `walleadmin` account's keys commented out; every key belongs to exactly one
+  account. It is kept outside the repository with the links, since it holds contact
+  details.*
+- [x] **Keep the reviewed links** for cutover and re-run Phase 1 with them on the
   cutover snapshot. A group that gained a row since the review shows as reviewed, but
-  the new row stays on its own until it is linked.
+  the new row stays on its own until it is linked. *Kept 2026-10-19 outside the
+  repository: `source_db`, `legacy_user_id` and `link` only, the columns `--links`
+  reads. The dry run's local copies are deleted; the re-run on the cutover snapshot is
+  still to do.*
 
 ### 13.13 Found scoping the routes (stage A2)
 
