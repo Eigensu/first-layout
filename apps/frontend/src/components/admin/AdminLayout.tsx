@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { PlayersSection } from "./players/PlayersSection";
 import { TeamsEditSection } from "./points/TeamsEditSection";
 import { SponsorsSection } from "./sponsors/SponsorsSection";
@@ -38,8 +39,9 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps = {}) {
   const [activeSection, setActiveSection] = useState<Section>("players");
   const router = useRouter();
+  const { user } = useAuth();
 
-  const sections = [
+  const allSections = [
     { id: "tournaments" as Section, label: "Tournaments", icon: Globe },
     { id: "players" as Section, label: "Players", icon: Users },
     { id: "sponsors" as Section, label: "Sponsors", icon: Award },
@@ -49,6 +51,11 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
     { id: "carousel" as Section, label: "Carousel Settings", icon: ImageIcon },
     { id: "settings" as Section, label: "General Settings", icon: Settings },
   ];
+  // The registry belongs to the whole platform, not to this tournament, and the
+  // backend refuses it to anyone else (get_platform_admin).
+  const sections = allSections.filter(
+    (section) => section.id !== "tournaments" || user?.is_platform_admin
+  );
 
   const renderSection = () => {
     switch (activeSection) {
