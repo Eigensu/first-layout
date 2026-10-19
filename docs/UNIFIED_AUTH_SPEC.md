@@ -1386,6 +1386,16 @@ code path, which also means the refresh is exercised long before it runs in prod
 - Login form copy changes from "Username" to **"Mobile number or email"**, with helper
   text for the transition period.
 
+**Built (stage F, 2026-10-19).**
+- `src/lib/api/tournaments.ts` has `getMyTournaments()`.
+- The profile's **Your Tournaments** card is `src/components/dashboard/MyTournamentsSection.tsx`. It sits first in the dashboard's right-hand column.
+- Each card shows its name, logo, status, teams, contests, best rank, points and last played date. It also shows "Played as …" when that name differs from the account's username.
+- A tournament links to its own subdomain, except the site already open (marked "This site") and archived ones, whose subdomain is gone.
+- The card is left out entirely when there is nothing to list or the backend has no such endpoint. That is what today's single-tournament services report, so they look as they did.
+- **Colours follow the dashboard page, not the tokens above.** That page is styled with its own slate, cyan and amber palette and uses none of the `--bg-*` custom properties, so the new card matches its neighbours. Moving the whole page onto the tokens is a separate job.
+- The login form says "Mobile number or email", with a line saying a username still works for now. Validation still accepts anything of three or more characters, which keeps old usernames working.
+- The **change-email UI is not built**: it needs the email-code channel (C3).
+
 ---
 
 ## 7. Migration
@@ -2070,7 +2080,7 @@ These block specific phases; everything else can be built without them.
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job — **done 2026-10-19** (§6.1–6.2a; the admin support endpoint is deferred) | B, R21 (§13.8, fixed in #45) |
-| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI | E, C3 |
+| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI — **done 2026-10-19** except the change-email UI, which waits on C3 (§6.3) | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
 | H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13.10** |
 | I | Cut over — stand up the one backend, backfill, repoint both frontends, archive the five services (§7, Phase 6) | C, C2b, C3, D, E, F, H |

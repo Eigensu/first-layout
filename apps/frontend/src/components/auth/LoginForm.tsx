@@ -12,21 +12,17 @@ import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 
-// Validation schema: allow username (>=3 chars) OR mobile number (10-20 digits)
+// Sign in with a mobile number or email. A username still works while people
+// move over (the backend tries it last, and asks for a mobile or email when two
+// accounts share it), so anything of three characters or more is accepted.
+// The field stays `username`: that is the key POST /api/auth/login reads.
 const loginSchema = z.object({
   username: z
     .string()
-    .min(1, "Enter username or mobile number")
-    .refine(
-      (v) => {
-        const isMobile = /^[0-9]{10,20}$/.test(v.trim());
-        const isUsername = v.trim().length >= 3;
-        return isMobile || isUsername;
-      },
-      {
-        message: "Enter a valid username (>= 3 chars) or mobile number",
-      }
-    ),
+    .min(1, "Enter your mobile number or email")
+    .refine((v) => v.trim().length >= 3, {
+      message: "Enter a valid mobile number or email",
+    }),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -106,16 +102,22 @@ export function LoginForm() {
             </div>
           )}
 
-          <Input
-            {...register("username")}
-            type="text"
-            placeholder="Enter username or mobile number"
-            icon="user"
-            error={errors.username?.message}
-            disabled={isLoading}
-            variant="light"
-            autoComplete="username"
-          />
+          <div>
+            <Input
+              {...register("username")}
+              type="text"
+              placeholder="Mobile number or email"
+              icon="user"
+              error={errors.username?.message}
+              disabled={isLoading}
+              variant="light"
+              autoComplete="username"
+            />
+            <p className="mt-1.5 px-1 text-xs text-text-muted">
+              One account for every Wall-E Arena tournament. Used a username
+              before? It still works for now.
+            </p>
+          </div>
 
           <Input
             {...register("password")}
