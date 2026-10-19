@@ -25,7 +25,7 @@ from app.schemas.sponsor import (
     UploadResponse,
 )
 from app.utils.cloudinary import delete_image, upload_image
-from app.utils.dependencies import get_current_active_user
+from app.utils.dependencies import get_admin_user
 from app.utils.gridfs import delete_sponsor_logo_from_gridfs, open_sponsor_logo_stream
 
 router = APIRouter(prefix="/api/v1/sponsors", tags=["sponsors"])
@@ -87,7 +87,7 @@ async def get_available_priorities(
         True,
         description="Whether to compute priorities for featured or non-featured group",
     ),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_admin_user),
 ):
     """Return available priority suggestions (gaps and next) within a group for admin UI."""
     result = await _get_available_priorities(featured)
@@ -194,7 +194,7 @@ async def get_sponsor(sponsor_id: str):
     "", response_model=SponsorDetailResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_sponsor_no_slash(
-    sponsor_data: SponsorCreate, current_user: User = Depends(get_current_active_user)
+    sponsor_data: SponsorCreate, current_user: User = Depends(get_admin_user)
 ):
     return await create_sponsor(sponsor_data, current_user)
 
@@ -206,7 +206,7 @@ async def create_sponsor_no_slash(
     "/", response_model=SponsorDetailResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_sponsor(
-    sponsor_data: SponsorCreate, current_user: User = Depends(get_current_active_user)
+    sponsor_data: SponsorCreate, current_user: User = Depends(get_admin_user)
 ):
     """
     Create a new sponsor (Admin only)
@@ -249,7 +249,7 @@ async def create_sponsor(
 async def update_sponsor(
     sponsor_id: str,
     sponsor_data: SponsorUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_admin_user),
 ):
     """
     Update sponsor information (Admin only)
@@ -310,9 +310,7 @@ async def update_sponsor(
 
 
 @router.delete("/{sponsor_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_sponsor(
-    sponsor_id: str, current_user: User = Depends(get_current_active_user)
-):
+async def delete_sponsor(sponsor_id: str, current_user: User = Depends(get_admin_user)):
     """
     Delete a sponsor (Admin only)
 
@@ -340,7 +338,7 @@ async def delete_sponsor(
 async def upload_sponsor_logo(
     sponsor_id: str,
     file: UploadFile = File(..., description="Sponsor logo image"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_admin_user),
 ):
     """
     Upload sponsor logo image (Admin only)
@@ -417,7 +415,7 @@ async def get_sponsor_logo(sponsor_id: str):
 
 @router.patch("/{sponsor_id}/toggle-featured", response_model=SponsorDetailResponse)
 async def toggle_featured(
-    sponsor_id: str, current_user: User = Depends(get_current_active_user)
+    sponsor_id: str, current_user: User = Depends(get_admin_user)
 ):
     """
     Toggle sponsor featured status (Admin only)
@@ -444,9 +442,7 @@ async def toggle_featured(
 
 
 @router.patch("/{sponsor_id}/toggle-active", response_model=SponsorDetailResponse)
-async def toggle_active(
-    sponsor_id: str, current_user: User = Depends(get_current_active_user)
-):
+async def toggle_active(sponsor_id: str, current_user: User = Depends(get_admin_user)):
     """
     Toggle sponsor active status (Admin only)
 
