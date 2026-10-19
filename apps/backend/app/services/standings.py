@@ -62,13 +62,7 @@ async def contest_standings(
         team = teams_by_id.get(str(enr.team_id))
         if not team:
             continue
-        oids: list[PydanticObjectId] = []
-        for pid in team.player_ids:
-            if ObjectId.is_valid(pid):
-                try:
-                    oids.append(PydanticObjectId(pid))
-                except Exception:
-                    continue
+        oids = _player_ids(team)
         team_player_oids_map[str(enr.team_id)] = oids
         all_player_ids.update(oids)
 
@@ -101,20 +95,41 @@ async def contest_standings(
         if not user:
             continue
         oids = team_player_oids_map.get(str(enr.team_id), [])
-        # Sum using string form to match map keys, with captain/vice multipliers
-        total = 0.0
-        captain_id = str(team.captain_id) if team.captain_id else None
-        vice_id = str(team.vice_captain_id) if team.vice_captain_id else None
-        for oid in oids:
-            pid = str(oid)
-            base = float(pcp_points_map.get(pid, 0.0))
-            if captain_id and pid == captain_id:
-                base *= 2.0
-            elif vice_id and pid == vice_id:
-                base *= 1.5
-            total += base
-        computed.append((team, user, float(total)))
+        computed.append((team, user, _team_points(team, oids, pcp_points_map)))
 
     # sort by points desc
     computed.sort(key=lambda tup: tup[2], reverse=True)
     return computed
+
+
+def _player_ids(team: Team) -> List[PydanticObjectId]:
+    """The team's players as ObjectIds; an id that is not one is skipped."""
+    oids: List[PydanticObjectId] = []
+    for pid in team.player_ids:
+        if ObjectId.is_valid(pid):
+            try:
+                oids.append(PydanticObjectId(pid))
+            except Exception:
+                continue
+    return oids
+
+
+def _team_points(
+    team: Team, oids: List[PydanticObjectId], points_by_player: Dict[str, float]
+) -> float:
+    """Sum the players' points, with the captain and vice-captain multipliers.
+
+    Compared as strings, which is how the points map is keyed.
+    """
+    total = 0.0
+    captain_id = str(team.captain_id) if team.captain_id else None
+    vice_id = str(team.vice_captain_id) if team.vice_captain_id else None
+    for oid in oids:
+        pid = str(oid)
+        base = float(points_by_player.get(pid, 0.0))
+        if captain_id and pid == captain_id:
+            base *= 2.0
+        elif vice_id and pid == vice_id:
+            base *= 1.5
+        total += base
+    return float(total)
