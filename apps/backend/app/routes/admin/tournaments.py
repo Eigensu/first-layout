@@ -267,7 +267,21 @@ def _membership_of(user_id: PydanticObjectId, tournament: Tournament):
     )
 
 
-@router.get("/{tournament_id}/admins", response_model=TournamentAdminListResponse)
+async def _set_role(membership: TournamentMembership, role: str) -> None:
+    # Only the role is written. A save() would write back every field as it
+    # was loaded, undoing a sign-in, a first play or a stats refresh that
+    # landed in between.
+    await membership.set({TournamentMembership.role: role})
+
+
+_NOT_SHARED = {409: {"description": "Not the shared backend; admins there are is_admin"}}
+
+
+@router.get(
+    "/{tournament_id}/admins",
+    response_model=TournamentAdminListResponse,
+    responses={404: {"description": "Tournament not found"}, **_NOT_SHARED},
+)
 async def list_tournament_admins(
     tournament_id: str,
     current_user: User = Depends(get_platform_admin),
@@ -293,7 +307,17 @@ async def list_tournament_admins(
     return TournamentAdminListResponse(admins=admins)
 
 
-@router.post("/{tournament_id}/admins", response_model=TournamentAdminResponse)
+@router.post(
+    "/{tournament_id}/admins",
+    response_model=TournamentAdminResponse,
+    responses={
+        400: {"description": "That account is disabled"},
+        404: {"description": "Tournament not found, or no account by that identifier"},
+        409: {
+            "description": "Not the shared backend, or a username held by more than one account"
+        },
+    },
+)
 async def appoint_tournament_admin(
     tournament_id: str,
     data: TournamentAdminAppoint,
@@ -346,15 +370,21 @@ async def appoint_tournament_admin(
             return _admin_response(user, membership)
 
     if membership.role != ROLE_ADMIN:
-        membership.role = ROLE_ADMIN
-        await membership.save()
+        await _set_role(membership, ROLE_ADMIN)
         await _log_admin_change(
             current_user, "tournament_admin.appoint", user.id, tournament
         )
     return _admin_response(user, membership)
 
 
-@router.delete("/{tournament_id}/admins/{user_id}")
+@router.delete(
+    "/{tournament_id}/admins/{user_id}",
+    responses={
+        400: {"description": "Invalid user id"},
+        404: {"description": "Tournament not found, or not an admin of it"},
+        **_NOT_SHARED,
+    },
+)
 async def remove_tournament_admin(
     tournament_id: str,
     user_id: str,
@@ -373,7 +403,6 @@ async def remove_tournament_admin(
     membership = await _membership_of(uid, tournament)
     if membership is None or membership.role != ROLE_ADMIN:
         raise HTTPException(status_code=404, detail="Not an admin of this tournament")
-    membership.role = ROLE_PLAYER
-    await membership.save()
+    await _set_role(membership, ROLE_PLAYER)
     await _log_admin_change(current_user, "tournament_admin.remove", uid, tournament)
     return {"message": f"No longer an admin of '{tournament.slug}'"}

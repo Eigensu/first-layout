@@ -163,6 +163,46 @@ async def test_signing_in_while_being_appointed(shared, world, http, monkeypatch
     assert len(await _logged("tournament_admin.appoint")) == 1
 
 
+@pytest.mark.parametrize("starting_role", [ROLE_PLAYER, ROLE_ADMIN])
+async def test_changing_the_role_keeps_play_that_landed_meanwhile(
+    shared, world, http, monkeypatch, starting_role
+):
+    """They make a team between our read of their row and our write to it.
+
+    Writing the whole row back would put them back to registered and drop the
+    activity; only the role may change (Greptile on #56).
+    """
+    from app.routes.admin import tournaments as routes
+    from app.services.membership import record_play
+
+    asha, alpha = world["asha"], world["alpha"]
+    await TournamentMembership(
+        user_id=asha.id,
+        tournament_id=alpha.id,
+        tournament_slug="alpha",
+        display_name="asha",
+        role=starting_role,
+    ).insert()
+    stale = await _membership(asha, alpha)
+    await record_play(asha, alpha.id)
+
+    async def _as_first_read(user_id, tournament):
+        return stale
+
+    monkeypatch.setattr(routes, "_membership_of", _as_first_read)
+    as_user(world["platform"])
+    if starting_role == ROLE_PLAYER:
+        response = await http.post(_admins(world), json={"identifier": "asha"})
+    else:
+        response = await http.delete(f"{_admins(world)}/{asha.id}")
+
+    assert response.status_code == 200, response.text
+    fresh = await _membership(asha, alpha)
+    assert fresh.role == (ROLE_ADMIN if starting_role == ROLE_PLAYER else ROLE_PLAYER)
+    assert fresh.status == STATUS_PLAYED
+    assert fresh.last_active_at is not None
+
+
 async def test_appointing_is_logged_once(shared, world, http):
     await _appoint(http, world, "asha")
     again = await _appoint(http, world, "asha")
