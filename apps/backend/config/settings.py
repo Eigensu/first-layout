@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # the live services unchanged; the unified backend sets "shared".
     tenancy: Literal["single", "shared"] = Field(default="single", alias="TENANCY")
 
+    # Rate limits on the auth routes (docs/RATE_LIMITING_SPEC.md). Enabled but
+    # not enforcing by default: the limiter counts and logs what it would have
+    # blocked, and RATE_LIMIT_ENFORCE=true turns that into 429s once the logs
+    # show real users are clear of the limits. Proxy hops is how many proxies
+    # in front of the service append to X-Forwarded-For (spec §4.1).
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")
+    rate_limit_proxy_hops: int = Field(default=1, alias="RATE_LIMIT_PROXY_HOPS")
+
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")

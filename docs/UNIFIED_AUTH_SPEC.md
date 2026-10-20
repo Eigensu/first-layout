@@ -2066,7 +2066,7 @@ These block specific phases; everything else can be built without them.
 | C | Auth route changes (`sub`, login resolution, register, Google) + tests | B |
 | C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a) | — |
 | C2b | ~~Close the reset gate~~ **shipped** — endpoint, schema, orphaned modal and dead API wrapper deleted; `client.ts` structured-error fix (§4.2) | — |
-| C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` | — *(MongoDB-backed; no longer blocked on Redis)* |
+| C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` — **built 2026-10-20, in observe mode**: counts and logs, refuses nothing until `RATE_LIMIT_ENFORCE=true` (that spec's §8). The mobile app shows a 429 as a generic error and needs the message mapped before enforcing | — *(MongoDB-backed; no longer blocked on Redis)* |
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
 | D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job — **done 2026-10-19** (§6.1–6.2a; the admin support endpoint is deferred) | B, R21 (§13.8, fixed in #45) |

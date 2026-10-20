@@ -2,7 +2,16 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import DuplicateKeyError
 
@@ -45,6 +54,7 @@ from app.services.auth.password_reset import (
 from app.services.membership import record_sign_in
 from app.utils.dependencies import get_current_active_user, subject_claims
 from app.utils.gridfs import upload_avatar_to_gridfs
+from app.utils.rate_limit import rate_limit
 from app.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -62,6 +72,7 @@ logger = logging.getLogger("app.auth")
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(
+    request: Request,
     username: str = Form(...),
     email: EmailStr = Form(...),
     password: str = Form(...),
@@ -71,6 +82,7 @@ async def register(
     tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Register a new user"""
+    await rate_limit("register", request)
 
     # Validate fields with existing schema
     try:
@@ -171,12 +183,14 @@ async def register(
 
 @router.post("/login", response_model=Token)
 async def login(
+    request: Request,
     user_data: UserLogin,
     tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Login with username (or mobile) and password"""
 
     identifier = (user_data.username or "").strip()
+    await rate_limit("login", request, identifier=identifier)
 
     try:
         user = await resolve_login_identity(identifier)
@@ -242,10 +256,12 @@ async def login(
 
 @router.post("/google", response_model=Token)
 async def google_auth(
+    request: Request,
     payload: GoogleAuth,
     tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Sign up or log in using a Google Identity Services ID token."""
+    await rate_limit("google", request)
     try:
         token_payload = verify_google_id_token(payload.id_token)
     except GoogleTokenError as e:
@@ -281,10 +297,12 @@ async def google_auth(
 
 @router.post("/apple", response_model=Token)
 async def apple_auth(
+    request: Request,
     payload: AppleAuth,
     tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Sign up or log in using an Apple identity token from expo-apple-authentication."""
+    await rate_limit("apple", request)
     try:
         token_payload = await verify_apple_identity_token(payload.identity_token)
     except AppleTokenError as e:
@@ -319,8 +337,9 @@ async def apple_auth(
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(refresh_token: str):
+async def refresh_token(request: Request, refresh_token: str):
     """Refresh access token using refresh token"""
+    await rate_limit("refresh", request)
 
     # Decode and validate refresh token
     payload = decode_token(refresh_token)
@@ -396,10 +415,14 @@ async def _revoke_refresh_token(refresh_token: str) -> None:
 
 
 @router.post("/forgot-password/request")
-async def forgot_password_request(payload: ForgotPasswordRequest):
+async def forgot_password_request(request: Request, payload: ForgotPasswordRequest):
     """Start forgot password flow by sending OTP to the provided phone.
     Always return generic response to avoid user enumeration."""
     logger.info("POST /api/auth/forgot-password/request body={'phone':'[redacted]'}")
+    # Outside the try below: its catch-all turns every failure into the generic
+    # success message, which would swallow the 429 (and the 503 this route
+    # returns when the limiter cannot count, since every call sends an SMS).
+    await rate_limit("forgot_password_request", request, identifier=payload.phone)
     try:
         await pr_start_session(payload.phone)
         logger.info(
@@ -414,11 +437,13 @@ async def forgot_password_request(payload: ForgotPasswordRequest):
 
 
 @router.post("/forgot-password/verify")
-async def forgot_password_verify(payload: ForgotPasswordVerify):
+async def forgot_password_verify(request: Request, payload: ForgotPasswordVerify):
     """Verify OTP and issue short-lived reset token."""
     logger.info(
         "POST /api/auth/forgot-password/verify body={'phone':'[redacted]','otp':'[redacted]'}"
     )
+    # Outside the try below, which turns every failure into a 400.
+    await rate_limit("forgot_password_verify", request, identifier=payload.phone)
     try:
         reset_token, ttl = await pr_verify_and_issue(payload.phone, payload.otp)
         logger.info(
