@@ -19,7 +19,7 @@ import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, Optional, Tuple
 
 from fastapi import HTTPException, Request, status
 from pymongo import ReturnDocument
@@ -172,11 +172,14 @@ async def rate_limit(
     request: Request,
     identifier: Optional[str] = None,
     account: Optional[User] = None,
+    axes: Optional[Tuple[str, ...]] = None,
 ) -> None:
     """Count this request against `rule`, and refuse it if that puts it over.
 
     `account` is who `identifier` resolved to, when the route knows; the
     identifier axis then counts against that account (see identifier_key).
+    `axes` limits the call to some of the rule's axes, so a route can check the
+    address before doing the work of resolving the account, then the account.
 
     Until the rule is enforced (RATE_LIMIT_ENFORCE, or its name in
     RATE_LIMIT_ENFORCE_RULES), nothing is refused: requests over a limit are
@@ -193,10 +196,11 @@ async def rate_limit(
     values = {IP: client_ip(request)}
     if identifier is not None and identifier.strip():
         values[IDENTIFIER] = identifier_key(identifier, account)
+    counted = {a: v for a, v in values.items() if axes is None or a in axes}
 
     try:
         tripped = await asyncio.wait_for(
-            _count(rule, values, _now()), timeout=STORE_TIMEOUT_SECONDS
+            _count(rule, counted, _now()), timeout=STORE_TIMEOUT_SECONDS
         )
     except Exception:
         # Logged at ERROR either way: a limiter failing open in silence is one

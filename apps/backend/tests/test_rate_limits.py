@@ -170,6 +170,36 @@ async def test_ip_limit_is_separate_axis(anon_client, db, enforcing, monkeypatch
     assert other.status_code == 401
 
 
+async def test_an_address_over_its_limit_is_refused_before_any_lookup(
+    anon_client, db, enforcing, monkeypatch
+):
+    """The account lookup can scan stored mobiles; a refused client gets none."""
+    monkeypatch.setitem(rl.RULES, "login", {IDENTIFIER: Limit(5, HOUR), IP: Limit(1, HOUR)})
+    lookups = []
+
+    async def _resolve(identifier):
+        lookups.append(identifier)
+        return None
+
+    monkeypatch.setattr("app.routes.auth.resolve_login_identity", _resolve)
+    await _login(anon_client, "9000000001")
+
+    response = await _login(anon_client, "9000000002")
+
+    assert response.status_code == 429
+    assert lookups == ["9000000001"]
+
+
+async def test_one_login_counts_once_on_each_axis(anon_client, rahul):
+    await _login(anon_client, "rahul")
+
+    rows = await RateLimitCounter.find_all().to_list()
+    assert sorted((r.key.split(":")[1], r.count) for r in rows) == [
+        ("identifier", 1),
+        ("ip", 1),
+    ]
+
+
 def test_client_ip_takes_rightmost():
     assert rl.client_ip(_request("1.2.3.4, 5.6.7.8")) == "5.6.7.8"
 

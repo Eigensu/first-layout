@@ -54,7 +54,7 @@ from app.services.auth.password_reset import (
 from app.services.membership import record_sign_in
 from app.utils.dependencies import get_current_active_user, subject_claims
 from app.utils.gridfs import upload_avatar_to_gridfs
-from app.utils.rate_limit import rate_limit
+from app.utils.rate_limit import IDENTIFIER, IP, rate_limit
 from app.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -191,15 +191,20 @@ async def login(
 
     identifier = (user_data.username or "").strip()
 
+    # The address first, so a client already over its limit is refused before
+    # the account lookup, which for an unknown number scans stored mobiles.
+    await rate_limit("login", request, axes=(IP,))
     ambiguous = False
     try:
         user = await resolve_login_identity(identifier)
     except AmbiguousIdentifier:
         user, ambiguous = None, True
-    # Counted against the account the identifier reached, so every spelling of
-    # a number is one bucket and a look-alike username is never someone else's.
-    # Before the password check either way: that is what the limit protects.
-    await rate_limit("login", request, identifier=identifier, account=user)
+    # Then the account the identifier reached, so every spelling of a number is
+    # one bucket and a look-alike username is never someone else's. Before the
+    # password check either way: that is what the limit protects.
+    await rate_limit(
+        "login", request, identifier=identifier, account=user, axes=(IDENTIFIER,)
+    )
 
     if ambiguous:
         # Structured on purpose: extractErrorMessage renders `message`, so the
