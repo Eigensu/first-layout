@@ -3,6 +3,7 @@
 No sleeping: the limiter's clock is a function, and these tests move it.
 """
 
+import asyncio
 import logging
 
 import pytest
@@ -95,6 +96,46 @@ async def test_reformatting_a_number_shares_its_bucket(anon_client, rahul, enfor
     assert (await _login(anon_client, "+919876543210")).status_code == 429
 
 
+async def test_a_look_alike_username_is_not_someone_elses_number(
+    anon_client, rahul, enforcing
+):
+    """"98_765_432_10" is a valid username, and need not be rahul's.
+
+    Keyed on the text, it would share rahul's mobile's bucket, and guesses at
+    his number would lock its owner out (Greptile on #55).
+    """
+    lookalike = User(
+        username="98_765_432_10",
+        email="lookalike@example.com",
+        hashed_password=get_password_hash(PASSWORD),
+    )
+    await lookalike.insert()
+    for _ in range(6):
+        await _login(anon_client, "9876543210")
+
+    assert (await _login(anon_client, "98_765_432_10", password=PASSWORD)).status_code == 200
+
+
+async def test_unknown_numbers_share_a_bucket_however_typed(anon_client, db, enforcing):
+    for typed in ("9000000001", "+91 90000 00001", "919000000001", "09000000001", "90000-00001"):
+        assert (await _login(anon_client, typed)).status_code == 401
+
+    assert (await _login(anon_client, "9000000001")).status_code == 429
+
+
+async def test_an_ambiguous_username_is_limited_too(anon_client, rahul, enforcing):
+    twin = User(
+        username="rahul",
+        email="other-rahul@example.com",
+        hashed_password=get_password_hash(PASSWORD),
+    )
+    await twin.insert()
+    for _ in range(5):
+        assert (await _login(anon_client, "rahul")).status_code == 409
+
+    assert (await _login(anon_client, "rahul")).status_code == 429
+
+
 async def test_identifier_case_and_spaces_share_a_bucket(anon_client, rahul, enforcing):
     for typed in ("rahul", "RAHUL", " Rahul ", "rahul", "rAhUl"):
         await _login(anon_client, typed)
@@ -175,6 +216,27 @@ async def test_observe_mode_never_blocks(anon_client, rahul, caplog):
     assert "1.2.3.4, 203.0.113.7" in logged
 
 
+async def test_one_rule_can_be_enforced_alone(anon_client, rahul, monkeypatch):
+    """The rollout enforces the SMS route first, while login keeps observing."""
+    monkeypatch.setattr(rl.settings, "rate_limit_enforce_rules", " forgot_password_request ,")
+
+    async def _send(phone):
+        pass
+
+    monkeypatch.setattr("app.routes.auth.pr_start_session", _send)
+    for _ in range(3):
+        await anon_client.post("/api/auth/forgot-password/request", json={"phone": "9876543210"})
+    otp = await anon_client.post(
+        "/api/auth/forgot-password/request", json={"phone": "9876543210"}
+    )
+    for _ in range(6):
+        await _login(anon_client, "rahul")
+    login = await _login(anon_client, "rahul", password=PASSWORD)
+
+    assert otp.status_code == 429
+    assert login.status_code == 200
+
+
 async def test_disabled_counts_nothing(anon_client, rahul, monkeypatch):
     monkeypatch.setattr(rl.settings, "rate_limit_enabled", False)
     await _login(anon_client, "rahul")
@@ -222,6 +284,35 @@ async def test_racing_first_hits_both_count(db, monkeypatch):
 
 async def _store_down(*args, **kwargs):
     raise PyMongoError("store unavailable")
+
+
+async def _store_stalls(*args, **kwargs):
+    await asyncio.sleep(30)
+
+
+async def test_a_stalled_store_does_not_hold_up_sign_in(
+    anon_client, rahul, enforcing, monkeypatch
+):
+    monkeypatch.setattr(rl, "STORE_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(rl, "_hit", _store_stalls)
+
+    response = await asyncio.wait_for(
+        _login(anon_client, "rahul", password=PASSWORD), timeout=5
+    )
+
+    assert response.status_code == 200
+
+
+async def test_a_stalled_store_closes_the_otp_route(anon_client, rahul, monkeypatch):
+    monkeypatch.setattr(rl.settings, "rate_limit_enforce_rules", "forgot_password_request")
+    monkeypatch.setattr(rl, "STORE_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(rl, "_hit", _store_stalls)
+
+    response = await anon_client.post(
+        "/api/auth/forgot-password/request", json={"phone": "9876543210"}
+    )
+
+    assert response.status_code == 503
 
 
 async def test_store_failure_fails_open_on_login(anon_client, rahul, enforcing, monkeypatch):

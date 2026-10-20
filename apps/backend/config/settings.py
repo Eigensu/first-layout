@@ -47,10 +47,13 @@ class Settings(BaseSettings):
     # Rate limits on the auth routes (docs/RATE_LIMITING_SPEC.md). Enabled but
     # not enforcing by default: the limiter counts and logs what it would have
     # blocked, and RATE_LIMIT_ENFORCE=true turns that into 429s once the logs
-    # show real users are clear of the limits. Proxy hops is how many proxies
-    # in front of the service append to X-Forwarded-For (spec §4.1).
+    # show real users are clear of the limits. RATE_LIMIT_ENFORCE_RULES names
+    # rules to enforce on their own first, comma-separated, e.g.
+    # "forgot_password_request". Proxy hops is how many proxies in front of the
+    # service append to X-Forwarded-For (spec §4.1).
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")
+    rate_limit_enforce_rules: str = Field(default="", alias="RATE_LIMIT_ENFORCE_RULES")
     rate_limit_proxy_hops: int = Field(default=1, alias="RATE_LIMIT_PROXY_HOPS")
 
     # API Configuration

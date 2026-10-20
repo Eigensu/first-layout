@@ -12,6 +12,7 @@ across a window boundary; at limits this coarse that is a fair price for one
 upsert per request and an exact Retry-After.
 """
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -25,6 +26,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.models.rate_limit import RateLimitCounter
+from app.models.user import User
 from app.services.auth.identity import canonical_mobile, digits_only, is_phone_shaped
 from config.settings import get_settings
 
@@ -61,6 +63,19 @@ RULES: Dict[str, Dict[str, Limit]] = {
 # (spec §5): a store outage must not become an open tap on the SMS budget.
 SPENDS_MONEY = {"forgot_password_request"}
 
+# How long counting may take before it counts as the store being down. The
+# limiter sits in front of sign-in, and a stalled write must not hold it up.
+STORE_TIMEOUT_SECONDS = 1.0
+
+
+def _enforcing(rule: str) -> bool:
+    """RATE_LIMIT_ENFORCE turns on every rule; RATE_LIMIT_ENFORCE_RULES names
+    some, so the money routes can be enforced first (spec §8)."""
+    if settings.rate_limit_enforce:
+        return True
+    named = {r.strip() for r in settings.rate_limit_enforce_rules.split(",")}
+    return rule in named
+
 
 def _now() -> float:
     """The clock, as a function so tests can move it instead of sleeping."""
@@ -84,13 +99,21 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def identifier_key(identifier: str) -> str:
+def identifier_key(identifier: str, account: Optional[User] = None) -> str:
     """One bucket per account, however its identifier is typed.
 
-    "+91 98765 43210" and "9876543210" sign in to the same account
-    (services/auth/identity.py), so they share a bucket too; otherwise
-    reformatting a number would buy a fresh allowance.
+    When the identifier resolved to an account, the bucket is that account:
+    every way of typing someone's number lands in it, and nothing else does.
+    Normalising the text instead cannot tell a username like "98_765_432_10"
+    from the mobile 9876543210, which may belong to someone else, and would
+    let attempts on one lock the other out.
+
+    With no account there is no one to lock out, so the text is the key, with
+    a number reduced to its digits so that reformatting it buys no fresh
+    allowance against an enumeration sweep.
     """
+    if account is not None:
+        return f"account:{account.id}"
     value = identifier.strip().lower()
     if "@" not in value and is_phone_shaped(value):
         return canonical_mobile(digits_only(value))
@@ -133,14 +156,34 @@ def _wait_phrase(seconds: int) -> str:
     return "1 minute" if minutes == 1 else f"{minutes} minutes"
 
 
-async def rate_limit(rule: str, request: Request, identifier: Optional[str] = None) -> None:
+async def _count(rule: str, values: Dict[str, str], now: float) -> Dict[str, int]:
+    """Count the request on each axis; the seconds to wait on any that went over."""
+    tripped: Dict[str, int] = {}
+    for axis, limit in RULES[rule].items():
+        if axis in values:
+            wait = await _hit(rule, axis, values[axis], limit, now)
+            if wait is not None:
+                tripped[axis] = wait
+    return tripped
+
+
+async def rate_limit(
+    rule: str,
+    request: Request,
+    identifier: Optional[str] = None,
+    account: Optional[User] = None,
+) -> None:
     """Count this request against `rule`, and refuse it if that puts it over.
 
-    Until RATE_LIMIT_ENFORCE is on, nothing is refused: requests over a limit
-    are logged as `would_block`, with the resolved address and the raw
+    `account` is who `identifier` resolved to, when the route knows; the
+    identifier axis then counts against that account (see identifier_key).
+
+    Until the rule is enforced (RATE_LIMIT_ENFORCE, or its name in
+    RATE_LIMIT_ENFORCE_RULES), nothing is refused: requests over a limit are
+    logged as `would_block`, with the resolved address and the raw
     X-Forwarded-For, so the limits and the proxy-hop count can be checked
     against real traffic first (spec §8). For the same reason a store failure
-    only refuses money-spending routes while enforcing.
+    only refuses money-spending routes while they are enforced.
 
     The 429 never says which axis tripped or how many attempts are left; both
     are free information to someone probing the limits (spec §6).
@@ -149,24 +192,18 @@ async def rate_limit(rule: str, request: Request, identifier: Optional[str] = No
         return
     values = {IP: client_ip(request)}
     if identifier is not None and identifier.strip():
-        values[IDENTIFIER] = identifier_key(identifier)
+        values[IDENTIFIER] = identifier_key(identifier, account)
 
-    now = _now()
-    tripped: List[str] = []
-    retry_after = 0
     try:
-        for axis, limit in RULES[rule].items():
-            if axis not in values:
-                continue
-            wait = await _hit(rule, axis, values[axis], limit, now)
-            if wait is not None:
-                tripped.append(axis)
-                retry_after = max(retry_after, wait)
+        tripped = await asyncio.wait_for(
+            _count(rule, values, _now()), timeout=STORE_TIMEOUT_SECONDS
+        )
     except Exception:
         # Logged at ERROR either way: a limiter failing open in silence is one
-        # you find out is broken during the incident it was there to stop.
+        # you find out is broken during the incident it was there to stop. A
+        # timeout lands here too.
         logger.exception("rate_limit store_unavailable rule=%s", rule)
-        if rule in SPENDS_MONEY and settings.rate_limit_enforce:
+        if rule in SPENDS_MONEY and _enforcing(rule):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail={
@@ -178,13 +215,14 @@ async def rate_limit(rule: str, request: Request, identifier: Optional[str] = No
 
     if not tripped:
         return
+    retry_after = max(tripped.values())
     context = (
         rule,
         ",".join(tripped),
         values[IP],
         request.headers.get("x-forwarded-for", ""),
     )
-    if not settings.rate_limit_enforce:
+    if not _enforcing(rule):
         logger.warning(
             "rate_limit would_block rule=%s axis=%s ip=%s forwarded_for=%r", *context
         )

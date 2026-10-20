@@ -75,7 +75,7 @@ gospel. Each route is limited on two keys at once; whichever trips first wins.
 
 | Route | Per identifier | Per IP | Notes |
 |---|---|---|---|
-| `POST /api/auth/login` | 5 / 15 min | 60 / 15 min | Identifier = the submitted mobile/email/username, normalised |
+| `POST /api/auth/login` | 5 / 15 min | 60 / 15 min | Identifier = **the account it resolves to**; an identifier that resolves to no one is keyed on its text, a number reduced to its digits |
 | `POST /api/auth/register` | — | 10 / hour | Nothing to key on before the account exists |
 | `POST /api/auth/google` | — | 30 / hour | Google already rate-limits its side |
 | `POST /api/auth/apple` | — | 30 / hour | Same reasoning as Google; added when built |
@@ -229,9 +229,23 @@ their catch-all `try`, which would otherwise turn a 429 into their generic reply
 ```python
 # config/settings.py
 rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
-rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")   # §8
+rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")   # §8, every rule
+rate_limit_enforce_rules: str = Field(default="", alias="RATE_LIMIT_ENFORCE_RULES")  # §8, named rules
 rate_limit_proxy_hops: int = Field(default=1, alias="RATE_LIMIT_PROXY_HOPS")  # §4.1
 ```
+
+Three things changed after review (Greptile on #55):
+
+- **Login counts against the account, not the text.** Usernames may contain digits,
+  `_` and `-`, so `98_765_432_10` is a valid username that need not belong to whoever
+  holds 9876543210. Normalising the text put both in one bucket, so guesses at one
+  could lock the other out. Login now resolves the identifier first and counts against
+  that account; every spelling of a number still lands in one bucket, because they all
+  resolve to it. The password check still comes after the limit.
+- **Rules can be enforced one at a time.** `RATE_LIMIT_ENFORCE_RULES=forgot_password_request`
+  enforces the SMS route while everything else keeps observing, which is step 4 of §8.
+- **Counting has a one-second deadline** (`STORE_TIMEOUT_SECONDS`). A stalled write is
+  treated as the store being down, so it fails open on sign-in instead of holding it up.
 
 No new configuration is needed on either live service: the counters use the
 service's own database. In observe mode a store failure fails open even on the money

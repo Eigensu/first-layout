@@ -190,11 +190,18 @@ async def login(
     """Login with username (or mobile) and password"""
 
     identifier = (user_data.username or "").strip()
-    await rate_limit("login", request, identifier=identifier)
 
+    ambiguous = False
     try:
         user = await resolve_login_identity(identifier)
     except AmbiguousIdentifier:
+        user, ambiguous = None, True
+    # Counted against the account the identifier reached, so every spelling of
+    # a number is one bucket and a look-alike username is never someone else's.
+    # Before the password check either way: that is what the limit protects.
+    await rate_limit("login", request, identifier=identifier, account=user)
+
+    if ambiguous:
         # Structured on purpose: extractErrorMessage renders `message`, so the
         # user is told what to do instead of being shown a generic failure for
         # credentials that were actually correct.
