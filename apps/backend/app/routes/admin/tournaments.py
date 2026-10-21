@@ -1,21 +1,34 @@
 from typing import Optional
 
 from beanie import PydanticObjectId
+from beanie.operators import In
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pymongo.errors import DuplicateKeyError
 
 from app.common.enums.tournaments import TournamentStatus
+from app.models.admin.audit_log import AdminActionLog
 from app.models.tournament import Tournament
+from app.models.tournament_membership import (
+    ROLE_ADMIN,
+    ROLE_PLAYER,
+    TournamentMembership,
+)
 from app.models.user import User
 from app.schemas.tournament import (
     SlugAvailabilityResponse,
+    TournamentAdminAppoint,
+    TournamentAdminListResponse,
+    TournamentAdminResponse,
     TournamentCreate,
     TournamentListResponse,
     TournamentResponse,
     TournamentUpdate,
     validate_slug,
 )
+from app.services.auth.identity import AmbiguousIdentifier, resolve_login_identity
 from app.utils.dependencies import get_platform_admin
 from app.utils.timezone import now_ist, to_ist
+from config.settings import settings
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
 
@@ -201,3 +214,195 @@ async def delete_tournament(
     return {
         "message": f"Tournament '{tournament.slug}' archived; its subdomain no longer resolves"
     }
+
+
+# --- who administers a tournament ----------------------------------------------
+#
+# Under shared tenancy, admin is a role on one tournament's membership
+# (spec §4.7); these are how a platform admin hands it out. A legacy
+# single-tournament service still uses the global is_admin, so there is nothing
+# for them to do there.
+
+
+def _require_shared_tenancy() -> None:
+    if not settings.shared_tenancy:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Tournament admins are appointed on the shared backend only. "
+                "On this service, admins are the accounts with is_admin set."
+            ),
+        )
+
+
+def _admin_response(
+    user: User, membership: TournamentMembership
+) -> TournamentAdminResponse:
+    return TournamentAdminResponse(
+        user_id=str(user.id),
+        username=user.username,
+        full_name=user.full_name,
+        email=user.email,
+        display_name=membership.display_name,
+    )
+
+
+async def _log_admin_change(
+    admin: User, action: str, user_id: PydanticObjectId, tournament: Tournament
+) -> None:
+    await AdminActionLog(
+        admin_id=str(admin.id),
+        action=action,
+        target_type="user",
+        target_id=str(user_id),
+        details={"tournament_slug": tournament.slug},
+        tournament_id=tournament.id,
+    ).insert()
+
+
+def _membership_of(user_id: PydanticObjectId, tournament: Tournament):
+    return TournamentMembership.find_one(
+        TournamentMembership.user_id == user_id,
+        TournamentMembership.tournament_id == tournament.id,
+    )
+
+
+async def _set_role(membership: TournamentMembership, role: str) -> None:
+    # Only the role is written. A save() would write back every field as it
+    # was loaded, undoing a sign-in, a first play or a stats refresh that
+    # landed in between.
+    await membership.set({TournamentMembership.role: role})
+
+
+_NOT_SHARED = {409: {"description": "Not the shared backend; admins there are is_admin"}}
+
+
+@router.get(
+    "/{tournament_id}/admins",
+    response_model=TournamentAdminListResponse,
+    responses={404: {"description": "Tournament not found"}, **_NOT_SHARED},
+)
+async def list_tournament_admins(
+    tournament_id: str,
+    current_user: User = Depends(get_platform_admin),
+):
+    """Who administers this tournament. Platform admins run every tournament
+    and are not listed unless they were also appointed here."""
+    _require_shared_tenancy()
+    tournament = await _get_or_404(tournament_id)
+    memberships = await TournamentMembership.find(
+        TournamentMembership.tournament_id == tournament.id,
+        TournamentMembership.role == ROLE_ADMIN,
+    ).to_list()
+    users = {
+        user.id: user
+        for user in await User.find(
+            In(User.id, [m.user_id for m in memberships])
+        ).to_list()
+    }
+    admins = [
+        _admin_response(users[m.user_id], m) for m in memberships if m.user_id in users
+    ]
+    admins.sort(key=lambda a: a.display_name.lower())
+    return TournamentAdminListResponse(admins=admins)
+
+
+@router.post(
+    "/{tournament_id}/admins",
+    response_model=TournamentAdminResponse,
+    responses={
+        400: {"description": "That account is disabled"},
+        404: {"description": "Tournament not found, or no account by that identifier"},
+        409: {
+            "description": "Not the shared backend, or a username held by more than one account"
+        },
+    },
+)
+async def appoint_tournament_admin(
+    tournament_id: str,
+    data: TournamentAdminAppoint,
+    current_user: User = Depends(get_platform_admin),
+):
+    """Make someone an admin of this tournament, found by whatever they sign in with.
+
+    They need an account already. Someone who has never been to this
+    tournament gets a membership here, as if they had signed in on its site.
+    Appointing an existing admin again changes nothing.
+    """
+    _require_shared_tenancy()
+    tournament = await _get_or_404(tournament_id)
+    try:
+        user = await resolve_login_identity(data.identifier)
+    except AmbiguousIdentifier:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "That username belongs to more than one account. "
+                "Use their mobile number or email instead."
+            ),
+        )
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No account signs in with that mobile number, email or username",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="That account is disabled")
+
+    membership = await _membership_of(user.id, tournament)
+    if membership is None:
+        try:
+            membership = await TournamentMembership(
+                user_id=user.id,
+                tournament_id=tournament.id,
+                tournament_slug=tournament.slug,
+                display_name=user.username,
+                role=ROLE_ADMIN,
+            ).insert()
+        except DuplicateKeyError:
+            # They signed in on the tournament's site at the same moment, which
+            # created their row first. Promote that one instead.
+            membership = await _membership_of(user.id, tournament)
+        else:
+            await _log_admin_change(
+                current_user, "tournament_admin.appoint", user.id, tournament
+            )
+            return _admin_response(user, membership)
+
+    if membership.role != ROLE_ADMIN:
+        await _set_role(membership, ROLE_ADMIN)
+        await _log_admin_change(
+            current_user, "tournament_admin.appoint", user.id, tournament
+        )
+    return _admin_response(user, membership)
+
+
+@router.delete(
+    "/{tournament_id}/admins/{user_id}",
+    responses={
+        400: {"description": "Invalid user id"},
+        404: {"description": "Tournament not found, or not an admin of it"},
+        **_NOT_SHARED,
+    },
+)
+async def remove_tournament_admin(
+    tournament_id: str,
+    user_id: str,
+    current_user: User = Depends(get_platform_admin),
+):
+    """Stop someone administering this tournament.
+
+    They stay a member: the teams and results they have here are still theirs.
+    """
+    _require_shared_tenancy()
+    tournament = await _get_or_404(tournament_id)
+    try:
+        uid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    membership = await _membership_of(uid, tournament)
+    if membership is None or membership.role != ROLE_ADMIN:
+        raise HTTPException(status_code=404, detail="Not an admin of this tournament")
+    await _set_role(membership, ROLE_PLAYER)
+    await _log_admin_change(current_user, "tournament_admin.remove", uid, tournament)
+    return {"message": f"No longer an admin of '{tournament.slug}'"}

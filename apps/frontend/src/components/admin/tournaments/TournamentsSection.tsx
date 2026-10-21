@@ -17,7 +17,9 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  ShieldCheck,
 } from "lucide-react";
+import { TournamentAdminsDialog } from "./TournamentAdminsDialog";
 import {
   adminTournamentsApi,
   Tournament,
@@ -439,6 +441,7 @@ export function TournamentsSection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formTarget, setFormTarget] = useState<Tournament | "create" | null>(null);
+  const [adminsTarget, setAdminsTarget] = useState<Tournament | null>(null);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
   const load = useCallback(async (search?: string) => {
@@ -600,6 +603,12 @@ export function TournamentsSection() {
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </button>
+                <button
+                  onClick={() => setAdminsTarget(t)}
+                  className="px-3 py-1 rounded border border-border text-sm flex-1 text-center text-text-main hover:bg-bg-elevated transition-colors inline-flex items-center justify-center gap-1"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Admins
+                </button>
                 {t.status !== "archived" && (
                   <button
                     onClick={() => handleArchive(t)}
@@ -628,6 +637,13 @@ export function TournamentsSection() {
             setFormTarget(null);
             load(searchQuery);
           }}
+        />
+      )}
+
+      {adminsTarget && (
+        <TournamentAdminsDialog
+          tournament={adminsTarget}
+          onClose={() => setAdminsTarget(null)}
         />
       )}
     </div>

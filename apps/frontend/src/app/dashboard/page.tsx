@@ -14,6 +14,8 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL, LS_KEYS, tenantHeaders } from "@/common/consts";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
+import { getMyTournaments, type MyTournaments } from "@/lib/api/tournaments";
+import { MyTournamentsSection } from "@/components/dashboard/MyTournamentsSection";
 import { getImageUrl } from "@/lib/utils";
 import {
   publicContestsApi,
@@ -49,6 +51,9 @@ function DashboardContent() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamResponse[]>([]);
   const [pastContests, setPastContests] = useState<PastContestSummary[]>([]);
+  const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
+    null,
+  );
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -196,6 +201,22 @@ function DashboardContent() {
     };
 
     loadDashboardData();
+  }, [isAuthenticated, user]);
+
+  // Apart from the load above, so a slow /me/tournaments never holds the rest
+  // of the dashboard behind its loading screen. A backend without memberships
+  // (a single-tournament one, or one from before them) leaves the section out.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    let active = true;
+    getMyTournaments()
+      .catch(() => null)
+      .then((found) => {
+        if (active) setMyTournaments(found);
+      });
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated, user]);
 
   const pastContestIdSet = useMemo(
@@ -451,6 +472,13 @@ function DashboardContent() {
             </section>
 
             <section className="xl:col-span-8 space-y-6">
+              {myTournaments && (
+                <MyTournamentsSection
+                  tournaments={myTournaments}
+                  username={user?.username}
+                />
+              )}
+
               <div className="rounded-2xl sm:rounded-3xl border border-white/70 bg-white/85 shadow-lg p-4 sm:p-7">
                 <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 mb-3 sm:mb-4">
                   <Users className="h-5 w-5 text-cyan-600" />

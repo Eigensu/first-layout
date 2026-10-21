@@ -153,3 +153,22 @@ class PublicTournamentResponse(BaseModel):
         if isinstance(v, datetime):
             return to_ist(v)
         return v
+
+
+class TournamentAdminAppoint(BaseModel):
+    # Whatever the person signs in with: a mobile number, an email, or (while
+    # usernames last) a username.
+    identifier: str = Field(..., min_length=1)
+
+
+class TournamentAdminResponse(BaseModel):
+    user_id: str
+    username: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    # The name they go by in this tournament, which need not be their username.
+    display_name: str
+
+
+class TournamentAdminListResponse(BaseModel):
+    admins: List[TournamentAdminResponse]

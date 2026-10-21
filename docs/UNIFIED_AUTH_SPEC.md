@@ -946,6 +946,21 @@ Migration sets `role="admin"` on the membership for every legacy row with
 `is_admin: true`; `is_platform_admin` is set **only** from an explicit allowlist you
 confirm before the run.
 
+**Appointing admins after cutover** (built 2026-10-20). Without this, a tournament
+created after cutover would have no admin until someone edited the database. A platform
+admin lists, appoints and removes a tournament's admins from the Tournaments tab
+("Admins" on each card):
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/tournaments/{id}/admins` | That tournament's admin memberships, with name, username and email |
+| `POST /api/admin/tournaments/{id}/admins` `{identifier}` | Finds the account by mobile, email or username (the login resolver, so an ambiguous username is a 409 asking for mobile or email), then sets `role="admin"` on its membership, creating one if they have never been to the tournament |
+| `DELETE /api/admin/tournaments/{id}/admins/{user_id}` | Sets the role back to `player`; the membership and its history stay |
+
+All three are platform-admin only, so a tournament admin cannot appoint more admins.
+Each change is written to `admin_action_logs`. Under `single` they answer 409, since
+admins there are `is_admin` and nothing reads a membership's role.
+
 ---
 
 ## 5. Password reset — two channels, and a gate that is open
@@ -1443,6 +1458,16 @@ code path, which also means the refresh is exercised long before it runs in prod
   `globals.css` — no hex literals, per `colour-spec.md`.
 - Login form copy changes from "Username" to **"Mobile number or email"**, with helper
   text for the transition period.
+
+**Built (stage F, 2026-10-19).**
+- `src/lib/api/tournaments.ts` has `getMyTournaments()`.
+- The profile's **Your Tournaments** card is `src/components/dashboard/MyTournamentsSection.tsx`. It sits first in the dashboard's right-hand column.
+- Each card shows its name, logo, status, teams, contests, best rank, points and last played date. It also shows "Played as …" when that name differs from the account's username.
+- A tournament links to its own subdomain, except the site already open (marked "This site") and archived ones, whose subdomain is gone.
+- The card is left out entirely when there is nothing to list or the backend has no such endpoint. That is what today's single-tournament services report, so they look as they did.
+- **Colours follow the dashboard page, not the tokens above.** That page is styled with its own slate, cyan and amber palette and uses none of the `--bg-*` custom properties, so the new card matches its neighbours. Moving the whole page onto the tokens is a separate job.
+- The login form says "Mobile number or email", with a line saying a username still works for now. Validation still accepts anything of three or more characters, which keeps old usernames working.
+- The **change-email UI is not built**: it needs the email-code channel (C3).
 
 ---
 
@@ -2162,7 +2187,7 @@ These block specific phases; everything else can be built without them.
 | C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) — **built 2026-10-21**, off until `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set (§5.5, §5.7 *Built*) | Q8 *(to go live, not to build)* |
 | D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job — **done 2026-10-19** (§6.1–6.2a; the admin support endpoint is deferred) | B, R21 (§13.8, fixed in #45) |
-| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI — the change-email card and the email option on the reset pages **built 2026-10-21** with C3 | E, C3 |
+| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI — **done**: all but the change-email UI on 2026-10-19 (§6.3); the change-email card and the email option on the reset pages on 2026-10-21 with C3 (§5.7 *Built*) | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
 | H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13.10** |
 | I | Cut over — stand up the one backend, backfill, repoint both frontends, archive the five services (§7, Phase 6) | C, C2b, C3, D, E, F, H |
@@ -2175,9 +2200,12 @@ review before anything irreversible happens.
 **H ran on 2026-10-17** against a local copy, after #45 and #46 merged. It found four
 more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three more
 (R42–R44, §13.12), also fixed; a third pass with the review applied passes Phase 5 and
-leaves 2 of 1,962 password accounts unreachable, both staff logins. What is left
-before I is the platform-admin list (§13.10) and keeping the reviewed links for
-cutover.
+leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform-admin
+list and the reviewed links, the two things it left open, were settled on 2026-10-19
+(§13.10); the owner confirmed the list again on 2026-10-21. What is left before I:
+setting up Resend (Q8–Q9), the two app decisions (Q11–Q12), the unified Railway
+service and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on
+the cutover snapshot.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
