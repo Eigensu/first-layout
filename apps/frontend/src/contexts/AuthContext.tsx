@@ -185,6 +185,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [logout]);
 
+  const updateUser = useCallback((fresh: User) => {
+    setUser(fresh);
+    localStorage.setItem(LS_KEYS.USER, JSON.stringify(fresh));
+  }, []);
+
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
@@ -194,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     refreshToken,
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -12,6 +12,8 @@ export interface User {
   is_platform_admin?: boolean;
   created_at: string;
   avatar_url: string | null;
+  // "password", "google" or "apple": how the account was first created.
+  auth_provider?: string;
 }
 
 export interface LoginCredentials {
@@ -43,4 +45,6 @@ export interface AuthContextType {
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
+  // Replace the signed-in user with a newer copy, e.g. after changing the email.
+  updateUser: (user: User) => void;
 }

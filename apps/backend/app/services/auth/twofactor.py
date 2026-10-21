@@ -13,6 +13,10 @@ API_KEY = getattr(settings, "twofactor_api_key", None)
 TEMPLATE_NAME = getattr(settings, "twofactor_template_name", None)
 
 
+def is_configured() -> bool:
+    return bool(API_KEY and TEMPLATE_NAME)
+
+
 async def send_otp_autogen(
     phone: str, template_name: Optional[str] = None
 ) -> Tuple[bool, Optional[str], Optional[str]]:

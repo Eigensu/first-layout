@@ -82,7 +82,8 @@ gospel. Each route is limited on two keys at once; whichever trips first wins.
 | `POST /api/auth/forgot-password/request` | **3 / hour** | 20 / hour | **Spends money.** The tightest limit in the table |
 | `POST /api/auth/forgot-password/verify` | 10 / hour | 40 / hour | `session.attempts` already caps guesses per session; this caps session churn |
 | `POST /api/auth/refresh` | — | 120 / hour | A legitimate client refreshes rarely |
-| `POST /api/users/me/email/request` | 3 / hour per **user** | — | Authenticated, so key on user id |
+| `POST /api/users/me/email/request` | 3 / hour per **user** | 20 / hour | Authenticated, so key on the account. **Spends money** (an email), and it checks the password, so this is also its password-guessing limit |
+| `POST /api/users/me/email/verify` | 10 / hour per **user** | 40 / hour | As `forgot-password/verify` |
 
 ### 3.2 What is deliberately *not* limited
 
@@ -221,7 +222,9 @@ app/routes/auth.py           each limited route awaits rate_limit(rule, request,
 tests/test_rate_limits.py
 ```
 
-`/me/email/request` gets its rule when C3 builds that route. Each route calls
+The email-change routes (`email_change_request`, `email_change_verify`, in
+`app/routes/users.py`) got their rules when C3 built them, on 2026-10-21;
+`email_change_request` is in `SPENDS_MONEY` with `forgot_password_request`. Each route calls
 `rate_limit()` itself rather than through a decorator or dependency, because the
 identifier comes out of the parsed body. The two forgot-password routes call it before
 their catch-all `try`, which would otherwise turn a 429 into their generic reply.

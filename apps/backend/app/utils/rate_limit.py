@@ -56,12 +56,16 @@ RULES: Dict[str, Dict[str, Limit]] = {
     "forgot_password_request": {IDENTIFIER: Limit(3, HOUR), IP: Limit(20, HOUR)},
     "forgot_password_verify": {IDENTIFIER: Limit(10, HOUR), IP: Limit(40, HOUR)},
     "refresh": {IP: Limit(120, HOUR)},
+    # Signed in, so the identifier is the account itself. The request also
+    # checks the password, so its limit is the guessing limit there too.
+    "email_change_request": {IDENTIFIER: Limit(3, HOUR), IP: Limit(20, HOUR)},
+    "email_change_verify": {IDENTIFIER: Limit(10, HOUR), IP: Limit(40, HOUR)},
 }
 
-# Routes that spend money on every call (an SMS today, an email later). When
-# the counters cannot be read these refuse instead of letting requests through
+# Routes that spend money on every call (an SMS or an email). When the
+# counters cannot be read these refuse instead of letting requests through
 # (spec §5): a store outage must not become an open tap on the SMS budget.
-SPENDS_MONEY = {"forgot_password_request"}
+SPENDS_MONEY = {"forgot_password_request", "email_change_request"}
 
 # How long counting may take before it counts as the store being down. The
 # limiter sits in front of sign-in, and a stalled write must not hold it up.

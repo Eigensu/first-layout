@@ -58,6 +58,23 @@ class UserUpdateRequest(BaseModel):
         return digits
 
 
+class EmailChangeRequest(BaseModel):
+    """Start changing the account's email; a code goes to the new address."""
+
+    email: EmailStr
+    # Re-authentication, as for deleting the account: the password, or for an
+    # account without one a fresh Google or Apple sign-in. Once email can reset
+    # a password, an email change is an account takeover for whoever holds a
+    # stolen session, unless it asks for something the session alone lacks.
+    password: Optional[str] = None
+    google_id_token: Optional[str] = None
+    apple_identity_token: Optional[str] = None
+
+
+class EmailChangeVerify(BaseModel):
+    otp: str = Field(..., min_length=1, max_length=12)
+
+
 class DeleteAccountRequest(BaseModel):
     """Schema for account deletion request"""
 

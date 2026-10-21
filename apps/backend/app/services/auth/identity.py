@@ -255,6 +255,50 @@ async def resolve_phone_holder(phone: str) -> Optional[User]:
     return await _holder_of_symbol_number(digits)
 
 
+def normalize_email(value: str) -> str:
+    """The form emails[] stores and every email lookup compares against."""
+    return value.strip().lower()
+
+
+async def resolve_email_holder(email: str) -> Optional[User]:
+    """The account holding this address, by address alone.
+
+    The email counterpart of resolve_phone_holder: a reset code goes to the
+    address typed, so the account it resets must be the one holding it.
+    """
+    return await _by_email(normalize_email(email))
+
+
+async def email_taken_by_other(email: str, user: User) -> bool:
+    """Whether an account other than `user` signs in with this address."""
+    value = normalize_email(email)
+    for query in (User.emails == value, User.email == value):
+        holder = await User.find_one(query)
+        if holder and holder.id != user.id:
+            return True
+    return False
+
+
+def set_profile_email(user: User, address: str) -> None:
+    """Make `address` the account's email, in both fields login reads it from.
+
+    The address replaced leaves `emails` too, as a replaced number leaves
+    `mobiles` (set_profile_mobile): a mistyped or abandoned address must stop
+    being a way into the account, and stop receiving its reset codes. Other
+    addresses a merged account carries from its other tournaments stay.
+    """
+    value = normalize_email(address)
+    # The primary is emails[0] with the scalar mirroring it; both are read in
+    # case an older write let them drift apart.
+    replaced = {value}
+    if user.email:
+        replaced.add(normalize_email(user.email))
+    if user.emails:
+        replaced.add(user.emails[0])
+    user.emails = [value] + [e for e in user.emails if e not in replaced]
+    user.email = value
+
+
 def set_profile_mobile(user: User, number: str) -> None:
     """Replace the number on a profile, in both fields login reads it from.
 

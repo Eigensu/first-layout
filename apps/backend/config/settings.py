@@ -71,7 +71,6 @@ class Settings(BaseSettings):
     payment_gateway_key: Optional[str] = Field(
         default=None, alias="PAYMENT_GATEWAY_KEY"
     )
-    email_service_key: Optional[str] = Field(default=None, alias="EMAIL_SERVICE_KEY")
 
     # Cloudinary
     cloudinary_cloud_name: Optional[str] = Field(
@@ -97,6 +96,13 @@ class Settings(BaseSettings):
     otp_expiry_seconds: int = Field(default=600, alias="OTP_EXPIRY_SECONDS")
     otp_max_attempts: int = Field(default=5, alias="OTP_MAX_ATTEMPTS")
     reset_token_ttl_seconds: int = Field(default=600, alias="RESET_TOKEN_TTL_SECONDS")
+
+    # Resend, the email channel for reset and change-email codes (spec §5.4).
+    # Both must be set for the channel to be offered; until then the email
+    # option answers 503 and the website hides it.
+    resend_api_key: Optional[str] = Field(default=None, alias="RESEND_API_KEY")
+    resend_from_email: Optional[str] = Field(default=None, alias="RESEND_FROM_EMAIL")
+    resend_reply_to: Optional[str] = Field(default=None, alias="RESEND_REPLY_TO")
 
     @property
     def cors_origins_list(self) -> list[str]:

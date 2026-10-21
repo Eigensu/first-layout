@@ -1,8 +1,9 @@
+import logging
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Union
 
 from beanie.operators import In
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from app.models.tournament import Tournament
@@ -16,23 +17,33 @@ from app.schemas.membership import (
 from app.schemas.user import (
     ASCII_DIGITS,
     DeleteAccountRequest,
+    EmailChangeRequest,
+    EmailChangeVerify,
     UserResponse,
     UserUpdateRequest,
 )
+from app.services.auth import email_otp
 from app.services.auth.apple import AppleTokenError, verify_apple_identity_token
+from app.services.auth.email_change import EmailTaken, EmailUnchanged
+from app.services.auth.email_change import confirm_email_change as confirm_change
+from app.services.auth.email_change import request_email_change as request_change
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
-from app.services.auth.identity import set_profile_mobile
+from app.services.auth.identity import set_profile_mobile, verify_user_password
 from app.utils.dependencies import (
     get_current_active_user,
     is_platform_admin,
     is_tournament_admin,
 )
 from app.utils.gridfs import open_avatar_stream
+from app.utils.rate_limit import rate_limit
 from app.utils.security import verify_password
-from app.utils.tenant import TenantId, get_optional_tenant
+from app.utils.tenant import TenantId, get_optional_tenant, tournament_name
 from app.utils.timezone import to_ist
+from config.settings import get_settings
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
+settings = get_settings()
+logger = logging.getLogger("app.users")
 
 
 async def _user_response(user: User, tournament_id: TenantId) -> UserResponse:
@@ -242,11 +253,125 @@ async def patch_current_user(
     return await _user_response(current_user, tournament_id)
 
 
+async def _reauthenticate(user: User, payload: EmailChangeRequest) -> None:
+    """The password if the account has one; otherwise a fresh provider sign-in.
+
+    Refused with 400, as change-password refuses a wrong current password, and
+    not the 401 deleting an account uses: the clients read a 401 on a
+    signed-in route as an expired session, and refresh it or sign out.
+    """
+    if user.hashed_password or user.legacy_hashes:
+        ok, _ = verify_user_password(user, payload.password or "")
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
+            )
+        return
+    try:
+        await _reauthenticate_passwordless(user, payload, action="change your email")
+    except HTTPException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.detail)
+
+
+@router.post(
+    "/me/email/request",
+    responses={
+        400: {"description": "Re-authentication failed, or no change"},
+        409: {"description": "Another account uses that address"},
+        502: {"description": "The code could not be sent"},
+        503: {"description": "The email channel is not configured here"},
+    },
+)
+async def request_email_change(
+    request: Request,
+    payload: EmailChangeRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    tournament_id: Annotated[TenantId, Depends(get_optional_tenant)],
+):
+    """Send a code to the new address; the email changes once it comes back."""
+    if not email_otp.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "channel_unavailable",
+                "message": "Changing your email isn't available right now.",
+            },
+        )
+    # Before the password check, so guessing it through here is counted too.
+    await rate_limit(
+        "email_change_request",
+        request,
+        identifier=str(current_user.id),
+        account=current_user,
+    )
+    await _reauthenticate(current_user, payload)
+    try:
+        address = await request_change(
+            current_user, str(payload.email), await tournament_name(tournament_id)
+        )
+    except EmailUnchanged:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That is already your email",
+        )
+    except EmailTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email is already linked to another account",
+        )
+    except ValueError:
+        logger.exception("Could not send the email-change code")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="We couldn't send the code. Please try again in a moment.",
+        )
+    return {"email": address, "expires_in_sec": settings.otp_expiry_seconds}
+
+
+@router.post(
+    "/me/email/verify",
+    response_model=UserResponse,
+    responses={
+        400: {"description": "Wrong, expired or used-up code"},
+        409: {"description": "Another account took the address meanwhile"},
+    },
+)
+async def verify_email_change(
+    request: Request,
+    payload: EmailChangeVerify,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    tournament_id: Annotated[TenantId, Depends(get_optional_tenant)],
+):
+    """Commit the change with the code sent to the new address."""
+    await rate_limit(
+        "email_change_verify",
+        request,
+        identifier=str(current_user.id),
+        account=current_user,
+    )
+    try:
+        await confirm_change(current_user, payload.otp)
+    except EmailTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email is already linked to another account",
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code"
+        )
+    return await _user_response(current_user, tournament_id)
+
+
 def _linked(ids: list, scalar) -> set:
     return set(ids) | ({scalar} if scalar else set())
 
 
-async def _reauthenticate_passwordless(user: User, request: DeleteAccountRequest):
+async def _reauthenticate_passwordless(
+    user: User,
+    request: Union[DeleteAccountRequest, EmailChangeRequest],
+    action: str = "delete this account",
+):
     """Require a fresh sign-in with a provider this account is linked to.
 
     A bearer token alone must not be enough to delete a passwordless account,
@@ -288,7 +413,7 @@ async def _reauthenticate_passwordless(user: User, request: DeleteAccountRequest
     provider = "Apple" if apple_ids and not google_ids else "Google"
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=f"Re-authenticate with {provider} to delete this account",
+        detail=f"Re-authenticate with {provider} to {action}",
     )
 
 
