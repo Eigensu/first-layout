@@ -1002,3 +1002,90 @@ async def test_apple_sign_in_does_not_restore_a_removed_address(rahul, mailbox):
     )
 
     assert "rahul@example.com" not in (await User.get(rahul.id)).emails
+
+
+# --------------------------------------------------------------------------
+# a write that read the account before an email change does not undo it
+# --------------------------------------------------------------------------
+
+
+async def _read_then_change(user, mailbox):
+    """The account as a request read it, then the email change landing after."""
+    stale = await User.get(user.id)
+    await _change_email(user, mailbox)
+    return stale
+
+
+async def _assert_change_survived(user):
+    stored = await User.get(user.id)
+    assert stored.email == "new@example.com"
+    assert "rahul@example.com" not in stored.emails
+    assert stored.removed_emails == ["rahul@example.com"]
+
+
+async def test_a_login_that_overlaps_an_email_change_keeps_it(
+    anon_client, rahul, mailbox, monkeypatch
+):
+    stale = await _read_then_change(rahul, mailbox)
+
+    async def resolve(identifier):
+        return stale
+
+    monkeypatch.setattr("app.routes.auth.resolve_login_identity", resolve)
+
+    assert (await _login(anon_client, "rahul", PASSWORD)).status_code == 200
+    await _assert_change_survived(rahul)
+    assert (await User.get(rahul.id)).last_login is not None
+
+
+async def test_a_google_sign_in_that_overlaps_an_email_change_keeps_it(
+    rahul, mailbox, monkeypatch
+):
+    from app.services.auth import google
+
+    await rahul.set({User.google_ids: ["google-sub-1"]})
+    stale = await _read_then_change(rahul, mailbox)
+
+    async def find(google_id, email):
+        return stale
+
+    monkeypatch.setattr(google, "_find_existing", find)
+
+    await google.find_or_create_google_user(
+        {"sub": "google-sub-1", "email": "fresh@example.com", "email_verified": True}
+    )
+
+    await _assert_change_survived(rahul)
+    # A new provider address is still recorded beside it.
+    assert "fresh@example.com" in (await User.get(rahul.id)).emails
+
+
+async def test_a_password_change_that_overlaps_an_email_change_keeps_it(
+    signed_in, rahul, mailbox
+):
+    stale = await _read_then_change(rahul, mailbox)
+
+    resp = await signed_in(stale).post(
+        "/api/auth/change-password",
+        json={
+            "current_password": PASSWORD,
+            "new_password": NEW_PASSWORD,
+            "confirm_password": NEW_PASSWORD,
+        },
+    )
+
+    assert resp.status_code == 200
+    await _assert_change_survived(rahul)
+    assert verify_password(NEW_PASSWORD, (await User.get(rahul.id)).hashed_password)
+
+
+async def test_a_profile_edit_that_overlaps_an_email_change_keeps_it(
+    signed_in, rahul, mailbox
+):
+    stale = await _read_then_change(rahul, mailbox)
+
+    resp = await signed_in(stale).patch("/api/users/me", json={"full_name": "Rahul K"})
+
+    assert resp.status_code == 200
+    await _assert_change_survived(rahul)
+    assert (await User.get(rahul.id)).full_name == "Rahul K"

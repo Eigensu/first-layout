@@ -310,6 +310,43 @@ def set_profile_email(user: User, address: str) -> List[str]:
     return removed
 
 
+async def link_provider_identity(
+    user: User,
+    ids_field: str,
+    id_field: str,
+    provider_id: str,
+    address: Optional[str],
+) -> None:
+    """Record a Google or Apple identity on an existing account, field by field.
+
+    Targeted writes, not ``user.save()``: a save writes the whole account as it
+    was read when sign-in began, and would undo an email change confirmed in
+    the meantime. ``address`` is the provider's address to add, when the caller
+    has decided it should be; it is added only if it is still off the account's
+    removed list at the moment of writing, so that change wins the race too.
+    """
+    ids = getattr(user, ids_field)
+    if provider_id not in ids:
+        ids.append(provider_id)
+    fields = {"is_verified": True}
+    if not getattr(user, id_field):
+        setattr(user, id_field, ids[0])
+        fields[id_field] = ids[0]
+    user.is_verified = True
+    collection = User.get_motor_collection()
+    await collection.update_one(
+        {"_id": user.id}, {"$addToSet": {ids_field: provider_id}, "$set": fields}
+    )
+    if address is None:
+        return
+    added = await collection.update_one(
+        {"_id": user.id, "removed_emails": {"$ne": address}},
+        {"$addToSet": {"emails": address}},
+    )
+    if added.modified_count and address not in user.emails:
+        user.emails.append(address)
+
+
 def holds_destination(user: User, channel: str, destination: str) -> bool:
     """Whether a code's destination still belongs to the account.
 
@@ -367,9 +404,11 @@ async def promote_legacy_password(user: User, plaintext: str) -> None:
     hashing parameters. The extra valid secrets therefore exist only until each
     person next signs in, instead of for as long as the account does.
     """
-    user.hashed_password = get_password_hash(plaintext)
-    user.legacy_hashes = []
-    await user.save()
+    # Those two fields only: this runs mid-login, and a whole-document save
+    # would put back anything changed since the account was read.
+    await user.set(
+        {User.hashed_password: get_password_hash(plaintext), User.legacy_hashes: []}
+    )
 
 
 def set_new_password(user: User, plaintext: str) -> None:

@@ -251,9 +251,10 @@ async def login(
         # up with exactly one valid password rather than several.
         await promote_legacy_password(user, user_data.password)
 
-    # Update last login
-    user.last_login = datetime.utcnow()
-    await user.save()
+    # Only the field this writes: a whole-document save would put back any
+    # field changed since the account was read, such as an email change
+    # confirmed on another device a moment ago.
+    await user.set({User.last_login: datetime.utcnow()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -294,8 +295,7 @@ async def google_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+    await user.set({User.last_login: datetime.utcnow()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -335,8 +335,7 @@ async def apple_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+    await user.set({User.last_login: datetime.utcnow()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -590,9 +589,14 @@ async def change_password(
             detail="New password must be different from current password",
         )
 
-    # Update password
+    # Update password -- those fields only, so a concurrent email change stays.
     set_new_password(current_user, payload.new_password)
-    current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    await current_user.set(
+        {
+            User.hashed_password: current_user.hashed_password,
+            User.legacy_hashes: current_user.legacy_hashes,
+            User.updated_at: datetime.utcnow(),
+        }
+    )
 
     return {"message": "Password changed successfully"}

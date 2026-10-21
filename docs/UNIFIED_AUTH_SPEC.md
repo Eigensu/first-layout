@@ -1274,6 +1274,11 @@ in `routes/users.py`, and the profile's "Change Email" card
   configured.
 - The commit writes only `emails`, `email`, `removed_emails`, `is_verified` and
   `updated_at`, so a sign-in or password change landing meanwhile is not overwritten.
+  The reverse holds too: every other route that writes a signed-in account (login and
+  Google/Apple sign-in, promoting a legacy password, reset and change of password,
+  `PUT`/`PATCH /me`, account deletion) writes only the fields it changed, where it
+  used to save the whole account as it read it and could put an old email back
+  (Greptile on #57).
 - **The old address stays removed.** It goes into a new `User.removed_emails`, which
   Google and Apple sign-in check before recording the provider's address. They record
   a changed provider address on every sign-in, so without this a Google-linked account

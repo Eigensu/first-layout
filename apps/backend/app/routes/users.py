@@ -177,8 +177,10 @@ async def update_current_user(
 ):
     """Update current user information"""
 
+    changes = {}
     if full_name:
         current_user.full_name = full_name
+        changes[User.full_name] = full_name
 
     if mobile:
         normalized_mobile = "".join(ch for ch in mobile.strip() if ch in ASCII_DIGITS)
@@ -195,13 +197,18 @@ async def update_current_user(
             )
 
         set_profile_mobile(current_user, normalized_mobile)
+        changes[User.mobile] = current_user.mobile
+        changes[User.mobiles] = current_user.mobiles
 
     if avatar_url:
         current_user.avatar_url = avatar_url
+        changes[User.avatar_url] = avatar_url
 
-    current_user.updated_at = datetime.utcnow()
+    changes[User.updated_at] = datetime.utcnow()
     try:
-        await current_user.save()
+        # The fields this request changed, not the whole document; see
+        # patch_current_user.
+        await current_user.set(changes)
     except DuplicateKeyError:
         # See patch_current_user: the check above is read-then-write, so
         # uniq_mobile is what actually settles a concurrent claim.
@@ -227,8 +234,10 @@ async def patch_current_user(
     Google accounts are created with mobile unset.
     """
 
+    changes = {}
     if payload.full_name is not None:
         current_user.full_name = payload.full_name.strip() or None
+        changes[User.full_name] = current_user.full_name
 
     if payload.mobile is not None:
         if await _mobile_taken_by_other(payload.mobile, current_user):
@@ -237,10 +246,15 @@ async def patch_current_user(
                 detail="This mobile number is already linked to another account",
             )
         set_profile_mobile(current_user, payload.mobile)
+        changes[User.mobile] = current_user.mobile
+        changes[User.mobiles] = current_user.mobiles
 
-    current_user.updated_at = datetime.now(timezone.utc)
+    changes[User.updated_at] = datetime.now(timezone.utc)
     try:
-        await current_user.save()
+        # Only what this request changed. The user was read when the request
+        # began, and a whole-document save would put back any field changed
+        # since -- an email change confirmed on another device, say.
+        await current_user.set(changes)
     except DuplicateKeyError:
         # The check above is read-then-write, so a concurrent request can take
         # the number in between. uniq_mobile rejects the loser; surface it as
@@ -441,12 +455,17 @@ async def delete_current_user(
     else:
         await _reauthenticate_passwordless(current_user, request)
 
-    # Soft delete by deactivating and recording timestamp
-    current_user.is_active = False
-    current_user.deleted_at = datetime.utcnow()
-    current_user.deletion_reason = request.reason
-    current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    # Soft delete by deactivating and recording timestamp, writing those fields
+    # only, as patch_current_user does.
+    now = datetime.utcnow()
+    await current_user.set(
+        {
+            User.is_active: False,
+            User.deleted_at: now,
+            User.deletion_reason: request.reason,
+            User.updated_at: now,
+        }
+    )
 
     # Revoke all refresh tokens for this user
     await RefreshToken.find(

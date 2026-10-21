@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 
 from app.models.user import User
 from app.services.auth.google import _email_held_by_other, _generate_unique_username
+from app.services.auth.identity import link_provider_identity
 from config.settings import get_settings
 
 settings = get_settings()
@@ -107,23 +108,23 @@ async def find_or_create_apple_user(
         # Link the identity rather than duplicating it, and append rather
         # than overwrite: a merged account can legitimately hold more than
         # one Apple identity.
-        if apple_id not in user.apple_ids:
-            user.apple_ids.append(apple_id)
-        if not user.apple_id:
-            user.apple_id = user.apple_ids[0]
-        if (
+        add_address = (
             email
             and email.lower() not in user.emails
             # An address its owner changed away from stays removed.
             and email.lower() not in user.removed_emails
-            and not await _email_held_by_other(email, user)
-        ):
             # Skipped when another account holds the address, as for Google:
-            # uniq_emails would otherwise fail the save and turn a sign-in by
+            # uniq_emails would otherwise fail the write and turn a sign-in by
             # the Apple id that identifies them exactly into a server error.
-            user.emails.append(email.lower())
-        user.is_verified = True
-        await user.save()
+            and not await _email_held_by_other(email, user)
+        )
+        await link_provider_identity(
+            user,
+            "apple_ids",
+            "apple_id",
+            apple_id,
+            email.lower() if add_address else None,
+        )
         return user
 
     # Defensive fallback only: the native iOS flow with the .fullName/.email

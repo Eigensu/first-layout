@@ -283,8 +283,14 @@ async def reset_password(reset_token: str, new_password: str) -> None:
     if spent is None:
         raise ValueError("Invalid or expired token")
     set_new_password(user, new_password)
-    user.updated_at = _now()
-    await user.save()
+    # The password fields only, so nothing changed meanwhile is put back.
+    await user.set(
+        {
+            User.hashed_password: user.hashed_password,
+            User.legacy_hashes: user.legacy_hashes,
+            User.updated_at: _now(),
+        }
+    )
     # Revoke all refresh tokens for this user
     async for rt in RefreshToken.find(
         RefreshToken.user_id == user.id, RefreshToken.revoked == False

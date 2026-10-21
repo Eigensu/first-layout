@@ -139,7 +139,8 @@ async def test_patch_maps_duplicate_key_race_to_409(
     async def _raise_duplicate(*args, **kwargs):
         raise DuplicateKeyError("E11000 duplicate key error: uniq_mobile")
 
-    monkeypatch.setattr(type(google_user), "save", _raise_duplicate)
+    # The route writes only the fields it changed, through set().
+    monkeypatch.setattr(type(google_user), "set", _raise_duplicate)
 
     resp = await user_client.patch("/api/users/me", json={"mobile": "9876543210"})
 
@@ -166,7 +167,7 @@ async def test_put_maps_duplicate_key_race_to_400(
     async def _raise_duplicate(*args, **kwargs):
         raise DuplicateKeyError("E11000 duplicate key error: uniq_mobile")
 
-    monkeypatch.setattr(type(google_user), "save", _raise_duplicate)
+    monkeypatch.setattr(type(google_user), "set", _raise_duplicate)
 
     resp = await user_client.put("/api/users/me", params={"mobile": "9876543210"})
 
