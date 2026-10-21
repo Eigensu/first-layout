@@ -1,6 +1,6 @@
 # Rate Limiting — Technical Specification
 
-**Status:** Ready for review, not implemented
+**Status:** Built 2026-10-20 (`app/utils/rate_limit.py`); ships in observe mode (§8), not enforcing
 **Scope:** Platform-wide, but only auth and OTP routes are limited in v1
 **Related:** `docs/UNIFIED_AUTH_SPEC.md` §5.6 (this replaces that section's sketch)
 
@@ -30,8 +30,8 @@ is platform-wide plumbing, independently shippable, and outlives the auth migrat
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | Library | **`slowapi`** — the conventional FastAPI choice, backed by `limits`. |
-| 2 | Backing store | **MongoDB**, via `limits`' `async+mongodb://` backend. No new infrastructure: the cluster is already there and already a hard dependency. |
+| 1 | Library | **None: a fixed-window counter in `app/utils/rate_limit.py`.** *Changed from `slowapi` when built:* slowapi's key functions see only the `Request`, so they cannot key on the identifier inside a JSON login body, and that is the axis doing the security work (§4.2). A fixed window can let up to twice a limit through across a window boundary; at these limits that is a fair price for one upsert per request and an exact `Retry-After`. |
+| 2 | Backing store | **MongoDB**, in the `rate_limit_counters` collection (`RateLimitCounter`), one row per key per window, deleted by a TTL index. No new infrastructure: the cluster is already there and already a hard dependency. Keys hold a hash of the address or identifier, never the value. |
 | 3 | Key function | **Written by hand, not slowapi's built-ins** — see §4.1. This is not optional. |
 | 4 | Primary axis | **The identifier** (mobile / email / username), not the IP. IP is a loose backstop only — see §4.2. |
 | 5 | Failure mode | **Fail-open** on login and register; **fail-closed** on anything that spends money. |
@@ -47,6 +47,10 @@ those variables point at a real instance or are vestigial.
 `limits` supports MongoDB natively, with an async driver, and Mongo is already a
 hard dependency of every service. That makes a Mongo-backed limiter deployable to both
 live tournaments **today, with no new variables and no new infrastructure**.
+
+*As built,* the limiter talks to MongoDB through Beanie rather than through `limits`,
+so the storage-URI switch sketched below was not built. Moving to Redis later means
+replacing `_hit` in `app/utils/rate_limit.py`, about twenty lines.
 
 Counter-argument, stated fairly: Redis is the faster and more conventional store for
 this, and at high volume a Mongo counter costs one indexed `findAndModify` per limited
@@ -71,9 +75,10 @@ gospel. Each route is limited on two keys at once; whichever trips first wins.
 
 | Route | Per identifier | Per IP | Notes |
 |---|---|---|---|
-| `POST /api/auth/login` | 5 / 15 min | 60 / 15 min | Identifier = the submitted mobile/email/username, normalised |
+| `POST /api/auth/login` | 5 / 15 min | 60 / 15 min | Identifier = **the account it resolves to**; an identifier that resolves to no one is keyed on its text, a number reduced to its digits |
 | `POST /api/auth/register` | — | 10 / hour | Nothing to key on before the account exists |
 | `POST /api/auth/google` | — | 30 / hour | Google already rate-limits its side |
+| `POST /api/auth/apple` | — | 30 / hour | Same reasoning as Google; added when built |
 | `POST /api/auth/forgot-password/request` | **3 / hour** | 20 / hour | **Spends money.** The tightest limit in the table |
 | `POST /api/auth/forgot-password/verify` | 10 / hour | 40 / hour | `session.attempts` already caps guesses per session; this caps session churn |
 | `POST /api/auth/refresh` | — | 120 / hour | A legitimate client refreshes rarely |
@@ -193,6 +198,11 @@ is broken during the incident it was meant to prevent.
 user as the sentence rather than as raw JSON. **No frontend change is required** —
 but the login and forgot-password screens should be checked once against a real 429.
 
+**The mobile app does need one** (Eigensu/walle-app, `src/services/authService.ts`):
+its login maps 401, 403, 404 and 5xx to messages and rethrows anything else, so a 429
+reaches the user as "Request failed with status code 429". Map it to
+`detail.message` before enforcing login.
+
 Never say which axis tripped, or how many attempts remain. Both are free information
 for someone probing the limits.
 
@@ -200,24 +210,47 @@ for someone probing the limits.
 
 ## 7. Implementation
 
+*As built (2026-10-20):*
+
 ```
-app/utils/rate_limit.py      limiter, client_ip, identifier keys, the decorators
+app/utils/rate_limit.py      RULES table, client_ip, identifier_key, rate_limit()
+app/models/rate_limit.py     RateLimitCounter (unique key, TTL on expires_at)
 config/settings.py           RATE_LIMIT_* settings
-main.py                      register the limiter + the 429 handler
-app/routes/auth.py           decorate the limited routes
-app/routes/users.py          decorate /me/email/request
+config/database.py           register RateLimitCounter
+app/routes/auth.py           each limited route awaits rate_limit(rule, request, ...)
 tests/test_rate_limits.py
 ```
+
+`/me/email/request` gets its rule when C3 builds that route. Each route calls
+`rate_limit()` itself rather than through a decorator or dependency, because the
+identifier comes out of the parsed body. The two forgot-password routes call it before
+their catch-all `try`, which would otherwise turn a 429 into their generic reply.
 
 ```python
 # config/settings.py
 rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
-rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")   # §8
-rate_limit_storage_uri: Optional[str] = Field(default=None, alias="RATE_LIMIT_STORAGE_URI")
+rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")   # §8, every rule
+rate_limit_enforce_rules: str = Field(default="", alias="RATE_LIMIT_ENFORCE_RULES")  # §8, named rules
+rate_limit_proxy_hops: int = Field(default=1, alias="RATE_LIMIT_PROXY_HOPS")  # §4.1
 ```
 
-`rate_limit_storage_uri` defaults to `async+mongodb://` derived from `MONGODB_URL`, so
-the feature works with no new configuration on either live service.
+Three things changed after review (Greptile on #55):
+
+- **Login counts against the account, not the text.** Usernames may contain digits,
+  `_` and `-`, so `98_765_432_10` is a valid username that need not belong to whoever
+  holds 9876543210. Normalising the text put both in one bucket, so guesses at one
+  could lock the other out. Login now resolves the identifier first and counts against
+  that account; every spelling of a number still lands in one bucket, because they all
+  resolve to it. The password check still comes after the limit.
+- **Rules can be enforced one at a time.** `RATE_LIMIT_ENFORCE_RULES=forgot_password_request`
+  enforces the SMS route while everything else keeps observing, which is step 4 of §8.
+- **Counting has a one-second deadline** (`STORE_TIMEOUT_SECONDS`). A stalled write is
+  treated as the store being down, so it fails open on sign-in instead of holding it up.
+
+No new configuration is needed on either live service: the counters use the
+service's own database. In observe mode a store failure fails open even on the money
+routes, so that turning the limiter on cannot change behaviour until `RATE_LIMIT_ENFORCE`
+is set.
 
 The limits themselves belong in one module-level table, not scattered across
 decorators — they will be tuned repeatedly during §8, and hunting them through route
@@ -266,6 +299,12 @@ Inject the clock and the store instead.
 | `test_store_failure_fails_closed_on_otp` | Store raises → `forgot-password/request` returns 503 |
 | `test_429_body_shape` | `code`, `message`, `retry_after_seconds`, and a `Retry-After` header |
 | `test_hot_path_is_not_limited` | Team save and contest join are never rate limited |
+
+*Built:* all ten, plus a test that each route is wired to its rule, one that a
+reformatted mobile number shares its bucket, one that a counter holds no address or
+identifier, and one for two first requests racing to create a window's row.
+Mutation-checked: reading `X-Forwarded-For` from the left fails four of them, and
+dropping the fail-closed branch fails its test.
 
 `test_client_ip_takes_rightmost` and its spoofing sibling are the two that matter most:
 they are the difference between a working limiter and an outage, and neither is

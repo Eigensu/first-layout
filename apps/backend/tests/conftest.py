@@ -20,6 +20,7 @@ from app.models.contest import Contest
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
+from app.models.rate_limit import RateLimitCounter
 from app.models.settings import GlobalSettings
 from app.models.sponsor import Sponsor
 from app.models.team import Team
@@ -49,6 +50,7 @@ DOCUMENT_MODELS = [
     GlobalSettings,
     Tournament,
     TournamentMembership,
+    RateLimitCounter,
 ]
 
 
