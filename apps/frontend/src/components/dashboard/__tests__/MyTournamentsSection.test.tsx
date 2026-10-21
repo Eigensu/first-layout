@@ -50,6 +50,17 @@ function onSite(slug: string) {
   vi.stubGlobal('window', { location: { host: `${slug}.wallearena.com` } });
 }
 
+// The page shows dates in the viewer's time zone, and 09:00 in India is still
+// the day before in the Americas, so the expected text is worked out the same
+// way rather than written for one zone.
+function localDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 describe('MyTournamentsSection', () => {
   it('renders nothing when the account has joined no tournaments', () => {
     expect(render({}).html).toBe('');
@@ -67,7 +78,7 @@ describe('MyTournamentsSection', () => {
     expect(text).toContain('Contests: 2');
     expect(text).toContain('Best rank: #14');
     expect(text).toContain('Points: 812.5');
-    expect(text).toContain('Last played: October 5, 2026');
+    expect(text).toContain(`Last played: ${localDate(played.last_active_at!)}`);
     expect(text).not.toContain('Played as');
   });
 
@@ -109,7 +120,7 @@ describe('MyTournamentsSection', () => {
     const { html, text } = render({ played: [fresh, unnamed] });
 
     expect(text).toContain('Best rank: N/A');
-    expect(text).toContain('Last played: October 1, 2026');
+    expect(text).toContain(`Last played: ${localDate(played.joined_at)}`);
     expect(text).toContain('Last played: -');
     expect(html).toContain('src="https://cdn.example.com/rspl.png"');
     expect(text).toContain(' M ');

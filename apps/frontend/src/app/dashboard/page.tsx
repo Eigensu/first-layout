@@ -89,18 +89,14 @@ function DashboardContent() {
           throw new Error("Session expired. Please log in again.");
         }
 
-        const [teamsRes, enrollmentsRes, tournamentsRes] = await Promise.all([
+        const [teamsRes, enrollmentsRes] = await Promise.all([
           getUserTeams(token),
           publicContestsApi
             .myEnrollments()
             .catch(() => [] as EnrollmentResponse[]),
-          // A backend without memberships (a single-tournament one, or one
-          // from before them) just leaves the section out.
-          getMyTournaments().catch(() => null),
         ]);
 
         setTeams(teamsRes.teams || []);
-        setMyTournaments(tournamentsRes);
 
         if (!enrollmentsRes.length) {
           setPastContests([]);
@@ -190,6 +186,22 @@ function DashboardContent() {
     };
 
     loadDashboardData();
+  }, [isAuthenticated, user]);
+
+  // Apart from the load above, so a slow /me/tournaments never holds the rest
+  // of the dashboard behind its loading screen. A backend without memberships
+  // (a single-tournament one, or one from before them) leaves the section out.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    let active = true;
+    getMyTournaments()
+      .catch(() => null)
+      .then((found) => {
+        if (active) setMyTournaments(found);
+      });
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated, user]);
 
   const pastContestIdSet = useMemo(
