@@ -17,8 +17,19 @@ export type ChangeEmailState =
 
 export type Outcome<T> = { ok: true; value: T } | { ok: false; error: string };
 
-// Only what is worth catching before a round trip; the backend decides.
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * Only what is worth catching before a round trip; the backend decides.
+ * One "@", something before it, and a dot inside the part after it. Written
+ * without a regular expression, whose obvious form backtracks badly.
+ */
+function looksLikeEmail(value: string): boolean {
+  if (/\s/.test(value)) return false;
+  const parts = value.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  const dot = domain.lastIndexOf('.');
+  return local.length > 0 && dot > 0 && dot < domain.length - 1;
+}
 
 export function emailChangeProblem(
   email: string,
@@ -26,8 +37,8 @@ export function emailChangeProblem(
   currentEmail?: string | null,
 ): string | null {
   const value = email.trim().toLowerCase();
-  if (!EMAIL_SHAPE.test(value)) return 'Enter a valid email address.';
-  if (currentEmail && value === currentEmail.trim().toLowerCase()) {
+  if (!looksLikeEmail(value)) return 'Enter a valid email address.';
+  if (value === currentEmail?.trim().toLowerCase()) {
     return 'That is already your email.';
   }
   if (!password) return 'Enter your current password.';

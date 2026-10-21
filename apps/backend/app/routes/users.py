@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, Union
+from typing import Annotated
 
 from beanie.operators import In
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -369,7 +369,7 @@ def _linked(ids: list, scalar) -> set:
 
 async def _reauthenticate_passwordless(
     user: User,
-    request: Union[DeleteAccountRequest, EmailChangeRequest],
+    request: DeleteAccountRequest | EmailChangeRequest,
     action: str = "delete this account",
 ):
     """Require a fresh sign-in with a provider this account is linked to.

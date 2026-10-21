@@ -897,3 +897,108 @@ async def test_an_email_change_code_cannot_reset_a_password(rahul, mailbox):
         await password_reset.verify_email_otp_and_issue_token(
             "new@example.com", mailbox[0]["code"]
         )
+
+
+# --------------------------------------------------------------------------
+# a removed address or number stops being a way into the account
+# --------------------------------------------------------------------------
+
+
+async def _change_email(user, mailbox, address="new@example.com"):
+    await request_email_change(user, address, None)
+    await confirm_email_change(user, mailbox[-1]["code"])
+
+
+async def test_a_reset_code_mailed_to_the_old_address_dies_with_it(rahul, mailbox):
+    """Whoever reads the old inbox must not finish a reset once it is gone."""
+    await password_reset.start_email_session("rahul@example.com")
+    stale_code = mailbox[0]["code"]
+
+    await _change_email(rahul, mailbox)
+
+    with pytest.raises(ValueError):
+        await password_reset.verify_email_otp_and_issue_token(
+            "rahul@example.com", stale_code
+        )
+    open_resets = await PasswordResetSession.find(
+        PasswordResetSession.purpose == PURPOSE_PASSWORD_RESET
+    ).to_list()
+    assert open_resets == []
+
+
+async def test_a_reset_token_for_a_removed_address_cannot_set_a_password(rahul):
+    """The token was issued before the change; reset itself checks ownership."""
+    token = await _token_for(rahul, "verified")
+    await User.get_motor_collection().update_one(
+        {"_id": rahul.id},
+        {"$set": {"email": "new@example.com", "emails": ["new@example.com"]}},
+    )
+
+    with pytest.raises(ValueError):
+        await password_reset.reset_password(token, NEW_PASSWORD)
+
+    assert verify_password(PASSWORD, (await User.get(rahul.id)).hashed_password)
+
+
+async def test_an_sms_reset_for_a_replaced_number_cannot_set_a_password(rahul, sms):
+    await password_reset.start_session("9876543210")
+    token, _ = await password_reset.verify_otp_and_issue_token("9876543210", "123456")
+    await User.get_motor_collection().update_one(
+        {"_id": rahul.id}, {"$set": {"mobile": "9123456780", "mobiles": ["9123456780"]}}
+    )
+
+    with pytest.raises(ValueError):
+        await password_reset.reset_password(token, NEW_PASSWORD)
+
+
+async def test_an_sms_reset_reaches_a_number_stored_another_way(rahul, sms):
+    """The session holds the digits typed; the account may store the same
+    phone with its country code."""
+    await User.get_motor_collection().update_one(
+        {"_id": rahul.id}, {"$set": {"mobiles": ["919876543210"]}}
+    )
+    await password_reset.start_session("9876543210")
+    token, _ = await password_reset.verify_otp_and_issue_token("9876543210", "123456")
+
+    await password_reset.reset_password(token, NEW_PASSWORD)
+
+    assert verify_password(NEW_PASSWORD, (await User.get(rahul.id)).hashed_password)
+
+
+async def test_the_old_address_is_remembered_as_removed(rahul, mailbox):
+    await _change_email(rahul, mailbox)
+
+    stored = await User.get(rahul.id)
+    assert stored.removed_emails == ["rahul@example.com"]
+
+    # Changing back makes it the account's again.
+    await _change_email(stored, mailbox, "rahul@example.com")
+    assert (await User.get(rahul.id)).removed_emails == ["new@example.com"]
+
+
+async def test_google_sign_in_does_not_restore_a_removed_address(rahul, mailbox):
+    from app.services.auth.google import find_or_create_google_user
+
+    await rahul.set({User.google_ids: ["google-sub-1"]})
+    await _change_email(rahul, mailbox)
+
+    await find_or_create_google_user(
+        {"sub": "google-sub-1", "email": "rahul@example.com", "email_verified": True}
+    )
+
+    stored = await User.get(rahul.id)
+    assert "rahul@example.com" not in stored.emails
+    assert stored.email == "new@example.com"
+
+
+async def test_apple_sign_in_does_not_restore_a_removed_address(rahul, mailbox):
+    from app.services.auth.apple import find_or_create_apple_user
+
+    await rahul.set({User.apple_ids: ["apple-sub-1"]})
+    await _change_email(rahul, mailbox)
+
+    await find_or_create_apple_user(
+        {"sub": "apple-sub-1", "email": "rahul@example.com"}
+    )
+
+    assert "rahul@example.com" not in (await User.get(rahul.id)).emails

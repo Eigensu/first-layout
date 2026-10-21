@@ -105,8 +105,11 @@ async def find_or_create_google_user(payload: dict) -> User:
             user.google_ids.append(google_id)
         if not user.google_id:
             user.google_id = user.google_ids[0]
-        if email.lower() not in user.emails and not await _email_held_by_other(
-            email, user
+        if (
+            email.lower() not in user.emails
+            # An address its owner changed away from stays removed.
+            and email.lower() not in user.removed_emails
+            and not await _email_held_by_other(email, user)
         ):
             # Skipped when another account holds the address: a Google account
             # can change its email to one already registered here, and

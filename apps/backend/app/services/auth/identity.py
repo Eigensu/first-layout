@@ -7,6 +7,7 @@ backfill has not reached yet. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
 
 from typing import List, Optional, Tuple
 
+from app.models.password_reset import CHANNEL_EMAIL
 from app.models.user import User
 from app.utils.security import get_password_hash, verify_password
 
@@ -279,24 +280,51 @@ async def email_taken_by_other(email: str, user: User) -> bool:
     return False
 
 
-def set_profile_email(user: User, address: str) -> None:
+def set_profile_email(user: User, address: str) -> List[str]:
     """Make `address` the account's email, in both fields login reads it from.
 
     The address replaced leaves `emails` too, as a replaced number leaves
     `mobiles` (set_profile_mobile): a mistyped or abandoned address must stop
     being a way into the account, and stop receiving its reset codes. Other
     addresses a merged account carries from its other tournaments stay.
+
+    The replaced address is kept in `removed_emails`, so a Google or Apple
+    sign-in that still reports it does not add it back. Returns it (in a list,
+    as the scalar and emails[0] can disagree on older accounts).
     """
     value = normalize_email(address)
     # The primary is emails[0] with the scalar mirroring it; both are read in
     # case an older write let them drift apart.
-    replaced = {value}
+    replaced = set()
     if user.email:
         replaced.add(normalize_email(user.email))
     if user.emails:
         replaced.add(user.emails[0])
-    user.emails = [value] + [e for e in user.emails if e not in replaced]
+    replaced.discard(value)
+    user.emails = [value] + [e for e in user.emails if e not in replaced | {value}]
     user.email = value
+    removed = sorted(replaced)
+    user.removed_emails = [
+        e for e in user.removed_emails if e != value and e not in replaced
+    ] + removed
+    return removed
+
+
+def holds_destination(user: User, channel: str, destination: str) -> bool:
+    """Whether a code's destination still belongs to the account.
+
+    A reset session outlives an email change or a new number on the profile by
+    up to its expiry, and its code went to the old one. Whoever holds that
+    address or number now must not be able to finish the reset with it.
+    """
+    if channel == CHANNEL_EMAIL:
+        held = set(user.emails)
+        if user.email:
+            held.add(normalize_email(user.email))
+        return destination in held
+    wanted = canonical_mobile(digits_only(destination))
+    numbers = list(user.mobiles) + ([user.mobile] if user.mobile else [])
+    return any(canonical_mobile(digits_only(m)) == wanted for m in numbers)
 
 
 def set_profile_mobile(user: User, number: str) -> None:

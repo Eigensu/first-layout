@@ -11,9 +11,15 @@ Shares its sessions with password reset (purpose "email_change").
 from datetime import datetime, timezone
 from typing import Optional
 
+from beanie.operators import In
 from pymongo.errors import DuplicateKeyError
 
-from app.models.password_reset import PURPOSE_EMAIL_CHANGE, PasswordResetSession
+from app.models.password_reset import (
+    CHANNEL_EMAIL,
+    PURPOSE_EMAIL_CHANGE,
+    PURPOSE_PASSWORD_RESET,
+    PasswordResetSession,
+)
 from app.models.user import User
 from app.services.auth.identity import (
     email_taken_by_other,
@@ -70,7 +76,7 @@ async def confirm_email_change(user: User, otp: str) -> str:
         raise EmailTaken()
     await mark_verified(session)
 
-    set_profile_email(user, session.destination)
+    removed = set_profile_email(user, session.destination)
     # The first time this flag means anything on a password account: the
     # person has just shown they receive mail at this address.
     user.is_verified = True
@@ -82,6 +88,7 @@ async def confirm_email_change(user: User, otp: str) -> str:
             {
                 User.emails: user.emails,
                 User.email: user.email,
+                User.removed_emails: user.removed_emails,
                 User.is_verified: True,
                 User.updated_at: user.updated_at,
             }
@@ -90,4 +97,13 @@ async def confirm_email_change(user: User, otp: str) -> str:
         # The re-check above is read-then-write; uniq_emails settles the race.
         raise EmailTaken()
     await session.set({PasswordResetSession.status: "completed"})
+    # A reset code mailed to the old address must not outlive it. Reset also
+    # checks the address is still the account's; this just leaves nothing open.
+    if removed:
+        await PasswordResetSession.find(
+            PasswordResetSession.user_id == user.id,
+            PasswordResetSession.purpose == PURPOSE_PASSWORD_RESET,
+            PasswordResetSession.channel == CHANNEL_EMAIL,
+            In(PasswordResetSession.destination, removed),
+        ).delete()
     return user.email

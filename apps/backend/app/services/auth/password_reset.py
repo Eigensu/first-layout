@@ -30,6 +30,7 @@ from app.services.auth.email_otp import (
 )
 from app.services.auth.identity import (
     digits_only,
+    holds_destination,
     normalize_email,
     resolve_email_holder,
     resolve_phone_holder,
@@ -40,6 +41,10 @@ from app.services.auth.twofactor import verify_otp as provider_verify_otp
 from config.settings import get_settings
 
 settings = get_settings()
+
+# One message for every way a session can fail to open: which way it failed is
+# only of use to someone guessing.
+INVALID_SESSION = "Invalid or expired session"
 
 
 def _now():
@@ -130,7 +135,7 @@ async def claim_attempt(*conditions) -> PasswordResetSession:
         .first_or_none()
     )
     if not session or session.expires_at < _now():
-        raise ValueError("Invalid or expired session")
+        raise ValueError(INVALID_SESSION)
     counted = await PasswordResetSession.get_motor_collection().find_one_and_update(
         {
             "_id": session.id,
@@ -141,7 +146,7 @@ async def claim_attempt(*conditions) -> PasswordResetSession:
         return_document=ReturnDocument.AFTER,
     )
     if counted is None:
-        raise ValueError("Invalid or expired session")
+        raise ValueError(INVALID_SESSION)
     session.attempts = counted["attempts"]
     return session
 
@@ -153,7 +158,7 @@ async def mark_verified(session: PasswordResetSession) -> None:
         {"$set": {"status": "verified", "updated_at": _now()}},
     )
     if moved is None:
-        raise ValueError("Invalid or expired session")
+        raise ValueError(INVALID_SESSION)
     session.status = "verified"
 
 
@@ -265,6 +270,11 @@ async def reset_password(reset_token: str, new_password: str) -> None:
     user = await User.get(token_doc.user_id)
     if not user:
         raise ValueError("User not found")
+    # The code went to an address or number that may have left the account
+    # since -- an email change, or a new number on the profile -- and whoever
+    # holds it now must not finish the reset.
+    if not holds_destination(user, session.channel, session.destination):
+        raise ValueError("Invalid session")
     # Spent before the password changes, and conditionally, so two requests
     # racing with one token cannot both reset.
     spent = await PasswordResetToken.get_motor_collection().find_one_and_update(

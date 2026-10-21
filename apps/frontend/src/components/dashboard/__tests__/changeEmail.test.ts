@@ -31,7 +31,9 @@ describe('emailChangeProblem', () => {
   });
 
   it('catches what is wrong before a round trip', () => {
-    expect(emailChangeProblem('not-an-email', 'Secret123')).toBe('Enter a valid email address.');
+    for (const bad of ['not-an-email', 'a@b', 'a@.com', 'a@b.', '@b.com', 'a@b@c.com', 'a b@c.com']) {
+      expect(emailChangeProblem(bad, 'Secret123')).toBe('Enter a valid email address.');
+    }
     expect(emailChangeProblem(' OLD@example.com ', 'Secret123', 'old@example.com')).toBe(
       'That is already your email.',
     );

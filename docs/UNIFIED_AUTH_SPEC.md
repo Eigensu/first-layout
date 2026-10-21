@@ -1191,6 +1191,10 @@ Behaviour to preserve or fix while touching this code:
   registry `name`) in the subject and body; otherwise "Wall-E Arena".
 - Sessions carry `purpose`, so an email-change code cannot open a reset, and a reset
   cannot spend an email-change session.
+- **A reset checks the code's destination still belongs to the account**
+  (`identity.holds_destination`). A session outlives an email change or a new number
+  on the profile by up to its expiry, and whoever holds the old address or number
+  must not finish the reset with it (Greptile on #57).
 
 ### 5.6 Rate limiting
 
@@ -1253,8 +1257,14 @@ in `routes/users.py`, and the profile's "Change Email" card
   in `emails[]` or the `email` scalar, checked again at `/verify` and settled by
   `uniq_emails` on a race; 502 if the code could not be mailed; 503 when Resend is not
   configured.
-- The commit writes only `emails`, `email`, `is_verified` and `updated_at`, so a
-  sign-in or password change landing meanwhile is not overwritten.
+- The commit writes only `emails`, `email`, `removed_emails`, `is_verified` and
+  `updated_at`, so a sign-in or password change landing meanwhile is not overwritten.
+- **The old address stays removed.** It goes into a new `User.removed_emails`, which
+  Google and Apple sign-in check before recording the provider's address. They record
+  a changed provider address on every sign-in, so without this a Google-linked account
+  would get its old address back on the next Google sign-in. Changing back to an
+  address takes it off the list. Open reset sessions mailed to the old address are
+  deleted at the same time (Greptile on #57).
 - The website shows the card only when the email channel is on.
 
 ---

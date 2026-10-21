@@ -114,6 +114,8 @@ async def find_or_create_apple_user(
         if (
             email
             and email.lower() not in user.emails
+            # An address its owner changed away from stays removed.
+            and email.lower() not in user.removed_emails
             and not await _email_held_by_other(email, user)
         ):
             # Skipped when another account holds the address, as for Google:
