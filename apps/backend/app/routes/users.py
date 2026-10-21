@@ -204,7 +204,7 @@ async def update_current_user(
         current_user.avatar_url = avatar_url
         changes[User.avatar_url] = avatar_url
 
-    changes[User.updated_at] = datetime.utcnow()
+    changes[User.updated_at] = datetime.now(timezone.utc)
     try:
         # The fields this request changed, not the whole document; see
         # patch_current_user.
@@ -457,7 +457,7 @@ async def delete_current_user(
 
     # Soft delete by deactivating and recording timestamp, writing those fields
     # only, as patch_current_user does.
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     await current_user.set(
         {
             User.is_active: False,

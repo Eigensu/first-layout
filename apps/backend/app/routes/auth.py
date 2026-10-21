@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import (
@@ -254,7 +254,7 @@ async def login(
     # Only the field this writes: a whole-document save would put back any
     # field changed since the account was read, such as an email change
     # confirmed on another device a moment ago.
-    await user.set({User.last_login: datetime.utcnow()})
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -295,7 +295,7 @@ async def google_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    await user.set({User.last_login: datetime.utcnow()})
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -335,7 +335,7 @@ async def apple_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    await user.set({User.last_login: datetime.utcnow()})
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -595,7 +595,7 @@ async def change_password(
         {
             User.hashed_password: current_user.hashed_password,
             User.legacy_hashes: current_user.legacy_hashes,
-            User.updated_at: datetime.utcnow(),
+            User.updated_at: datetime.now(timezone.utc),
         }
     )
 
