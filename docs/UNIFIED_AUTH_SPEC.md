@@ -946,6 +946,21 @@ Migration sets `role="admin"` on the membership for every legacy row with
 `is_admin: true`; `is_platform_admin` is set **only** from an explicit allowlist you
 confirm before the run.
 
+**Appointing admins after cutover** (built 2026-10-20). Without this, a tournament
+created after cutover would have no admin until someone edited the database. A platform
+admin lists, appoints and removes a tournament's admins from the Tournaments tab
+("Admins" on each card):
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/tournaments/{id}/admins` | That tournament's admin memberships, with name, username and email |
+| `POST /api/admin/tournaments/{id}/admins` `{identifier}` | Finds the account by mobile, email or username (the login resolver, so an ambiguous username is a 409 asking for mobile or email), then sets `role="admin"` on its membership, creating one if they have never been to the tournament |
+| `DELETE /api/admin/tournaments/{id}/admins/{user_id}` | Sets the role back to `player`; the membership and its history stay |
+
+All three are platform-admin only, so a tournament admin cannot appoint more admins.
+Each change is written to `admin_action_logs`. Under `single` they answer 409, since
+admins there are `is_admin` and nothing reads a membership's role.
+
 ---
 
 ## 5. Password reset — two channels, and a gate that is open

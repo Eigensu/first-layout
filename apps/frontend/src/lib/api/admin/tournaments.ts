@@ -50,6 +50,17 @@ export interface SlugAvailability {
   reason?: string | null;
 }
 
+/** Someone appointed to run one tournament. Platform admins run them all and
+ *  are not listed. */
+export interface TournamentAdmin {
+  user_id: string;
+  username: string;
+  full_name?: string | null;
+  email?: string | null;
+  // The name they go by in this tournament, which need not be their username.
+  display_name: string;
+}
+
 export const adminTournamentsApi = {
   list: async (params?: {
     page?: number;
@@ -86,6 +97,23 @@ export const adminTournamentsApi = {
     const response = await apiClient.delete(`/api/admin/tournaments/${id}`, {
       params: { force: true },
     });
+    return response.data;
+  },
+  listAdmins: async (id: string): Promise<TournamentAdmin[]> => {
+    const response = await apiClient.get(`/api/admin/tournaments/${id}/admins`);
+    return response.data.admins;
+  },
+  /** `identifier` is whatever they sign in with: mobile, email or username. */
+  appointAdmin: async (id: string, identifier: string): Promise<TournamentAdmin> => {
+    const response = await apiClient.post(`/api/admin/tournaments/${id}/admins`, {
+      identifier,
+    });
+    return response.data;
+  },
+  removeAdmin: async (id: string, userId: string): Promise<{ message: string }> => {
+    const response = await apiClient.delete(
+      `/api/admin/tournaments/${id}/admins/${userId}`
+    );
     return response.data;
   },
 };
