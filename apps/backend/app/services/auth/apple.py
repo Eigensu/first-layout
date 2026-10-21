@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWK, PyJWTError
 
 from app.models.user import User
 from app.services.auth.google import _email_held_by_other, _generate_unique_username
@@ -52,7 +53,7 @@ async def verify_apple_identity_token(token: str) -> dict:
 
     try:
         unverified_header = jwt.get_unverified_header(token)
-    except JWTError as e:
+    except PyJWTError as e:
         raise AppleTokenError(str(e))
 
     kid = unverified_header.get("kid")
@@ -66,14 +67,20 @@ async def verify_apple_identity_token(token: str) -> dict:
         raise AppleTokenError("Apple signing key not found")
 
     try:
+        # The key is built as an RS256 RSA key from Apple's JWK, and RS256 is
+        # the only algorithm accepted, so a token naming any other is refused
+        # before its signature is looked at. That is the defence against
+        # algorithm confusion: an HS256 token "signed" with Apple's public key
+        # as the secret, which python-jose could be tricked into accepting.
+        signing_key = PyJWK(matching_key, algorithm="RS256")
         payload = jwt.decode(
             token,
-            matching_key,
+            signing_key.key,
             algorithms=["RS256"],
             audience=settings.apple_bundle_id,
             issuer=APPLE_ISSUER,
         )
-    except JWTError as e:
+    except PyJWTError as e:
         raise AppleTokenError(str(e))
 
     return payload

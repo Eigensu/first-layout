@@ -4,7 +4,6 @@ from beanie import PydanticObjectId
 from bson import ObjectId
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
 
 from app.models.tournament_membership import ROLE_ADMIN, TournamentMembership
 from app.models.user import User

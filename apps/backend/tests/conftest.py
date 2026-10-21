@@ -9,7 +9,26 @@ import pytest
 import pytest_asyncio
 from beanie import init_beanie
 from httpx import ASGITransport, AsyncClient
+from mongomock.collection import BulkOperationBuilder
 from mongomock_motor import AsyncMongoMockClient
+
+
+def _accept_unset_sort(method):
+    """pymongo 4.10+ hands UpdateOne's and ReplaceOne's `sort` to the bulk
+    builder, always, even unset; mongomock 4.3 (the latest) predates the
+    keyword and rejects it. Accept it unset, and refuse a real sort -- a
+    MongoDB 8 feature nothing here uses -- rather than silently drop it."""
+
+    def wrapper(self, *args, sort=None, **kwargs):
+        if sort is not None:
+            raise NotImplementedError("mongomock does not emulate sort in bulk writes")
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+BulkOperationBuilder.add_update = _accept_unset_sort(BulkOperationBuilder.add_update)
+BulkOperationBuilder.add_replace = _accept_unset_sort(BulkOperationBuilder.add_replace)
 
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.import_log import ImportLog

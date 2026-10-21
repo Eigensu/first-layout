@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 from secrets import token_hex
 from typing import Optional
 
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 
 from config.settings import get_settings
@@ -75,6 +76,6 @@ def decode_token(token: str) -> Optional[dict]:
             token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
         )
         return payload
-    except JWTError as e:
+    except PyJWTError as e:
         print(f"JWT Error: {e}")
         return None
