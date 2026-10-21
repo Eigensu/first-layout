@@ -228,7 +228,7 @@ async def test_ambiguous_username_gets_a_structured_409(client, db):
 
 @pytest.mark.asyncio
 async def test_tokens_are_issued_against_the_user_id(client, legacy_user):
-    from jose import jwt
+    import jwt
 
     from config.settings import get_settings
 

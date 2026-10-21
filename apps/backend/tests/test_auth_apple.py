@@ -237,7 +237,7 @@ async def test_an_apple_email_held_by_another_account_does_not_block_sign_in(
 
 @pytest.mark.asyncio
 async def test_apple_sign_in_tokens_carry_the_subject_claim(anon_client, monkeypatch):
-    from jose import jwt
+    import jwt
 
     from app.utils.dependencies import SUBJECT_KIND_CLAIM, SUBJECT_KIND_USER_ID
     from config.settings import get_settings
