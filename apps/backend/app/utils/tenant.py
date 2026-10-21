@@ -122,6 +122,18 @@ async def get_optional_tenant(request: Request) -> TenantId:
         return None
 
 
+async def tournament_name(tournament_id: TenantId) -> Optional[str]:
+    """The tournament's display name, for mail sent on its behalf.
+
+    None when the request names no tournament, and always under ``single``,
+    where there is no registry row to take a name from.
+    """
+    if tournament_id is None:
+        return None
+    tournament = await Tournament.get(tournament_id)
+    return tournament.name if tournament else None
+
+
 def scoped(model: Type[TDoc], tournament_id: TenantId):
     """Start a query against a tenant-scoped collection.
 

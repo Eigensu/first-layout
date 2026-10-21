@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import (
@@ -15,6 +15,7 @@ from fastapi import (
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import DuplicateKeyError
 
+from app.models.password_reset import CHANNEL_EMAIL, CHANNEL_SMS
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
     ASCII_DIGITS,
@@ -29,6 +30,7 @@ from app.schemas.auth import (
     UserRegister,
 )
 from app.schemas.user import UserResponse
+from app.services.auth import email_otp, twofactor
 from app.services.auth.apple import (
     AppleTokenError,
     find_or_create_apple_user,
@@ -47,7 +49,13 @@ from app.services.auth.identity import (
     verify_user_password,
 )
 from app.services.auth.password_reset import reset_password as pr_reset_password
+from app.services.auth.password_reset import (
+    start_email_session as pr_start_email_session,
+)
 from app.services.auth.password_reset import start_session as pr_start_session
+from app.services.auth.password_reset import (
+    verify_email_otp_and_issue_token as pr_verify_email,
+)
 from app.services.auth.password_reset import (
     verify_otp_and_issue_token as pr_verify_and_issue,
 )
@@ -62,7 +70,7 @@ from app.utils.security import (
     get_password_hash,
     verify_password,
 )
-from app.utils.tenant import TenantId, get_optional_tenant
+from app.utils.tenant import TenantId, get_optional_tenant, tournament_name
 from config.settings import get_settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -243,9 +251,10 @@ async def login(
         # up with exactly one valid password rather than several.
         await promote_legacy_password(user, user_data.password)
 
-    # Update last login
-    user.last_login = datetime.utcnow()
-    await user.save()
+    # Only the field this writes: a whole-document save would put back any
+    # field changed since the account was read, such as an email change
+    # confirmed on another device a moment ago.
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -286,8 +295,7 @@ async def google_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -327,8 +335,7 @@ async def apple_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -426,38 +433,101 @@ async def _revoke_refresh_token(refresh_token: str) -> None:
     )
 
 
-@router.post("/forgot-password/request")
-async def forgot_password_request(request: Request, payload: ForgotPasswordRequest):
-    """Start forgot password flow by sending OTP to the provided phone.
+RESET_CHANNEL_NAMES = {CHANNEL_SMS: "mobile number", CHANNEL_EMAIL: "email"}
+
+GENERIC_RESET_MESSAGES = {
+    CHANNEL_SMS: "If the phone exists, an OTP has been sent.",
+    CHANNEL_EMAIL: "If the email exists, a code has been sent.",
+}
+
+
+def reset_channels() -> dict:
+    return {
+        CHANNEL_SMS: twofactor.is_configured(),
+        CHANNEL_EMAIL: email_otp.is_configured(),
+    }
+
+
+def _channel_unavailable(channel: str) -> HTTPException:
+    other = CHANNEL_EMAIL if channel == CHANNEL_SMS else CHANNEL_SMS
+    message = (
+        f"Password reset by {RESET_CHANNEL_NAMES[channel]} isn't available right now."
+    )
+    if reset_channels()[other]:
+        message += f" Use your {RESET_CHANNEL_NAMES[other]} instead."
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": "channel_unavailable", "message": message},
+    )
+
+
+@router.get("/forgot-password/channels")
+async def forgot_password_channels():
+    """Which ways this service can deliver a reset code.
+
+    So the website offers only those. A reset that could not be delivered used
+    to answer "an OTP has been sent" all the same, which left fifth's players
+    waiting on a code that never came (spec §1.1a). Says nothing about any
+    account.
+    """
+    return reset_channels()
+
+
+@router.post(
+    "/forgot-password/request",
+    responses={503: {"description": "That channel is not configured here"}},
+)
+async def forgot_password_request(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
+    """Start forgot password flow by sending a code to the phone or email.
     Always return generic response to avoid user enumeration."""
-    logger.info("POST /api/auth/forgot-password/request body={'phone':'[redacted]'}")
+    channel = CHANNEL_EMAIL if payload.email is not None else CHANNEL_SMS
+    logger.info("POST /api/auth/forgot-password/request channel=%s", channel)
+    # Before any account is looked up, so the refusal depends on this
+    # service's configuration alone and says nothing about who exists.
+    if not reset_channels()[channel]:
+        raise _channel_unavailable(channel)
     # Outside the try below: its catch-all turns every failure into the generic
     # success message, which would swallow the 429 (and the 503 this route
-    # returns when the limiter cannot count, since every call sends an SMS).
-    await rate_limit("forgot_password_request", request, identifier=payload.phone)
+    # returns when the limiter cannot count, since every call sends a message).
+    await rate_limit("forgot_password_request", request, identifier=payload.identifier)
     try:
-        await pr_start_session(payload.phone)
+        if channel == CHANNEL_EMAIL:
+            await pr_start_email_session(
+                str(payload.email), brand=await tournament_name(tournament_id)
+            )
+        else:
+            await pr_start_session(payload.phone)
         logger.info(
-            "Response 200 /api/auth/forgot-password/request body={'message':'If the phone exists, an OTP has been sent.'}"
+            "Response 200 /api/auth/forgot-password/request channel=%s", channel
         )
-    except Exception as e:
-        # Intentionally return generic message regardless of internal failures
+    except Exception:
+        # Intentionally return generic message regardless of internal failures:
+        # a send is only attempted for an account that exists, so even a
+        # provider failure would tell the caller one does.
         logger.exception(
             "Internal error during forgot-password request; responding with generic message"
         )
-    return {"message": "If the phone exists, an OTP has been sent."}
+    return {"message": GENERIC_RESET_MESSAGES[channel]}
 
 
 @router.post("/forgot-password/verify")
 async def forgot_password_verify(request: Request, payload: ForgotPasswordVerify):
     """Verify OTP and issue short-lived reset token."""
     logger.info(
-        "POST /api/auth/forgot-password/verify body={'phone':'[redacted]','otp':'[redacted]'}"
+        "POST /api/auth/forgot-password/verify channel=%s",
+        CHANNEL_EMAIL if payload.email is not None else CHANNEL_SMS,
     )
     # Outside the try below, which turns every failure into a 400.
-    await rate_limit("forgot_password_verify", request, identifier=payload.phone)
+    await rate_limit("forgot_password_verify", request, identifier=payload.identifier)
     try:
-        reset_token, ttl = await pr_verify_and_issue(payload.phone, payload.otp)
+        if payload.email is not None:
+            reset_token, ttl = await pr_verify_email(str(payload.email), payload.otp)
+        else:
+            reset_token, ttl = await pr_verify_and_issue(payload.phone, payload.otp)
         logger.info(
             "Response 200 /api/auth/forgot-password/verify body={'reset_token':'[redacted]','expires_in_sec':%s}",
             ttl,
@@ -519,9 +589,14 @@ async def change_password(
             detail="New password must be different from current password",
         )
 
-    # Update password
+    # Update password -- those fields only, so a concurrent email change stays.
     set_new_password(current_user, payload.new_password)
-    current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    await current_user.set(
+        {
+            User.hashed_password: current_user.hashed_password,
+            User.legacy_hashes: current_user.legacy_hashes,
+            User.updated_at: datetime.now(timezone.utc),
+        }
+    )
 
     return {"message": "Password changed successfully"}

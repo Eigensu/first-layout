@@ -8,12 +8,15 @@ import logging
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.requests import Request
 
 from app.models.rate_limit import RateLimitCounter
 from app.models.user import User
+from app.services.auth import twofactor
 from app.utils import rate_limit as rl
+from app.utils.dependencies import get_current_active_user
 from app.utils.rate_limit import HOUR, IDENTIFIER, IP, Limit
 from app.utils.security import get_password_hash
 
@@ -26,6 +29,16 @@ def frozen_clock(monkeypatch):
     clock = {"now": NOW}
     monkeypatch.setattr(rl, "_now", lambda: clock["now"])
     return clock
+
+
+@pytest.fixture(autouse=True)
+def channels_configured(monkeypatch):
+    """Both reset channels on: an unconfigured one answers 503 before the
+    limiter is reached. Nothing is sent; the tests stub the senders."""
+    monkeypatch.setattr(twofactor, "API_KEY", "test-key")
+    monkeypatch.setattr(twofactor, "TEMPLATE_NAME", "test-template")
+    monkeypatch.setattr(rl.settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(rl.settings, "resend_from_email", "Test <test@example.com>")
 
 
 @pytest.fixture
@@ -343,6 +356,7 @@ async def test_a_stalled_store_closes_the_otp_route(anon_client, rahul, monkeypa
     )
 
     assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "temporarily_unavailable"
 
 
 async def test_store_failure_fails_open_on_login(anon_client, rahul, enforcing, monkeypatch):
@@ -365,6 +379,7 @@ async def test_store_failure_fails_closed_on_otp(anon_client, rahul, enforcing, 
     )
 
     assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "temporarily_unavailable"
     assert sent == []
 
 
@@ -475,28 +490,125 @@ async def test_each_route_is_limited_by_its_rule(
     assert response.status_code == 429
 
 
+# The signed-in routes that send a code: changing the account's email.
+EMAIL_CHANGE_PATHS = ("/api/users/me/email/request", "/api/users/me/email/verify")
+
+
 def test_hot_path_is_not_limited():
     """Only auth routes call the limiter; team saves and contest joins never do.
 
     Contest traffic spikes right before a match locks, exactly when a limiter
     tuned on average load would fire (spec §3.2).
     """
+    import inspect
+
     from main import app
 
-    limited = sorted(
-        route.path
-        for route in app.routes
-        if "rate_limit" in getattr(getattr(route, "endpoint", None), "__globals__", {})
-    )
+    def calls_limiter(route) -> bool:
+        try:
+            return "rate_limit(" in inspect.getsource(route.endpoint)
+        except (AttributeError, OSError, TypeError):
+            return False
+
+    limited = sorted(route.path for route in app.routes if calls_limiter(route))
 
     assert limited
-    assert all(path.startswith("/api/auth/") for path in limited), limited
+    assert all(
+        path.startswith("/api/auth/") or path in EMAIL_CHANGE_PATHS
+        for path in limited
+    ), limited
+    assert set(EMAIL_CHANGE_PATHS) <= set(limited)
 
 
 def test_every_rule_is_used():
     import inspect
+    import re
 
-    from app.routes import auth
+    from app.routes import auth, users
 
-    source = inspect.getsource(auth)
-    assert all(f'rate_limit("{rule}"' in source for rule in rl.RULES)
+    source = inspect.getsource(auth) + inspect.getsource(users)
+    for rule in rl.RULES:
+        assert re.search(rf'rate_limit\(\s*"{rule}"', source), rule
+
+
+# --- the email-change routes -------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def rahul_client(db, rahul):
+    from main import app
+
+    async def _me():
+        return rahul
+
+    app.dependency_overrides[get_current_active_user] = _me
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        yield client
+    app.dependency_overrides.pop(get_current_active_user, None)
+
+
+@pytest.fixture
+def change_requests(monkeypatch):
+    sent = []
+
+    async def _send(user, email, brand):
+        sent.append(email)
+        return email
+
+    monkeypatch.setattr("app.routes.users.request_change", _send)
+    return sent
+
+
+async def _change(client, password=PASSWORD):
+    return await client.post(
+        "/api/users/me/email/request",
+        json={"email": "new@example.com", "password": password},
+    )
+
+
+@pytest.mark.parametrize(
+    "rule,path,body",
+    [
+        (
+            "email_change_request",
+            "/api/users/me/email/request",
+            {"email": "new@example.com", "password": PASSWORD},
+        ),
+        ("email_change_verify", "/api/users/me/email/verify", {"otp": "123456"}),
+    ],
+    ids=["request", "verify"],
+)
+async def test_each_email_change_route_is_limited(
+    rahul_client, enforcing, monkeypatch, rule, path, body
+):
+    monkeypatch.setitem(rl.RULES, rule, {IP: Limit(0, HOUR)})
+
+    response = await rahul_client.post(path, json=body)
+
+    assert response.status_code == 429
+
+
+async def test_password_guesses_through_the_email_change_are_counted(
+    rahul_client, enforcing, change_requests
+):
+    """The request checks the password, so it is counted before that check:
+    otherwise it would be an unlimited way to guess one."""
+    for _ in range(3):
+        assert (await _change(rahul_client, password="wrong")).status_code == 400
+
+    assert (await _change(rahul_client)).status_code == 429
+    assert change_requests == []
+
+
+async def test_store_failure_closes_the_email_change(
+    rahul_client, enforcing, change_requests, monkeypatch
+):
+    monkeypatch.setattr(rl, "_hit", _store_down)
+
+    response = await _change(rahul_client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "temporarily_unavailable"
+    assert change_requests == []

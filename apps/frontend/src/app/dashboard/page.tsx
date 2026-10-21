@@ -24,6 +24,8 @@ import {
 } from "@/lib/api/public/contests";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
+import { ChangeEmailSection } from "@/components/dashboard/ChangeEmailSection";
+import { getResetChannels } from "@/lib/api/emailCodes";
 
 type PastContestSummary = {
   contestId: string;
@@ -44,7 +46,7 @@ export default function DashboardPage() {
 }
 
 function DashboardContent() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, updateUser } = useAuth();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamResponse[]>([]);
@@ -59,6 +61,19 @@ function DashboardContent() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Changing the email needs the email channel; until this service has one,
+  // the form stays hidden rather than failing on submit.
+  const [emailChannel, setEmailChannel] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getResetChannels().then((channels) => {
+      if (active) setEmailChannel(channels.email);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return "-";
@@ -633,6 +648,14 @@ function DashboardContent() {
                   </button>
                 </form>
               </div>
+
+              {emailChannel && (
+                <ChangeEmailSection
+                  currentEmail={user?.email}
+                  authProvider={user?.auth_provider}
+                  onChanged={updateUser}
+                />
+              )}
             </section>
           </div>
         )}

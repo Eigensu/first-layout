@@ -13,6 +13,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.models.user import User
+from app.services.auth import twofactor
 from app.utils.security import get_password_hash, verify_password
 
 ORIGINAL_PASSWORD = "OriginalPass1"
@@ -83,12 +84,16 @@ async def test_schema_is_gone_too():
 
 
 @pytest.mark.asyncio
-async def test_otp_reset_flow_is_still_mounted(client):
+async def test_otp_reset_flow_is_still_mounted(client, monkeypatch):
     """The supported replacement must still be routed.
 
     A 404 here would mean the app has no password reset at all, which is the
     one outcome worse than the endpoint this change removed.
     """
+    # Configured, since an unconfigured channel answers 503. No account holds
+    # the number, so nothing is sent.
+    monkeypatch.setattr(twofactor, "API_KEY", "test-key")
+    monkeypatch.setattr(twofactor, "TEMPLATE_NAME", "test-template")
     resp = await client.post(
         "/api/auth/forgot-password/request", json={"phone": "9876543210"}
     )

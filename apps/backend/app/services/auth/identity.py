@@ -7,6 +7,7 @@ backfill has not reached yet. See docs/UNIFIED_AUTH_SPEC.md §4.2 and §4.3.
 
 from typing import List, Optional, Tuple
 
+from app.models.password_reset import CHANNEL_EMAIL
 from app.models.user import User
 from app.utils.security import get_password_hash, verify_password
 
@@ -255,6 +256,114 @@ async def resolve_phone_holder(phone: str) -> Optional[User]:
     return await _holder_of_symbol_number(digits)
 
 
+def normalize_email(value: str) -> str:
+    """The form emails[] stores and every email lookup compares against."""
+    return value.strip().lower()
+
+
+async def resolve_email_holder(email: str) -> Optional[User]:
+    """The account holding this address, by address alone.
+
+    The email counterpart of resolve_phone_holder: a reset code goes to the
+    address typed, so the account it resets must be the one holding it.
+    """
+    return await _by_email(normalize_email(email))
+
+
+async def email_taken_by_other(email: str, user: User) -> bool:
+    """Whether an account other than `user` signs in with this address."""
+    value = normalize_email(email)
+    for query in (User.emails == value, User.email == value):
+        holder = await User.find_one(query)
+        if holder and holder.id != user.id:
+            return True
+    return False
+
+
+def set_profile_email(user: User, address: str) -> List[str]:
+    """Make `address` the account's email, in both fields login reads it from.
+
+    The address replaced leaves `emails` too, as a replaced number leaves
+    `mobiles` (set_profile_mobile): a mistyped or abandoned address must stop
+    being a way into the account, and stop receiving its reset codes. Other
+    addresses a merged account carries from its other tournaments stay.
+
+    The replaced address is kept in `removed_emails`, so a Google or Apple
+    sign-in that still reports it does not add it back. Returns it (in a list,
+    as the scalar and emails[0] can disagree on older accounts).
+    """
+    value = normalize_email(address)
+    # The primary is emails[0] with the scalar mirroring it; both are read in
+    # case an older write let them drift apart.
+    replaced = set()
+    if user.email:
+        replaced.add(normalize_email(user.email))
+    if user.emails:
+        replaced.add(user.emails[0])
+    replaced.discard(value)
+    user.emails = [value] + [e for e in user.emails if e not in replaced | {value}]
+    user.email = value
+    removed = sorted(replaced)
+    user.removed_emails = [
+        e for e in user.removed_emails if e != value and e not in replaced
+    ] + removed
+    return removed
+
+
+async def link_provider_identity(
+    user: User,
+    ids_field: str,
+    id_field: str,
+    provider_id: str,
+    address: Optional[str],
+) -> None:
+    """Record a Google or Apple identity on an existing account, field by field.
+
+    Targeted writes, not ``user.save()``: a save writes the whole account as it
+    was read when sign-in began, and would undo an email change confirmed in
+    the meantime. ``address`` is the provider's address to add, when the caller
+    has decided it should be; it is added only if it is still off the account's
+    removed list at the moment of writing, so that change wins the race too.
+    """
+    ids = getattr(user, ids_field)
+    if provider_id not in ids:
+        ids.append(provider_id)
+    fields = {"is_verified": True}
+    if not getattr(user, id_field):
+        setattr(user, id_field, ids[0])
+        fields[id_field] = ids[0]
+    user.is_verified = True
+    collection = User.get_motor_collection()
+    await collection.update_one(
+        {"_id": user.id}, {"$addToSet": {ids_field: provider_id}, "$set": fields}
+    )
+    if address is None:
+        return
+    added = await collection.update_one(
+        {"_id": user.id, "removed_emails": {"$ne": address}},
+        {"$addToSet": {"emails": address}},
+    )
+    if added.modified_count and address not in user.emails:
+        user.emails.append(address)
+
+
+def holds_destination(user: User, channel: str, destination: str) -> bool:
+    """Whether a code's destination still belongs to the account.
+
+    A reset session outlives an email change or a new number on the profile by
+    up to its expiry, and its code went to the old one. Whoever holds that
+    address or number now must not be able to finish the reset with it.
+    """
+    if channel == CHANNEL_EMAIL:
+        held = set(user.emails)
+        if user.email:
+            held.add(normalize_email(user.email))
+        return destination in held
+    wanted = canonical_mobile(digits_only(destination))
+    numbers = list(user.mobiles) + ([user.mobile] if user.mobile else [])
+    return any(canonical_mobile(digits_only(m)) == wanted for m in numbers)
+
+
 def set_profile_mobile(user: User, number: str) -> None:
     """Replace the number on a profile, in both fields login reads it from.
 
@@ -295,9 +404,11 @@ async def promote_legacy_password(user: User, plaintext: str) -> None:
     hashing parameters. The extra valid secrets therefore exist only until each
     person next signs in, instead of for as long as the account does.
     """
-    user.hashed_password = get_password_hash(plaintext)
-    user.legacy_hashes = []
-    await user.save()
+    # Those two fields only: this runs mid-login, and a whole-document save
+    # would put back anything changed since the account was read.
+    await user.set(
+        {User.hashed_password: get_password_hash(plaintext), User.legacy_hashes: []}
+    )
 
 
 def set_new_password(user: User, plaintext: str) -> None:

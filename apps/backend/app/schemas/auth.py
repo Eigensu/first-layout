@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, model_validator, validator
 
 ASCII_DIGITS = "0123456789"
 
@@ -48,29 +48,43 @@ class UserRegister(BaseModel):
         return digits
 
 
-class ForgotPasswordRequest(BaseModel):
-    phone: str
+class ResetDestination(BaseModel):
+    """Where a reset code goes: a mobile number or an email address, not both.
+
+    `phone` is the body every client has always sent, so it stays as it was;
+    `email` is the second channel (spec §5.5).
+    """
+
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
 
     @validator("phone")
     def mobile_basic_validation(cls, v):
+        if v is None:
+            return v
         v = v.strip()
         digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
         if len(digits) < 10 or len(digits) > 15:
             raise ValueError("Mobile must be 10-15 digits")
         return v
 
+    @model_validator(mode="after")
+    def exactly_one_destination(self):
+        if (self.phone is None) == (self.email is None):
+            raise ValueError("Send either a mobile number or an email address")
+        return self
 
-class ForgotPasswordVerify(BaseModel):
-    phone: str
-    otp: str
+    @property
+    def identifier(self) -> str:
+        return self.phone if self.phone is not None else str(self.email)
 
-    @validator("phone")
-    def mobile_basic_validation(cls, v):
-        v = v.strip()
-        digits = "".join(ch for ch in v if ch in ASCII_DIGITS)
-        if len(digits) < 10 or len(digits) > 15:
-            raise ValueError("Mobile must be 10-15 digits")
-        return v
+
+class ForgotPasswordRequest(ResetDestination):
+    pass
+
+
+class ForgotPasswordVerify(ResetDestination):
+    otp: str = Field(..., min_length=1, max_length=12)
 
 
 class ForgotPasswordReset(BaseModel):

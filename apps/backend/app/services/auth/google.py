@@ -7,6 +7,7 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
 from app.models.user import User
+from app.services.auth.identity import link_provider_identity
 from config.settings import get_settings
 
 settings = get_settings()
@@ -101,20 +102,20 @@ async def find_or_create_google_user(payload: dict) -> User:
         # Google-verified email. Link the identity rather than duplicating it,
         # and append rather than overwrite: a merged account can legitimately
         # hold more than one Google identity.
-        if google_id not in user.google_ids:
-            user.google_ids.append(google_id)
-        if not user.google_id:
-            user.google_id = user.google_ids[0]
-        if email.lower() not in user.emails and not await _email_held_by_other(
-            email, user
-        ):
+        address = email.lower()
+        add_address = (
+            address not in user.emails
+            # An address its owner changed away from stays removed.
+            and address not in user.removed_emails
             # Skipped when another account holds the address: a Google account
             # can change its email to one already registered here, and
-            # uniq_emails would then fail the save -- refusing a returning
+            # uniq_emails would then fail the write -- refusing a returning
             # user's sign-in by the Google id that identifies them exactly.
-            user.emails.append(email.lower())
-        user.is_verified = True
-        await user.save()
+            and not await _email_held_by_other(email, user)
+        )
+        await link_provider_identity(
+            user, "google_ids", "google_id", google_id, address if add_address else None
+        )
         return user
 
     username = await _generate_unique_username(email)

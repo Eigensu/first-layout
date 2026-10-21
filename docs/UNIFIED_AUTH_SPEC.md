@@ -1179,6 +1179,38 @@ Behaviour to preserve or fix while touching this code:
   clearing the legacy hashes too means a reset invalidates *every* old credential, and
   is the fastest way to shrink the §4.3 window.
 
+**Built (2026-10-21, stage C3).** `app/services/auth/email_otp.py` (Resend),
+`password_reset.py` (both channels and the sessions they share), the routes in
+`routes/auth.py`, and `tests/test_email_channel.py`. Where it differs from the above:
+
+- **The body is `{phone}` or `{email}`, not `{channel, destination}`.** `{phone}` is
+  what the live website sends, so it keeps working unchanged; `{email}` is the new
+  channel. Exactly one, or 422.
+- **`GET /api/auth/forgot-password/channels`** → `{"sms": bool, "email": bool}`: which
+  channels this service is configured to send on. The website offers only those, and
+  falls back to SMS alone against a backend that predates the route.
+- **An unconfigured channel answers 503** (`code: "channel_unavailable"`), before any
+  account is looked up, so the answer depends on configuration alone and says nothing
+  about who exists. This ends `fifth`'s silent failure (§1.1a): its `/request` used to
+  say "an OTP has been sent" with no 2Factor credentials to send one. Every other
+  failure keeps the generic reply, because a send is only attempted for an account
+  that exists.
+- **SMS destinations are digits only**, compared by equality. A session started as
+  "+91 98765 43210" is verified as "+91 98765 43210"; the website carries the string it
+  sent from one page to the next, so the old pattern fallback had no job left.
+- **The attempt cap is a conditional increment** (`attempts < max_attempts` in the
+  update's filter). On email we check the code ourselves, so a read-then-save count
+  would let parallel guesses through on one count. Moving a session to `verified`, and
+  spending a reset token, are conditional updates too, so each happens once.
+- **Brand:** a reset started on a tournament's site names that tournament (its
+  registry `name`) in the subject and body; otherwise "Wall-E Arena".
+- Sessions carry `purpose`, so an email-change code cannot open a reset, and a reset
+  cannot spend an email-change session.
+- **A reset checks the code's destination still belongs to the account**
+  (`identity.holds_destination`). A session outlives an email change or a new number
+  on the profile by up to its expiry, and whoever holds the old address or number
+  must not finish the reset with it (Greptile on #57).
+
 ### 5.6 Rate limiting
 
 There is none today, anywhere. Adding a second OTP channel without it means an attacker
@@ -1223,6 +1255,37 @@ POST /api/users/me/email/verify    { otp }      → commits the change
   flag means anything on a password account.
 - Mobile changes stay on `PATCH /api/users/me` as today. This endpoint does not touch
   `mobiles[]`.
+
+**Built (2026-10-21, stage C3).** `app/services/auth/email_change.py`, the two routes
+in `routes/users.py`, and the profile's "Change Email" card
+(`components/dashboard/ChangeEmailSection.tsx`). Added in building it:
+
+- **Re-authentication on `/request`**: `{email, password}`, or for an account without
+  a password a fresh Google or Apple sign-in (`google_id_token` /
+  `apple_identity_token`), as deleting the account already asks. Once email can reset
+  a password, an email change is an account takeover for anyone holding a stolen
+  session; asking for something the session alone lacks closes that. A refusal is a
+  400, not a 401, because the clients read a 401 on a signed-in route as an expired
+  session and sign the person out. The rate limit counts before the password check,
+  so this is not an unlimited way to guess one.
+- 400 if the address is already the account's email; 409 if another account holds it
+  in `emails[]` or the `email` scalar, checked again at `/verify` and settled by
+  `uniq_emails` on a race; 502 if the code could not be mailed; 503 when Resend is not
+  configured.
+- The commit writes only `emails`, `email`, `removed_emails`, `is_verified` and
+  `updated_at`, so a sign-in or password change landing meanwhile is not overwritten.
+  The reverse holds too: every other route that writes a signed-in account (login and
+  Google/Apple sign-in, promoting a legacy password, reset and change of password,
+  `PUT`/`PATCH /me`, account deletion) writes only the fields it changed, where it
+  used to save the whole account as it read it and could put an old email back
+  (Greptile on #57).
+- **The old address stays removed.** It goes into a new `User.removed_emails`, which
+  Google and Apple sign-in check before recording the provider's address. They record
+  a changed provider address on every sign-in, so without this a Google-linked account
+  would get its old address back on the next Google sign-in. Changing back to an
+  address takes it off the list. Open reset sessions mailed to the old address are
+  deleted at the same time (Greptile on #57).
+- The website shows the card only when the email channel is on.
 
 ---
 
@@ -1864,7 +1927,14 @@ Under one database this is no longer "flip five services one at a time" — ther
 backend, and the two live tournaments move to it together.
 
 1. **Stand up the unified backend** on `api.wallearena.com`, pointed at the unified
-   database, running the new code. Nothing is pointed at it yet.
+   database, running the new code. Nothing is pointed at it yet. Its variables:
+   `TENANCY=shared`, `MONGODB_DB_NAME=walle_arena`, the shared `SECRET_KEY` /
+   `JWT_*`, `TWOFACTOR_*` (from `lpcl`), `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
+   (with `send.wallearena.com` verified in Resend, §5.4), `GOOGLE_CLIENT_ID`,
+   `APPLE_BUNDLE_ID`, and `CORS_ORIGINS` covering `https://*.wallearena.com`. The rate
+   limiter needs nothing: it starts in observe mode. Check
+   `GET /api/auth/forgot-password/channels` answers `{"sms": true, "email": true}`.
+   Wildcard DNS (`*.wallearena.com`) points at the website.
 2. **Full backfill** with the two live tournaments still serving from their own
    services: Phases 1–5 for all five source databases. Nothing in the source databases
    is modified.
@@ -1877,14 +1947,29 @@ backend, and the two live tournaments move to it together.
    the migration writes as zeros: `scripts/refresh_membership_stats.py --all`, once,
    so past tournaments' profiles show their history.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
-   redeploy.
+   redeploy. On the current Vercel plan that is a CLI deploy (`vercel deploy --prod`);
+   GitHub deploys fail for the private org repo.
+6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
+   from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
+   the `production` channel. Not before this step: today's backends have no tournament
+   list, so the app would show none. Two limits, both still to decide (§11, Q11–Q12):
+   a 1.0.3 install applies the update on the launch *after* it downloads, so its first
+   launch after cutover still talks to the old host; and 1.0.2 installs cannot take the
+   update at all.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
    `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
-   tournament's subdomain, and the Tournaments tab as a platform admin.
+   tournament's subdomain, and the Tournaments tab as a platform admin. Reset a
+   password by SMS and by email, and change an email from the profile. In the app:
+   the tournament list, sign-in, and switching tournaments without signing out.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
-   `fourth-layout-mtc`, `fifth-layout`.
+   `fourth-layout-mtc`, `fifth-layout`. Retire `walle-landing` (the app's old source
+   of per-tournament API URLs) once EAS shows most app users on the update.
 9. **Schedule** `scripts/refresh_membership_stats.py --all-live` on the unified
    service (a Railway cron), so live tournaments' profile numbers keep up.
+10. **Enforce the rate limits** after one contest deadline of observe-mode logs on the
+    unified service (`docs/RATE_LIMITING_SPEC.md` §8): first
+    `RATE_LIMIT_ENFORCE_RULES=forgot_password_request,email_change_request`, then
+    `RATE_LIMIT_ENFORCE=true`.
 
 > **Do this between seasons.** The read-only window is short, but a live contest is the
 > worst time to be moving teams and enrolments between databases — a user mid-squad-edit
@@ -2074,9 +2159,21 @@ These block specific phases; everything else can be built without them.
    certificate setup. *Blocks the email channel going live, nothing else.*
 9. **Is there an existing Resend account/API key**, or is this a new signup? The free
    tier's daily cap is worth checking against your peak reset volume before launch.
-10. **Do the five services share one Resend key and sending domain**, or should each
-   tournament send from its own address? One key with per-tenant branding in the
-   template (§5.4) is the lower-maintenance default.
+   *Answered 2026-10-20: a new account, still to be set up.* The code is built (C3)
+   and stays off until `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set.
+10. ~~Do the five services share one Resend key and sending domain?~~ **Built as the
+   default:** one key and one sending address, with the tournament's name in each
+   message (§5.5).
+11. **The app's first launch after cutover.** A 1.0.3 install downloads the update on
+   one launch and applies it on the next, so that first launch still talks to
+   `api-lpcl` / `fifth-api`. Keep those hosts answering for a day or two (the old
+   services, read-only, or the unified backend with a host→tournament fallback), or
+   accept one failed session per player. *Blocks Phase 6, step 8.*
+12. **App version 1.0.2.** It cannot take the update: 1.0.3 added Google and Apple
+   sign-in, which the update's code calls. Either publish a separate update built from
+   the 1.0.2 code, or require 1.0.3 from the store. How many players are on 1.0.2
+   (EAS → Updates, with the account that owns the app) decides which. *Blocks Phase 6,
+   step 6b.*
 
 ---
 
@@ -2089,13 +2186,13 @@ These block specific phases; everything else can be built without them.
 | A2 | `tournament_id` on the ten tenant models, index rebuild, per-tournament `Contest.code` and `GlobalSettings` (§3.5) — **done 2026-10-19**, with every route scoped and `TENANCY` (§2.3) | A |
 | B | `User` v2 model, membership model, identity/password services | A |
 | C | Auth route changes (`sub`, login resolution, register, Google) + tests | B |
-| C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a) | — |
+| C2a | **Give `fifth` a working reset channel** — 2Factor credentials or the Resend channel — and verify end to end (§1.1a). **Code done 2026-10-21 with C3**: `fifth` no longer claims to send a code it cannot, and email reset works there once `RESEND_*` is set on it | — |
 | C2b | ~~Close the reset gate~~ **shipped** — endpoint, schema, orphaned modal and dead API wrapper deleted; `client.ts` structured-error fix (§4.2) | — |
 | C2c | Rate limits on the auth routes — `docs/RATE_LIMITING_SPEC.md` — **built 2026-10-20, in observe mode**: counts and logs, refuses nothing until `RATE_LIMIT_ENFORCE=true` (that spec's §8). The mobile app shows a 429 as a generic error and needs the message mapped before enforcing | — *(MongoDB-backed; no longer blocked on Redis)* |
-| C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) | Q8 |
+| C3 | Email OTP channel: Resend service, dual-channel session, change-email endpoints (§5.2–5.7) — **built 2026-10-21**, off until `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set (§5.5, §5.7 *Built*) | Q8 *(to go live, not to build)* |
 | D | Admin guard split + route mapping + tests — **done 2026-10-19**, with admin on each tournament's subdomain (§4.7) | B |
 | E | `GET /api/users/me/tournaments`, membership write paths, reconcile job — **done 2026-10-19** (§6.1–6.2a; the admin support endpoint is deferred) | B, R21 (§13.8, fixed in #45) |
-| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI — **done 2026-10-19** except the change-email UI, which waits on C3 (§6.3) | E, C3 |
+| F | Frontend: profile section, login copy, `client.ts` error fix (§4.2), slug header, change-email UI — **done**: all but the change-email UI on 2026-10-19 (§6.3); the change-email card and the email option on the reset pages on 2026-10-21 with C3 (§5.7 *Built*) | E, C3 |
 | G | Migration scripts 00–07 + their tests, including the game-data import (§7, Phase 3) | B, A2 |
 | H | Dry run against a **restored copy** of the cluster, review the merge report | G, Q1–Q5, **§13.10** |
 | I | Cut over — stand up the one backend, backfill, repoint both frontends, archive the five services (§7, Phase 6) | C, C2b, C3, D, E, F, H |
@@ -2108,9 +2205,12 @@ review before anything irreversible happens.
 **H ran on 2026-10-17** against a local copy, after #45 and #46 merged. It found four
 more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three more
 (R42–R44, §13.12), also fixed; a third pass with the review applied passes Phase 5 and
-leaves 2 of 1,962 password accounts unreachable, both staff logins. What is left
-before I is the platform-admin list (§13.10) and keeping the reviewed links for
-cutover.
+leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform-admin
+list and the reviewed links, the two things it left open, were settled on 2026-10-19
+(§13.10); the owner confirmed the list again on 2026-10-21. What is left before I:
+setting up Resend (Q8–Q9), the two app decisions (Q11–Q12), the unified Railway
+service and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on
+the cutover snapshot.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the

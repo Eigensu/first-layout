@@ -80,6 +80,10 @@ class User(Document):
     mobiles: List[str] = Field(default_factory=list)
     google_ids: List[str] = Field(default_factory=list)
     apple_ids: List[str] = Field(default_factory=list)
+    # Addresses the owner changed away from (set_profile_email). Google and
+    # Apple sign-in record a provider's address on each sign-in, and would
+    # otherwise put a removed one straight back.
+    removed_emails: List[str] = Field(default_factory=list)
     # Optional because Google/Apple-signup accounts have no password until the
     # user sets one (see auth_provider).
     hashed_password: Optional[str] = None
