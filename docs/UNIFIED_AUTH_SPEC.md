@@ -1952,10 +1952,14 @@ backend, and the two live tournaments move to it together.
 6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
    from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
    the `production` channel. Not before this step: today's backends have no tournament
-   list, so the app would show none. Two limits, both still to decide (§11, Q11–Q12):
-   a 1.0.3 install applies the update on the launch *after* it downloads, so its first
-   launch after cutover still talks to the old host; and 1.0.2 installs cannot take the
-   update at all.
+   list, so the app would show none. Two limits, both accepted (§11, Q11–Q12, decided
+   2026-10-22): a 1.0.3 install applies the update on the launch *after* it downloads,
+   so its first launch after cutover still talks to the old host (read-only until
+   step 8 archives it, unreachable after), and the launch after that runs the update;
+   and 1.0.2 installs cannot take the update, so those players install 1.0.3 from the
+   store. Before choosing the cutover date, check that the App Store (and Google Play,
+   if the app is listed there) serves 1.0.3; otherwise a 1.0.2 player has nothing to
+   update to.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
    `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
    tournament's subdomain, and the Tournaments tab as a platform admin. Reset a
@@ -2140,9 +2144,9 @@ These block specific phases; everything else can be built without them.
    retired tournaments and are archived rather than migrated.
 2b. ~~Confirm the data model~~ **Decided:** one database, `tournament_id` on every
    tenant-scoped document (§2.5, §3.5).
-3. **Who should be platform admins?** An explicit list of emails/mobiles. Everyone
-   else with legacy `is_admin` becomes an admin of their own tournament only.
-   *Blocks Phase 2.*
+3. ~~Who should be platform admins?~~ **Settled 2026-10-19**, reconfirmed 2026-10-21:
+   two accounts, kept outside the repo with the reviewed links (§13.10). Everyone else
+   with legacy `is_admin` becomes an admin of their own tournament only.
 4. ~~Do `walle-register` and `walle-landing-backend` hold user accounts?~~ **Answered**
    by Phase 0: no. The register databases hold `players`, `payments` and `app_config`
    only, and no database in the cluster is named for `walle-landing-backend`.
@@ -2164,16 +2168,16 @@ These block specific phases; everything else can be built without them.
 10. ~~Do the five services share one Resend key and sending domain?~~ **Built as the
    default:** one key and one sending address, with the tournament's name in each
    message (§5.5).
-11. **The app's first launch after cutover.** A 1.0.3 install downloads the update on
-   one launch and applies it on the next, so that first launch still talks to
-   `api-lpcl` / `fifth-api`. Keep those hosts answering for a day or two (the old
-   services, read-only, or the unified backend with a host→tournament fallback), or
-   accept one failed session per player. *Blocks Phase 6, step 8.*
-12. **App version 1.0.2.** It cannot take the update: 1.0.3 added Google and Apple
-   sign-in, which the update's code calls. Either publish a separate update built from
-   the 1.0.2 code, or require 1.0.3 from the store. How many players are on 1.0.2
-   (EAS → Updates, with the account that owns the app) decides which. *Blocks Phase 6,
-   step 6b.*
+11. ~~The app's first launch after cutover.~~ **Decided 2026-10-22: accept one failed
+   session per player.** A 1.0.3 install downloads the update on one launch and applies
+   it on the next, so that first launch still talks to `api-lpcl` / `fifth-api`. Both
+   old app versions take those hosts from walle-landing and send no tournament, so a
+   host→tournament fallback on the unified backend would have kept them working; it was
+   considered and not chosen. The old hosts are not kept up past Phase 6, step 8.
+12. ~~App version 1.0.2.~~ **Decided 2026-10-22: require 1.0.3 from the store.** 1.0.2
+   cannot take the update, because 1.0.3 added Google and Apple sign-in, which the
+   update's code calls. No separate 1.0.2 update is built. This depends on the stores
+   serving 1.0.3 before cutover (Phase 6, step 6b).
 
 ---
 
@@ -2207,10 +2211,11 @@ more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three 
 (R42–R44, §13.12), also fixed; a third pass with the review applied passes Phase 5 and
 leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform-admin
 list and the reviewed links, the two things it left open, were settled on 2026-10-19
-(§13.10); the owner confirmed the list again on 2026-10-21. What is left before I:
-setting up Resend (Q8–Q9), the two app decisions (Q11–Q12), the unified Railway
-service and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on
-the cutover snapshot.
+(§13.10); the owner confirmed the list again on 2026-10-21. The two app decisions
+(Q11–Q12) were made on 2026-10-22. What is left before I: setting up Resend (Q8–Q9),
+checking the stores serve app 1.0.3 (Phase 6, step 6b), the unified Railway service
+and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on the
+cutover snapshot.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
