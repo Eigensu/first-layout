@@ -1957,9 +1957,8 @@ backend, and the two live tournaments move to it together.
    so its first launch after cutover still talks to the old host (read-only until
    step 8 archives it, unreachable after), and the launch after that runs the update;
    and 1.0.2 installs cannot take the update, so those players install 1.0.3 from the
-   store. Before choosing the cutover date, check that the App Store (and Google Play,
-   if the app is listed there) serves 1.0.3; otherwise a 1.0.2 player has nothing to
-   update to.
+   store, which must serve 1.0.3 or a 1.0.2 player has nothing to update to. *The
+   owner confirmed on 2026-10-22 that the stores serve 1.0.3.*
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
    `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
    tournament's subdomain, and the Tournaments tab as a platform admin. Reset a
@@ -2145,7 +2144,7 @@ These block specific phases; everything else can be built without them.
 2b. ~~Confirm the data model~~ **Decided:** one database, `tournament_id` on every
    tenant-scoped document (§2.5, §3.5).
 3. ~~Who should be platform admins?~~ **Settled 2026-10-19**, reconfirmed 2026-10-21:
-   two accounts, kept outside the repo with the reviewed links (§13.10). Everyone else
+   two accounts, kept outside the repo with the reviewed links (§13.12). Everyone else
    with legacy `is_admin` becomes an admin of their own tournament only.
 4. ~~Do `walle-register` and `walle-landing-backend` hold user accounts?~~ **Answered**
    by Phase 0: no. The register databases hold `players`, `payments` and `app_config`
@@ -2176,8 +2175,8 @@ These block specific phases; everything else can be built without them.
    considered and not chosen. The old hosts are not kept up past Phase 6, step 8.
 12. ~~App version 1.0.2.~~ **Decided 2026-10-22: require 1.0.3 from the store.** 1.0.2
    cannot take the update, because 1.0.3 added Google and Apple sign-in, which the
-   update's code calls. No separate 1.0.2 update is built. This depends on the stores
-   serving 1.0.3 before cutover (Phase 6, step 6b).
+   update's code calls. No separate 1.0.2 update is built. The stores serve 1.0.3
+   (confirmed 2026-10-22).
 
 ---
 
@@ -2213,9 +2212,8 @@ leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform
 list and the reviewed links, the two things it left open, were settled on 2026-10-19
 (§13.10); the owner confirmed the list again on 2026-10-21. The two app decisions
 (Q11–Q12) were made on 2026-10-22. What is left before I: setting up Resend (Q8–Q9),
-checking the stores serve app 1.0.3 (Phase 6, step 6b), the unified Railway service
-and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on the
-cutover snapshot.
+the unified Railway service and wildcard DNS (Phase 6, step 1), and re-running Phase 1
+with the links on the cutover snapshot.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -2551,9 +2549,10 @@ credential. 197 groups merge automatically and 52 go to review.
 - [x] **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
   `uniq_legacy_row` from the start. *Merged 2026-10-17 (`f76c24b`); both live services
   dropped the flawed index at startup and rebuilt it with the `$type` filter.*
-- [ ] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
+- [x] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
   administer the whole platform. Without it no one is a platform admin after cutover.
   *Decided 2026-10-17: the first dry run goes without it; it is needed before cutover.*
+  *Settled 2026-10-19 and reconfirmed 2026-10-21: two accounts, recorded in §13.12.*
 - [x] **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source
   mapping*). *`seed_registry.py`, run before Phase 2. Seeded into the dry run's copy
   (2026-10-17; a second run changes nothing). The real `walle_arena` is seeded the same
