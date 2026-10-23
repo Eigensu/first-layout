@@ -2252,7 +2252,16 @@ list and the reviewed links, the two things it left open, were settled on 2026-1
 (Q11–Q12) were made on 2026-10-22, and the unified Railway service was stood up on
 2026-10-23 (Phase 6, step 1). What is left before I: setting up Resend (Q8–Q9), the DNS
 for `walle-api.wallearena.com` and the wildcard for the website (Phase 6, step 1), and
-re-running Phase 1 with the links on the cutover snapshot.
+re-running Phase 1 with the links on the cutover snapshot. A preview of that re-run on
+2026-10-23, read-only against the live sources through `walle-api`'s own connection,
+found the sources unchanged since the review: 2,222 rows, all 95 links matching, all 20
+flagged groups reviewed, and 1,826 accounts once the links apply. Resend is deferred
+(2026-10-23), so the cutover goes ahead with SMS reset only and step 1's channel check
+expects `{"sms": true, "email": false}`. The read-only window (steps 4–5) becomes
+stopping `fifth-layout` (decided 2026-10-23): `second-layout` is already down and it is
+off-season, so nothing writes during the copy and no delta re-sync is needed. Each
+tournament's website hostname is added to `walle-web` with its own CNAME at GoDaddy and
+its own Google origin, rather than a wildcard (decided 2026-10-23).
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
