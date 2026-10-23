@@ -1944,7 +1944,8 @@ backend, and the two live tournaments move to it together.
    `walle-api.wallearena.com`. The `-api` ending keeps it out of the tournament slugs.
    Its DNS (a CNAME and a `_railway-verify` TXT record) is at GoDaddy, which holds
    `wallearena.com`'s DNS today. Both records were verified the same day. The first
-   certificate request hit a Let's Encrypt rate limit. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
+   certificate request hit a Let's Encrypt rate limit. Railway does not retry that by
+   itself, so an hour later it was requested again and issued. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
    than `fifth`'s, so no token minted before cutover is accepted. Such a token names its
    account by username (§4.1), which after the merge can belong to someone else, and
    under Q11 every player signs in again anyway. Nothing that is migrated depends on
