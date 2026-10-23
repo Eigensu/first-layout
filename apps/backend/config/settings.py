@@ -3,6 +3,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -140,6 +141,17 @@ class Settings(BaseSettings):
 
         combined = "^(?:" + "|".join(patterns) + ")$"
         return combined
+
+    @property
+    def mongodb_url_redacted(self) -> str:
+        """MONGODB_URL with its user, password and options removed, for logs.
+
+        The full URL carries the database password, and whatever a service
+        prints on startup is kept in its deploy logs.
+        """
+        parts = urlsplit(self.mongodb_url)
+        host = parts.netloc.rpartition("@")[2]
+        return urlunsplit((parts.scheme, host, parts.path, "", ""))
 
     @property
     def shared_tenancy(self) -> bool:

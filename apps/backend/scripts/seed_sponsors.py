@@ -112,7 +112,7 @@ async def seed_sponsors():
     try:
         # Test connection
         await client.admin.command("ping")
-        print(f"✓ Connected to MongoDB at {settings.mongodb_url}")
+        print(f"✓ Connected to MongoDB at {settings.mongodb_url_redacted}")
 
         # Initialize Beanie
         await init_beanie(

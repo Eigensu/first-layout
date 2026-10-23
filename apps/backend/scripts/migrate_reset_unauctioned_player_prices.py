@@ -39,7 +39,7 @@ async def reset_prices(reset_all: bool, dry_run: bool) -> None:
     client = AsyncIOMotorClient(settings.mongodb_url)
     try:
         await client.admin.command("ping")
-        print(f"✓ Connected to MongoDB at {settings.mongodb_url}")
+        print(f"✓ Connected to MongoDB at {settings.mongodb_url_redacted}")
 
         await init_beanie(
             database=client[settings.mongodb_db_name], document_models=[Player]
