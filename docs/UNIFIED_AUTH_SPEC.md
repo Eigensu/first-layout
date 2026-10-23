@@ -1968,6 +1968,22 @@ backend, and the two live tournaments move to it together.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
    redeploy. On the current Vercel plan that is a CLI deploy (`vercel deploy --prod`);
    GitHub deploys fail for the private org repo.
+
+   *Replaced 2026-10-23 by one new project.* The old frontends sit in a Vercel team
+   (`eigensus-projects`) that the working Vercel login cannot reach, so the unified
+   website is a new project, `walle-web`, in that login's own scope. Root
+   `apps/frontend`, Node 22, with `NEXT_PUBLIC_API_URL=https://walle-api.wallearena.com`,
+   `NEXT_PUBLIC_ROOT_DOMAIN=wallearena.com`, the app's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+   (the same one `walle-api` checks) and `NEXT_PUBLIC_APP_NAME`. It is deployed from a
+   `git archive` export of `main`, never a working checkout, whose root `.env` holds the
+   backend's secrets, with Vercel CLI 47.2.2 or later (Vercel refuses older ones). First
+   deployed `d468c17` to `walle-web.vercel.app`. At this step the tournament
+   hostnames (`rspl`, `dcpl`, the apex and `*.wallearena.com`) move from the old team's
+   projects onto `walle-web`. The wildcard needs a certificate: either Vercel
+   nameservers, or `vercel certs issue "*.wallearena.com" wallearena.com
+   --challenge-only` with the challenge TXT records added at GoDaddy, which then has to
+   be renewed by hand. Google sign-in accepts only exact origins, so each tournament
+   hostname must also be listed on the Google client.
 6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
    from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
    the `production` channel. Not before this step: today's backends have no tournament
