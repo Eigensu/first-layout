@@ -1,6 +1,26 @@
 import apiClient from "./client";
 import type { TournamentStatus } from "@/common/consts";
 
+/** A registry row as anyone may see it (GET /api/tournaments). */
+export interface PublicTournament {
+  slug: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  status: TournamentStatus;
+  start_at: string | null;
+  end_at: string | null;
+}
+
+/**
+ * Every tournament that is not archived, newest first: the root domain's
+ * directory. Needs no tournament header, so it works on the apex.
+ */
+export async function getPublicTournaments(): Promise<PublicTournament[]> {
+  const response = await apiClient.get<PublicTournament[]>("/api/tournaments");
+  return response.data;
+}
+
 /** A tournament this account made a team or entered a contest in. */
 export interface PlayedTournament {
   slug: string;
