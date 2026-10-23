@@ -2001,6 +2001,14 @@ backend, and the two live tournaments move to it together.
    --challenge-only` with the challenge TXT records added at GoDaddy, which then has to
    be renewed by hand. Google sign-in accepts only exact origins, so each tournament
    hostname must also be listed on the Google client.
+
+   *`rspl` and `dcpl` moved 2026-10-24.* Adding each hostname to `walle-web` returned a
+   `_vercel` TXT record (`vc-domain-verify=<host>,<code>`), because the old team held
+   it. With the TXT at GoDaddy, Vercel's verify moved the hostname at once. The CNAMEs
+   were left alone. Both sites now load `walle-web`, which calls
+   `walle-api.wallearena.com`. A hostname no Vercel account holds needs only its CNAME.
+   While `wallearena.com` is registered to the old team, each new tournament hostname
+   may need a TXT as well.
 6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
    from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
    the `production` channel. Not before this step: today's backends have no tournament
