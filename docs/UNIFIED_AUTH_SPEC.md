@@ -2274,8 +2274,9 @@ found the sources unchanged since the review: 2,222 rows, all 95 links matching,
 flagged groups reviewed, and 1,826 accounts once the links apply. Resend is deferred
 (2026-10-23), so the cutover goes ahead with SMS reset only and step 1's channel check
 expects `{"sms": true, "email": false}`. The read-only window (steps 4–5) becomes
-stopping `fifth-layout` (decided 2026-10-23): `second-layout` is already down and it is
-off-season, so nothing writes during the copy and no delta re-sync is needed. Each
+stopping `fifth-layout` *before* the copy in step 2 (decided 2026-10-23). With
+`second-layout` already down, nothing writes from the snapshot on, so no delta re-sync
+is needed. Each
 tournament's website hostname is added to `walle-web` with its own CNAME at GoDaddy and
 its own Google origin, rather than a wildcard (decided 2026-10-23). Later that day
 `fifth-layout` was stopped and the backfill ran into `walle_arena`. It passes Phase 5
