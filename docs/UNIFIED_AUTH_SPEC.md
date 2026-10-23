@@ -1936,14 +1936,15 @@ backend, and the two live tournaments move to it together.
    `GET /api/auth/forgot-password/channels` answers `{"sms": true, "email": true}`.
    Wildcard DNS (`*.wallearena.com`) points at the website.
 
-   *Done 2026-10-23, all but Resend and DNS.* The Railway service is `walle-api` in the
+   *Done 2026-10-23, all but Resend.* The Railway service is `walle-api` in the
    `Walle` project, deploying `main` from `/apps/backend` with health check
    `/api/health`. The build and start commands are set on the service, because Railway
    now refuses a config-file path. `api.wallearena.com` was the first choice, but Railway
    reports it held by an account outside the Eigensu workspace, so the service is on
    `walle-api.wallearena.com`. The `-api` ending keeps it out of the tournament slugs.
-   Its DNS (a CNAME and a `_railway-verify` TXT record) goes in GoDaddy, which holds
-   `wallearena.com`'s DNS today. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
+   Its DNS (a CNAME and a `_railway-verify` TXT record) is at GoDaddy, which holds
+   `wallearena.com`'s DNS today. Both records were verified the same day. The first
+   certificate request hit a Let's Encrypt rate limit. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
    than `fifth`'s, so no token minted before cutover is accepted. Such a token names its
    account by username (§4.1), which after the merge can belong to someone else, and
    under Q11 every player signs in again anyway. Nothing that is migrated depends on
@@ -1958,6 +1959,21 @@ backend, and the two live tournaments move to it together.
    services: Phases 1–5 for all five source databases. Nothing in the source databases
    is modified.
 3. **Verify** (Phase 5) and review the merge report.
+
+   *Steps 2 and 3 done 2026-10-23,* after `fifth-layout` was stopped at 05:28 UTC.
+   `second-layout` was already down, so nothing wrote to a source during the copy, and
+   steps 4 and 5 were not needed. Phase 1 on the stopped sources matched the morning's
+   preview byte for byte. `seed_registry.py` wrote the 15 registry rows. Phase 2 wrote
+   1,826 accounts and 2,122 memberships with no conflicts; the admin list makes exactly
+   two accounts platform admins. Phase 3 copied 46 contests, 2,402 teams, 2,750
+   enrolments, 2,872 players, 5,371 points rows, 64 sponsors, 37 carousel images, 184
+   import logs, 13 settings rows and 103 GridFS files, each tournament matching its dry
+   run. It found the rehearsal's 10 enrolment collisions, and mwpl's 22 import logs still
+   name the deleted admin (R40). Phase 4 copied 4 avatars. Phase 5 passes every check.
+   `refresh_membership_stats.py --all` then filled all 2,122 memberships. Against
+   `walle-api`, `rspl` and `dcpl` serve their contests, leaderboards, logos, sponsors and
+   carousel. A contest requested under the other tournament is a 404, and the archived
+   thirteen answer "Unknown tournament", as an archived slug should.
 4. **Read-only window on lpcl and fifth.** This is the only moment users are affected.
 5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of`,
    `--platform-admins` and `--links`) to pick up everything written during the backfill. It re-runs
@@ -2261,7 +2277,9 @@ expects `{"sms": true, "email": false}`. The read-only window (steps 4–5) beco
 stopping `fifth-layout` (decided 2026-10-23): `second-layout` is already down and it is
 off-season, so nothing writes during the copy and no delta re-sync is needed. Each
 tournament's website hostname is added to `walle-web` with its own CNAME at GoDaddy and
-its own Google origin, rather than a wildcard (decided 2026-10-23).
+its own Google origin, rather than a wildcard (decided 2026-10-23). Later that day
+`fifth-layout` was stopped and the backfill ran into `walle_arena`. It passes Phase 5
+(Phase 6, steps 2–3).
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
