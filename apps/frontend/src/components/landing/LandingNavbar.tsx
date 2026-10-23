@@ -14,12 +14,14 @@ const NAV_LINKS = [
 
 export function LandingNavbar() {
   const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  // The whole header, toggle included: were the toggle outside it, its
+  // mousedown would close the menu and the click that follows reopen it.
+  const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
@@ -29,7 +31,10 @@ export function LandingNavbar() {
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 pt-4 px-4 sm:px-6 md:pt-6 pointer-events-none flex justify-center">
-      <header className="pointer-events-auto w-full max-w-7xl bg-bg-elevated backdrop-blur-lg border border-border-subtle rounded-full shadow-pink-soft">
+      <header
+        ref={headerRef}
+        className="pointer-events-auto w-full max-w-7xl bg-bg-elevated backdrop-blur-lg border border-border-subtle rounded-full shadow-pink-soft"
+      >
         <div className="px-5 sm:px-8 py-3 sm:py-4 flex justify-between items-center relative">
           <Link href="/" className="flex items-center gap-3">
             <Image
@@ -73,7 +78,6 @@ export function LandingNavbar() {
         </div>
 
         <div
-          ref={menuRef}
           className={`absolute top-full left-0 right-0 mt-3 md:hidden transition-all duration-300 ${
             open ? "opacity-100 translate-y-0 visible" : "opacity-0 -translate-y-4 invisible"
           }`}
