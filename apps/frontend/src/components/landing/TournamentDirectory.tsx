@@ -43,7 +43,7 @@ function formatStart(value: string | null): string | null {
   }).format(date);
 }
 
-function sortTournaments(rows: PublicTournament[]): PublicTournament[] {
+export function sortTournaments(rows: PublicTournament[]): PublicTournament[] {
   return [...rows].sort((a, b) => {
     const byStatus = ORDER[a.status] - ORDER[b.status];
     if (byStatus !== 0) return byStatus;
@@ -54,7 +54,7 @@ function sortTournaments(rows: PublicTournament[]): PublicTournament[] {
   });
 }
 
-function TournamentCard({ tournament }: { tournament: PublicTournament }) {
+export function TournamentCard({ tournament }: { tournament: PublicTournament }) {
   const badge = BADGE[tournament.status];
   const start = formatStart(tournament.start_at);
 
