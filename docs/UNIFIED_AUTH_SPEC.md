@@ -1926,15 +1926,34 @@ password still signs in.
 Under one database this is no longer "flip five services one at a time" — there is one
 backend, and the two live tournaments move to it together.
 
-1. **Stand up the unified backend** on `api.wallearena.com`, pointed at the unified
-   database, running the new code. Nothing is pointed at it yet. Its variables:
-   `TENANCY=shared`, `MONGODB_DB_NAME=walle_arena`, the shared `SECRET_KEY` /
-   `JWT_*`, `TWOFACTOR_*` (from `lpcl`), `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
+1. **Stand up the unified backend** on `walle-api.wallearena.com`, pointed at the
+   unified database, running the new code. Nothing is pointed at it yet. Its variables:
+   `TENANCY=shared`, `MONGODB_DB_NAME=walle_arena`, a fresh `SECRET_KEY` /
+   `JWT_SECRET_KEY`, `TWOFACTOR_*` (from `lpcl`), `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
    (with `send.wallearena.com` verified in Resend, §5.4), `GOOGLE_CLIENT_ID`,
    `APPLE_BUNDLE_ID`, and `CORS_ORIGINS` covering `https://*.wallearena.com`. The rate
    limiter needs nothing: it starts in observe mode. Check
    `GET /api/auth/forgot-password/channels` answers `{"sms": true, "email": true}`.
    Wildcard DNS (`*.wallearena.com`) points at the website.
+
+   *Done 2026-10-23, all but Resend and DNS.* The Railway service is `walle-api` in the
+   `Walle` project, deploying `main` from `/apps/backend` with health check
+   `/api/health`. The build and start commands are set on the service, because Railway
+   now refuses a config-file path. `api.wallearena.com` was the first choice, but Railway
+   reports it held by an account outside the Eigensu workspace, so the service is on
+   `walle-api.wallearena.com`. The `-api` ending keeps it out of the tournament slugs.
+   Its DNS (a CNAME and a `_railway-verify` TXT record) goes in GoDaddy, which holds
+   `wallearena.com`'s DNS today. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
+   than `fifth`'s, so no token minted before cutover is accepted. Such a token names its
+   account by username (§4.1), which after the merge can belong to someone else, and
+   under Q11 every player signs in again anyway. Nothing that is migrated depends on
+   either secret. `MONGODB_URL` (from `fifth-layout`), `GOOGLE_CLIENT_ID` and
+   `CLOUDINARY_*` (from `second-layout`) and `TWOFACTOR_*` (the project's shared
+   variables) are Railway references, not copies; see step 8. Its first deploy
+   (`d468c17`) built `walle_arena`'s indexes on the cluster and answered: health
+   connected, channels `{"sms": true, "email": false}` until Resend is set,
+   `/api/tournaments` an empty list until the registry is seeded, 400 for a request that
+   names no tournament, and CORS open to `*.wallearena.com` only.
 2. **Full backfill** with the two live tournaments still serving from their own
    services: Phases 1–5 for all five source databases. Nothing in the source databases
    is modified.
@@ -1965,8 +1984,11 @@ backend, and the two live tournaments move to it together.
    password by SMS and by email, and change an email from the profile. In the app:
    the tournament list, sign-in, and switching tournaments without signing out.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
-   `fourth-layout-mtc`, `fifth-layout`. Retire `walle-landing` (the app's old source
-   of per-tournament API URLs) once EAS shows most app users on the update.
+   `fourth-layout-mtc`, `fifth-layout`. First replace `walle-api`'s references to
+   `fifth-layout` and `second-layout` variables with their values: a reference to a
+   deleted service resolves to nothing on the next deploy. Retire `walle-landing` (the
+   app's old source of per-tournament API URLs) once EAS shows most app users on the
+   update.
 9. **Schedule** `scripts/refresh_membership_stats.py --all-live` on the unified
    service (a Railway cron), so live tournaments' profile numbers keep up.
 10. **Enforce the rate limits** after one contest deadline of observe-mode logs on the
@@ -2211,9 +2233,10 @@ more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three 
 leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform-admin
 list and the reviewed links, the two things it left open, were settled on 2026-10-19
 (§13.10); the owner confirmed the list again on 2026-10-21. The two app decisions
-(Q11–Q12) were made on 2026-10-22. What is left before I: setting up Resend (Q8–Q9),
-the unified Railway service and wildcard DNS (Phase 6, step 1), and re-running Phase 1
-with the links on the cutover snapshot.
+(Q11–Q12) were made on 2026-10-22, and the unified Railway service was stood up on
+2026-10-23 (Phase 6, step 1). What is left before I: setting up Resend (Q8–Q9), the DNS
+for `walle-api.wallearena.com` and the wildcard for the website (Phase 6, step 1), and
+re-running Phase 1 with the links on the cutover snapshot.
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
