@@ -2008,7 +2008,9 @@ backend, and the two live tournaments move to it together.
    were left alone. Both sites now load `walle-web`, which calls
    `walle-api.wallearena.com`. A hostname no Vercel account holds needs only its CNAME.
    While `wallearena.com` is registered to the old team, each new tournament hostname
-   may need a TXT as well.
+   may need a TXT as well. *`wallearena.com` and `www` followed the same day*, serving
+   the landing pages walle-landing's frontend used to (PR #60). `www` 308-redirects to
+   the apex.
 6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
    from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
    the `production` channel. Not before this step: today's backends have no tournament
@@ -2018,7 +2020,14 @@ backend, and the two live tournaments move to it together.
    step 8 archives it, unreachable after), and the launch after that runs the update;
    and 1.0.2 installs cannot take the update, so those players install 1.0.3 from the
    store, which must serve 1.0.3 or a 1.0.2 player has nothing to update to. *The
-   owner confirmed on 2026-10-22 that the stores serve 1.0.3.*
+   owner confirmed on 2026-10-22 that the stores serve 1.0.3.* *Shipped 2026-10-24*
+   as update group `ecbbc968-70b7-436a-af8a-c127d985efd9` (runtime 1.0.3, from
+   `6d6bafc`), published by the Expo account that owns the project, `aagamr`. EAS
+   holds no environment variables, so `eas update` takes the `EXPO_PUBLIC_*` values
+   from `eas.json` on the command line. Without them the Google client IDs build in
+   empty. The App Store build (1.0.3, build 14) has the same native code. EAS's only
+   Android store build is 1.0.0, from January, with no update channel. No update
+   reaches it, so Android needs a store build of its own.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
    `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
    tournament's subdomain, and the Tournaments tab as a platform admin. Reset a
@@ -2027,11 +2036,14 @@ backend, and the two live tournaments move to it together.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
    `fourth-layout-mtc`, `fifth-layout`. First replace `walle-api`'s references to
    `fifth-layout` and `second-layout` variables with their values: a reference to a
-   deleted service resolves to nothing on the next deploy. Retire `walle-landing` (the
+   deleted service resolves to nothing on the next deploy (*done 2026-10-24*). Retire `walle-landing` (the
    app's old source of per-tournament API URLs) once EAS shows most app users on the
    update.
 9. **Schedule** `scripts/refresh_membership_stats.py --all-live` on the unified
-   service (a Railway cron), so live tournaments' profile numbers keep up.
+   service (a Railway cron), so live tournaments' profile numbers keep up. *Done
+   2026-10-24* as the service `walle-stats-cron` (hourly, `0 * * * *`), which reads
+   `walle-api`'s database and secrets by reference. Each run refreshes every member
+   of a live tournament (dcpl 397, rspl 75).
 10. **Enforce the rate limits** after one contest deadline of observe-mode logs on the
     unified service (`docs/RATE_LIMITING_SPEC.md` §8): first
     `RATE_LIMIT_ENFORCE_RULES=forgot_password_request,email_change_request`, then
