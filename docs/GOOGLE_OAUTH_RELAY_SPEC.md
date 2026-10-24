@@ -147,10 +147,12 @@ branch and relay logic live entirely inside that one component.
   there.
 - The `state` nonce guards against a stale or unrelated popup/tab delivering
   an unexpected message to the opener.
-- The ID token's exposure is unchanged from today's direct-mode flow: it's
-  short-lived, single-use (verified server-side against Google's public
-  keys), and never leaves the browser except over the `postMessage` channel
-  and the existing `POST /api/auth/google` call.
+- The ID token's exposure is unchanged from today's direct-mode flow. It
+  lasts about an hour and is verified server-side against Google's public
+  keys, but nothing marks it used: `POST /api/auth/google` accepts the same
+  token again until it expires. That is why it must reach no origin but the
+  opener's. It never leaves the browser except over the `postMessage`
+  channel and that call.
 
 ## Edge cases / deferred to v2
 
