@@ -5,6 +5,7 @@ export interface FrontendEnv {
   NEXT_PUBLIC_APP_NAME: string;
   NEXT_PUBLIC_APP_VERSION: string;
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: string;
+  NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN: string;
 }
 
 // Validate and load environment variables
@@ -15,6 +16,8 @@ function validateFrontendEnv(): FrontendEnv {
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Fantasy11',
     NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
     NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+    // Empty means https://<root domain> for its subdomains (src/lib/auth/googleRelay.ts).
+    NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN: process.env.NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN || '',
   };
 
   // Validate required public variables in production
@@ -37,6 +40,7 @@ export const {
   NEXT_PUBLIC_APP_NAME,
   NEXT_PUBLIC_APP_VERSION,
   NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+  NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN,
 } = env;
 
 // Helper functions

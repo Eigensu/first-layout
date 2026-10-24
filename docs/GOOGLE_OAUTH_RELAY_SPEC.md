@@ -1,11 +1,14 @@
 # Google Sign-In: Cross-Subdomain Relay Specification
 
+**Status:** built 2026-10-24. `https://wallearena.com` is registered on the web
+client, so a tournament subdomain needs no Google entry of its own.
+
 ## Overview
 
 Google sign-in currently uses the client-side Google Identity Services (GIS)
 ID-token flow (`apps/frontend/src/components/auth/GoogleSignInButton.tsx`),
 introduced to avoid registering a wildcard *redirect URI* for the
-multi-tenant `*.wallearena.com` subdomains (see the `580e5e6` commit).
+multi-tenant `*.wallearena.com` subdomains (PR #22).
 
 That sidestepped the redirect-URI problem, but GIS has the same restriction
 one level up: a Google OAuth Web-client's **Authorized JavaScript origins**
@@ -66,55 +69,72 @@ naturally alongside the existing `/auth/*` pages.
 
 ### New: relay page
 
-`apps/frontend/src/app/auth/google-relay/page.tsx`, served from the apex
-domain only.
+`apps/frontend/src/app/auth/google-relay/page.tsx` reads the query string and
+renders `components/auth/GoogleRelay.tsx`. The rules both sides share are in
+`apps/frontend/src/lib/auth/googleRelay.ts`.
 
 Responsibilities, in order:
 
 1. Read `origin` and `state` from the query string.
-2. **Validate `origin`** against the same slug rules as
-   `apps/frontend/src/common/consts/tournament.ts` — it must be
-   `https://<valid-slug>.wallearena.com` or the apex itself. Reject anything
-   else before it is ever used as a `postMessage` target.
-   This is the one security-critical check in the design: skipping it turns
-   the relay into an open token-leak gadget for arbitrary origins.
-3. Mount the GIS script and call `google.accounts.id.initialize({ client_id,
-   callback })`, identical to today's `GoogleSignInButton.tsx`.
-4. In the callback: `opener.postMessage({ type: "google-relay-token",
-   idToken, state }, validatedOrigin)`, then `window.close()`.
+2. Refuse unless this page is itself on the registered origin. On any other
+   host its Google button would fail anyway.
+3. **Validate `origin`** (`getAllowedOpenerOrigin`). It must be exactly an
+   origin, with no path or credentials. It must use the relay's scheme and
+   port, and its host must be a direct subdomain of the relay's that passes
+   the slug rules in `apps/frontend/src/common/consts/tournament.ts`. In
+   production that means `https://<valid-slug>.wallearena.com`. Anything else
+   is refused before it is ever used as a `postMessage` target. This is the
+   one security-critical check in the design: skipping it turns the relay
+   into an open token-leak gadget for arbitrary origins.
+4. Require a well-formed `state` (16–128 URL-safe characters).
+5. Render `GoogleSignInButton`, which on the apex is Google's own button.
+6. In the callback: `opener.postMessage({ type: "google-relay-token",
+   idToken, state }, validatedOrigin)`, then close 150 ms later, so the
+   message lands before the opener sees the popup close. If the opener is
+   gone, say so instead.
 
 ### Modified: `GoogleSignInButton.tsx`
 
-Branch on whether the current origin is already the registered one:
+Branch on `getGoogleRelayOrigin(location.origin)`, which is known only in
+the browser. The server renders an empty frame of the same size.
 
-- **Direct mode** — `window.location.origin === NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN`
-  (local dev on `localhost:3000`, and the apex itself). Keep today's inline
-  GIS button unchanged.
-- **Relay mode** — any tournament subdomain. Render a plain styled button.
-  On click, *synchronously* (before any `await`, so popup blockers don't
-  fire):
-  1. Generate a random `state` nonce.
-  2. `window.open(`${RELAY_ORIGIN}/auth/google-relay?origin=${location.origin}&state=${nonce}`, "google-relay", "width=460,height=560")`.
+- **Direct mode** — it returns null: the apex, Vercel previews and
+  `localhost:3000`. Keep today's inline GIS button unchanged.
+- **Relay mode** — any tournament subdomain. Render a lookalike of Google's
+  outline button, with the same three labels. On click, *synchronously*
+  (before any `await`, so popup blockers don't fire):
+  1. Generate a random `state` nonce (128 bits).
+  2. `window.open(`${RELAY_ORIGIN}/auth/google-relay?origin=${location.origin}&state=${nonce}`, "google-relay", …)`,
+     centred on the page. Reusing the window name means a second click
+     navigates the open popup instead of stacking another.
   3. Attach a `message` listener: accept only if
-     `event.origin === RELAY_ORIGIN && event.data.state === nonce`.
+     `event.origin === RELAY_ORIGIN`, `event.source === popup`, and the data
+     is a `google-relay-token` message carrying this nonce.
   4. On match, call the existing `onCredential(idToken)` prop — no changes
      needed in any caller.
-  5. Clean up: remove the listener, and poll `popup.closed` to catch the
-     user closing it without finishing (surfaced as a cancel, not an error).
+  5. Clean up: remove the listener, and poll `popup.closed` every 500 ms to
+     catch the user closing it without finishing (a silent cancel, not an
+     error). Unmounting mid-sign-in closes the popup.
 
 Every existing caller of `GoogleSignInButton` is unaffected — the mode
 branch and relay logic live entirely inside that one component.
 
 ## Config changes
 
-- New env var `NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN=https://wallearena.com`
-  (falls back to `window.location.origin` in dev, so `localhost:3000` keeps
-  working in direct mode with no extra setup).
+- Optional env var `NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN`. When empty, as it is on
+  `walle-web`, a subdomain of `NEXT_PUBLIC_ROOT_DOMAIN` relays through
+  `https://<root domain>`, and every other host renders Google's button
+  directly. Set it to `http://localhost:3000` to try relay mode from
+  `rspl.localhost:3000`.
 - Cloud Console **Authorized JavaScript origins** shrinks to exactly:
   - `http://localhost:3000`
   - `https://wallearena.com`
 
-  One-time setup, stable across every future tournament.
+  One-time setup, stable across every future tournament. On 2026-10-24 the
+  client accepted `wallearena.com` and `dcpl.wallearena.com` but not `rspl`.
+  To check an origin without console access, call
+  `GET https://accounts.google.com/o/oauth2/iframerpc?action=checkOrigin&origin=<urlencoded>&client_id=<client>`
+  with `X-Requested-With: XmlHttpRequest`. It answers `"valid": true|false`.
 - No backend env changes — `GOOGLE_CLIENT_ID` verification is unaffected by
   which origin obtained the token.
 
@@ -141,23 +161,30 @@ branch and relay logic live entirely inside that one component.
   the subdomain with a short-lived one-time code, exchanged via a small
   backend endpoint rather than putting the raw ID token in a URL) is the
   natural follow-up if this proves to matter.
-- **Popup blocked** (`window.open` returns `null`): show an inline "Enable
-  popups to continue with Google" message instead of failing silently.
+- **Popup blocked** (`window.open` returns `null`): show an inline "Allow
+  pop-ups for this site" message instead of failing silently.
 
 ## Files touched
 
-- New: `apps/frontend/src/app/auth/google-relay/page.tsx`
+- New: `apps/frontend/src/lib/auth/googleRelay.ts` (origin rules, state,
+  message shape)
+- New: `apps/frontend/src/app/auth/google-relay/{page,layout}.tsx` and
+  `apps/frontend/src/components/auth/GoogleRelay.tsx`
+- New: `apps/frontend/public/google-g.svg` (the relay-mode button's logo)
 - Modify: `apps/frontend/src/components/auth/GoogleSignInButton.tsx` (mode
   branch + popup/postMessage handshake)
 - Modify: `.env.example`, `apps/frontend/src/config/env.ts`
   (`NEXT_PUBLIC_GOOGLE_RELAY_ORIGIN`)
+- Tests: `lib/auth/__tests__/googleRelay.test.ts`,
+  `components/auth/__tests__/GoogleSignInButton.interaction.test.tsx`,
+  `components/auth/__tests__/GoogleRelay.interaction.test.tsx`
 - No backend changes.
 
 ## Rollout
 
 1. Add `https://wallearena.com` to the OAuth client's Authorized JavaScript
    origins in Cloud Console (additive — doesn't break the currently-working
-   direct-mode origins already registered).
+   direct-mode origins already registered). *Done.*
 2. Ship the relay page and the updated `GoogleSignInButton.tsx`.
 3. Once relay mode is confirmed working end-to-end, the previously
    individually-registered tournament subdomains can be left as-is or
