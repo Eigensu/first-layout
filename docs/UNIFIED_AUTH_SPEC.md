@@ -1999,8 +1999,10 @@ backend, and the two live tournaments move to it together.
    projects onto `walle-web`. The wildcard needs a certificate: either Vercel
    nameservers, or `vercel certs issue "*.wallearena.com" wallearena.com
    --challenge-only` with the challenge TXT records added at GoDaddy, which then has to
-   be renewed by hand. Google sign-in accepts only exact origins, so each tournament
-   hostname must also be listed on the Google client.
+   be renewed by hand. Google sign-in accepts only exact origins. *Since PR #62
+   (2026-10-24), a tournament's Google button runs sign-in in a popup on
+   `wallearena.com`, so that origin is the only one the Google client needs*
+   (`docs/GOOGLE_OAUTH_RELAY_SPEC.md`).
 
    *`rspl` and `dcpl` moved 2026-10-24.* Adding each hostname to `walle-web` returned a
    `_vercel` TXT record (`vc-domain-verify=<host>,<code>`), because the old team held
