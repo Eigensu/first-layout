@@ -3,10 +3,11 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
-from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
+from config.redaction import redact_mongodb_url
 
 # Get the root directory of the monorepo (two levels up from backend/config)
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
@@ -144,14 +145,8 @@ class Settings(BaseSettings):
 
     @property
     def mongodb_url_redacted(self) -> str:
-        """MONGODB_URL with its user, password and options removed, for logs.
-
-        The full URL carries the database password, and whatever a service
-        prints on startup is kept in its deploy logs.
-        """
-        parts = urlsplit(self.mongodb_url)
-        host = parts.netloc.rpartition("@")[2]
-        return urlunsplit((parts.scheme, host, parts.path, "", ""))
+        """MONGODB_URL with its user, password and options removed, for logs."""
+        return redact_mongodb_url(self.mongodb_url)
 
     @property
     def shared_tenancy(self) -> bool:

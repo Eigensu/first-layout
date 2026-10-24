@@ -16,12 +16,13 @@ root_env_path = os.path.abspath(
 load_dotenv(dotenv_path=root_env_path)
 
 from app.models.admin.slot import Slot
+from config.redaction import redact_mongodb_url
 
 
 async def main():
     # Use standard dev URI or env var
     mongo_uri = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
-    print(f"Connecting to MongoDB at: {mongo_uri}")
+    print(f"Connecting to MongoDB at: {redact_mongodb_url(mongo_uri)}")
     client = AsyncIOMotorClient(mongo_uri)
 
     # We'll use the walle_arena DB as default for local dev
