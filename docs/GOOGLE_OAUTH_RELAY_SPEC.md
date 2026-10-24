@@ -87,8 +87,13 @@ Responsibilities, in order:
    one security-critical check in the design: skipping it turns the relay
    into an open token-leak gadget for arbitrary origins.
 4. Require a well-formed `state` (16–128 URL-safe characters).
-5. Render `GoogleSignInButton`, which on the apex is Google's own button.
-6. In the callback: `opener.postMessage({ type: "google-relay-token",
+5. Require the slug to be in the live registry (`GET /api/tournaments`,
+   which lists every tournament not archived). A host that only *looks*
+   like a tournament isn't enough: a subdomain whose DNS was left pointing
+   at a service someone else could claim would otherwise receive the token.
+   If the registry can't be read, say so and offer no button.
+6. Render `GoogleSignInButton`, which on the apex is Google's own button.
+7. In the callback: `opener.postMessage({ type: "google-relay-token",
    idToken, state }, validatedOrigin)`, then close 150 ms later, so the
    message lands before the opener sees the popup close. If the opener is
    gone, say so instead.
@@ -106,7 +111,10 @@ the browser. The server renders an empty frame of the same size.
   1. Generate a random `state` nonce (128 bits).
   2. `window.open(`${RELAY_ORIGIN}/auth/google-relay?origin=${location.origin}&state=${nonce}`, "google-relay", …)`,
      centred on the page. Reusing the window name means a second click
-     navigates the open popup instead of stacking another.
+     navigates the open popup to a fresh nonce instead of stacking another.
+     A second click drops only the first attempt's listener. Closing the
+     popup and reopening the same name at once could hand back the closing
+     window.
   3. Attach a `message` listener: accept only if
      `event.origin === RELAY_ORIGIN`, `event.source === popup`, and the data
      is a `google-relay-token` message carrying this nonce.

@@ -77,6 +77,26 @@ describe('on a tournament subdomain', () => {
     expect(onCredential).toHaveBeenCalledWith('id-token');
   });
 
+  it('reuses the open popup for a second click and drops the first attempt', () => {
+    const popup = fakePopup();
+    const onCredential = vi.fn();
+    render(<GoogleSignInButton onCredential={onCredential} />);
+    const button = screen.getByRole('button', { name: 'Continue with Google' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(popup.close).not.toHaveBeenCalled();
+    const calls = vi.mocked(window.open).mock.calls;
+    expect(calls.map((c) => c[1])).toEqual(['google-relay', 'google-relay']);
+    const [first, second] = calls.map((c) => new URL(c[0] as string).searchParams.get('state'));
+    expect(second).not.toBe(first);
+
+    post({ type: 'google-relay-token', idToken: 'stale', state: first }, APEX, popup);
+    expect(onCredential).not.toHaveBeenCalled();
+    post({ type: 'google-relay-token', idToken: 'fresh', state: second }, APEX, popup);
+    expect(onCredential).toHaveBeenCalledWith('fresh');
+  });
+
   it('says so when the browser blocks the popup', () => {
     vi.spyOn(window, 'open').mockReturnValue(null);
     render(<GoogleSignInButton onCredential={vi.fn()} />);

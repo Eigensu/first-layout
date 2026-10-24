@@ -62,7 +62,7 @@ const LABELS: Record<ButtonText, string> = {
   continue_with: "Continue with Google",
 };
 
-/** Reusing one name means a second click navigates the open popup instead of stacking another. */
+/** One name, so a second click navigates the open popup instead of stacking another. */
 const RELAY_WINDOW_NAME = "google-relay";
 const POPUP_WIDTH = 460;
 const POPUP_HEIGHT = 640;
@@ -213,7 +213,9 @@ function RelayGoogleButton({
   useEffect(() => () => stopRef.current?.(true), []);
 
   const start = () => {
-    stopRef.current?.(true);
+    // Only the earlier attempt's listener goes. Closing its popup here and
+    // then reopening the same window name could hand back the closing window.
+    stopRef.current?.(false);
     const state = newRelayState();
     // Opened before anything async, so the browser counts it as this click's popup.
     const popup = window.open(

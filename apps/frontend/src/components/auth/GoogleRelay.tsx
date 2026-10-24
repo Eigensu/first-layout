@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { GoogleSignInButton } from "./GoogleSignInButton";
+import { getTournamentSlugFromHost } from "@/common/consts/tournament";
+import { getPublicTournaments } from "@/lib/api/tournaments";
 import {
   getAllowedOpenerOrigin,
   getGoogleRelayOrigin,
@@ -16,6 +18,8 @@ const subscribe = () => () => {};
 /** Long enough for the message to reach the opener before it sees the popup close. */
 const CLOSE_DELAY_MS = 150;
 
+type Registry = "checking" | "listed" | "unlisted" | "failed";
+
 function RelayCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-10">
@@ -24,6 +28,17 @@ function RelayCard({ title, children }: { title: string; children: React.ReactNo
         {children}
       </div>
     </main>
+  );
+}
+
+function NothingToSignIn() {
+  return (
+    <RelayCard title="Nothing to sign in to">
+      <p className="text-sm text-text-muted">
+        This window opens from the Google button on a tournament&apos;s sign-in
+        page. Close it and start again from there.
+      </p>
+    </RelayCard>
   );
 }
 
@@ -46,23 +61,44 @@ export function GoogleRelay({
     () => null,
   );
   const [openerGone, setOpenerGone] = useState(false);
-
-  if (here === null) return <RelayCard title="Sign in with Google">{null}</RelayCard>;
+  const [registry, setRegistry] = useState<Registry>("checking");
 
   // Only the registered origin relays, and only to a tournament page under it.
   const target =
-    getGoogleRelayOrigin(here) === null ? getAllowedOpenerOrigin(origin, here) : null;
+    here !== null && getGoogleRelayOrigin(here) === null
+      ? getAllowedOpenerOrigin(origin, here)
+      : null;
+  const slug = target ? getTournamentSlugFromHost(new URL(target).host) : null;
 
-  if (!target || !isRelayState(state)) {
+  // A host that merely looks like a tournament isn't enough: one left
+  // pointing at a service someone else could claim would receive the token.
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    getPublicTournaments()
+      .then((rows) => {
+        if (!cancelled) setRegistry(rows.some((t) => t.slug === slug) ? "listed" : "unlisted");
+      })
+      .catch(() => !cancelled && setRegistry("failed"));
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  if (here === null) return <RelayCard title="Sign in with Google">{null}</RelayCard>;
+  if (!target || !slug || !isRelayState(state) || registry === "unlisted") {
+    return <NothingToSignIn />;
+  }
+  if (registry === "failed") {
     return (
-      <RelayCard title="Nothing to sign in to">
-        <p className="text-sm text-text-muted">
-          This window opens from the Google button on a tournament&apos;s sign-in
-          page. Close it and start again from there.
+      <RelayCard title="Couldn't reach Wall-E Arena">
+        <p role="alert" className="text-sm text-text-muted">
+          Check your connection, then close this window and try again.
         </p>
       </RelayCard>
     );
   }
+  if (registry === "checking") return <RelayCard title="Sign in with Google">{null}</RelayCard>;
 
   const nonce: string = state;
 
