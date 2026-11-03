@@ -5,6 +5,7 @@ tests/fixtures/cricheroes_doc_examples.json; the few hand-made bodies are for
 cases the doc does not show (errors, drift from the documented types).
 """
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -217,6 +218,34 @@ async def test_no_answer_is_transport_error(make_client, failure):
         await client.get_tournament_match_list(1493258)
 
 
+async def test_a_non_dict_error_is_still_an_api_error(make_client):
+    """The doc's own error examples are not all well-formed JSON objects."""
+    body = {"status": False, "error": "Invalid api key"}
+    client, _ = make_client(Upstream(httpx.Response(200, json=body)))
+
+    with pytest.raises(CricHeroesAPIError) as caught:
+        await client.get_tournament_match_list(1493258)
+
+    assert caught.value.code is None
+    assert caught.value.message == "Invalid api key"
+
+
+async def test_a_slow_trickle_hits_the_overall_deadline(make_client):
+    """httpx times out each phase separately; the client's deadline is for
+    the whole request."""
+
+    async def slow(request):
+        await asyncio.sleep(1)
+        return ok([])
+
+    client, _ = make_client(slow, timeout=0.05)
+
+    with pytest.raises(CricHeroesTransportError) as caught:
+        await client.get_tournament_match_list(1493258)
+
+    assert "took longer than 0.05s" in str(caught.value)
+
+
 async def test_non_json_body_is_http_error(make_client):
     client, _ = make_client(
         Upstream(httpx.Response(200, text="<html>maintenance</html>"))
@@ -330,6 +359,18 @@ async def test_unparseable_retry_after_falls_back_to_backoff(make_client):
         httpx.Response(429, headers={"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}),
         ok([]),
     )
+    client, sleeps = make_client(upstream)
+
+    await client.get_tournament_match_list(1493258)
+
+    assert len(sleeps) == 1 and 0.4 <= sleeps[0] <= 0.6
+
+
+@pytest.mark.parametrize("value", ["inf", "nan", "1e999", "-5"])
+async def test_a_retry_after_nobody_can_honour_falls_back_to_backoff(
+    make_client, value
+):
+    upstream = Upstream(throttled(retry_after=value), ok([]))
     client, sleeps = make_client(upstream)
 
     await client.get_tournament_match_list(1493258)

@@ -41,17 +41,30 @@ from app.services.cricheroes_errors import (  # noqa: E402
 # sides, so it is very likely ours -- confirm before relying on it.
 DEFAULT_TOURNAMENT_ID = 1493258
 
+# The one refusal that proves the credentials got through: CricHeroes looked
+# the tournament up and has no boundary data for it. The API doc does not say
+# how bad credentials are reported -- possibly as another status:false code --
+# so no other refusal counts as success.
+NO_BOUNDARY_DATA = "96007"
+
 
 async def check(tournament_id: int) -> int:
     async with CricHeroesClient(max_retries=0) as client:
         try:
             result = await client.get_tournament_boundary_count(tournament_id)
         except CricHeroesAPIError as exc:
-            # The credentials got through; CricHeroes just has nothing for this
-            # id. That still answers the question this script asks.
-            print(f"OK: credentials accepted. {exc}")
-            print("(Try --tournament-id with one of your tournaments for data.)")
-            return 0
+            if str(exc.code) == NO_BOUNDARY_DATA:
+                # The credentials got through; CricHeroes just has nothing for
+                # this id. That still answers the question this script asks.
+                print(f"OK: credentials accepted. {exc}")
+                print("(Try --tournament-id with one of your tournaments for data.)")
+                return 0
+            print(f"FAILED ({type(exc).__name__}): {exc}")
+            print(
+                "CricHeroes refused the request. This may be how it rejects "
+                "credentials; do not treat them as working."
+            )
+            return 1
         except CricHeroesError as exc:
             print(f"FAILED ({type(exc).__name__}): {exc}")
             return 1

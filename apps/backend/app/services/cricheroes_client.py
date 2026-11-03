@@ -13,6 +13,7 @@ happen on 429 only, with backoff, and only while there is time budget left.
 
 import asyncio
 import logging
+import math
 import random
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, TypeVar
 
@@ -75,7 +76,8 @@ def _parse_retry_after(value: Optional[str]) -> Optional[float]:
         seconds = float(value.strip())
     except ValueError:
         return None
-    return seconds if seconds >= 0 else None
+    # "inf" and "nan" parse as floats but are no wait anyone can honour.
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
 class CricHeroesClient:
@@ -184,9 +186,17 @@ class CricHeroesClient:
             # Headers carry the credentials, so they are never logged.
             logger.info("CricHeroes GET %s params=%s", url, query)
             try:
-                response = await self._get_client().get(
-                    url, headers=headers, params=query
+                # httpx's timeout applies to each phase (connect, read, ...)
+                # separately, so a slow trickle of bytes never trips it. This
+                # makes it a deadline for the whole request (§6.4).
+                response = await asyncio.wait_for(
+                    self._get_client().get(url, headers=headers, params=query),
+                    timeout=self.timeout,
                 )
+            except asyncio.TimeoutError as exc:
+                raise CricHeroesTransportError(
+                    f"CricHeroes request to {url} took longer than {self.timeout:g}s"
+                ) from exc
             except httpx.HTTPError as exc:
                 raise CricHeroesTransportError(
                     f"CricHeroes request to {url} failed: {exc!r}"
@@ -229,7 +239,11 @@ class CricHeroesClient:
                 response.status_code, f"unexpected body: {response.text[:500]}"
             )
         if payload.get("status") is not True:
-            error = payload.get("error") or {}
+            error = payload.get("error")
+            if not isinstance(error, dict):
+                # The doc's own error examples are not all well-formed. Keep
+                # whatever came back as the message rather than fail on it.
+                error = {"message": str(error) if error else None}
             raise CricHeroesAPIError(error.get("code"), error.get("message"))
         return payload.get("data")
 

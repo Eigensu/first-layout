@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from beanie.operators import In
 from fastapi import UploadFile
 
 from app.models.admin.import_log import ImportLog
@@ -18,10 +19,9 @@ from app.utils.import_players.import_parsers import detect_format, parse_csv, pa
 from app.utils.import_players.import_validators import (
     ValidationError,
     check_conflict,
-    find_cricheroes_id_holder,
     validate_player_row,
 )
-from app.utils.tenant import TenantId
+from app.utils.tenant import TenantId, scoped
 
 # Configuration
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB for XLSX
@@ -166,51 +166,87 @@ class PlayerImportService:
             # players sharing one would both be credited with its stats.
             cricheroes_id = validated_data.get("cricheroes_player_id")
             if cricheroes_id is not None:
-                clash = await PlayerImportService._cricheroes_id_clash(
-                    cricheroes_id,
-                    row_number,
-                    cricheroes_ids_seen,
-                    existing=existing,
-                    tournament_id=tournament_id,
-                )
-                if clash:
+                if cricheroes_id in cricheroes_ids_seen:
                     errors.append(
                         RowError(
-                            row=row_number, field="cricheroes_player_id", message=clash
+                            row=row_number,
+                            field="cricheroes_player_id",
+                            message=(
+                                f"CricHeroes player ID {cricheroes_id} is also on row "
+                                f"{cricheroes_ids_seen[cricheroes_id]}; each player "
+                                "needs their own"
+                            ),
                         )
                     )
                     continue
                 cricheroes_ids_seen[cricheroes_id] = row_number
 
+            validated_data["_row_number"] = row_number
             valid_data.append(validated_data)
+
+        valid_data, held = await PlayerImportService._reject_held_cricheroes_ids(
+            valid_data, tournament_id=tournament_id
+        )
+        if held:
+            errors = sorted(errors + held, key=lambda error: error.row)
 
         return valid_data, errors, conflicts
 
     @staticmethod
-    async def _cricheroes_id_clash(
-        cricheroes_id: int,
-        row_number: int,
-        seen: Dict[int, int],
-        *,
-        existing: Optional[Player],
-        tournament_id: TenantId,
-    ) -> Optional[str]:
-        """Why this row may not take this CricHeroes id, or None if it may."""
-        if cricheroes_id in seen:
-            return (
-                f"CricHeroes player ID {cricheroes_id} is also on row "
-                f"{seen[cricheroes_id]}; each player needs their own"
-            )
-        holder = await find_cricheroes_id_holder(
-            cricheroes_id, tournament_id=tournament_id
+    async def _reject_held_cricheroes_ids(
+        valid_data: List[Dict[str, Any]], *, tournament_id: TenantId
+    ) -> Tuple[List[Dict[str, Any]], List[RowError]]:
+        """Drop rows whose CricHeroes id another player in the tournament keeps.
+
+        Judged against the tournament as it will be after this import, not
+        before it: a player whose own row moves them to a different id gives
+        theirs up, so ids can be swapped or moved between players in one
+        import. One query covers every id in the file.
+        """
+        wanted = {
+            data["cricheroes_player_id"]: data
+            for data in valid_data
+            if data.get("cricheroes_player_id") is not None
+        }
+        if not wanted:
+            return valid_data, []
+
+        holders = await (
+            scoped(Player, tournament_id)
+            .find(In(Player.cricheroes_player_id, list(wanted)))
+            .to_list()
         )
-        # Updating the player who already holds it is fine; anyone else is not.
-        if holder and (existing is None or holder.id != existing.id):
-            return (
-                f"CricHeroes player ID {cricheroes_id} already belongs to "
-                f"'{holder.name}' in this tournament"
+        # Existing players this file gives an id: the one they hold now is freed.
+        new_id_of = {
+            data["_existing_player"].id: data["cricheroes_player_id"]
+            for data in valid_data
+            if data.get("_is_update") and data.get("cricheroes_player_id") is not None
+        }
+
+        errors, rejected = [], set()
+        for holder in holders:
+            row = wanted[holder.cricheroes_player_id]
+            claimant = row.get("_existing_player")
+            if claimant is not None and claimant.id == holder.id:
+                continue  # the row updates the holder itself
+            if new_id_of.get(holder.id, holder.cricheroes_player_id) != (
+                holder.cricheroes_player_id
+            ):
+                continue  # the holder moves to another id in this file
+            errors.append(
+                RowError(
+                    row=row["_row_number"],
+                    field="cricheroes_player_id",
+                    message=(
+                        f"CricHeroes player ID {holder.cricheroes_player_id} already "
+                        f"belongs to '{holder.name}' in this tournament"
+                    ),
+                )
             )
-        return None
+            rejected.add(id(row))
+
+        kept = [data for data in valid_data if id(data) not in rejected]
+        return kept, errors
 
     @staticmethod
     def get_samples(

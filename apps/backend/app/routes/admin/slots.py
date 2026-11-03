@@ -351,6 +351,7 @@ async def get_slot_players(
                 price=p.price,
                 slot=p.slot,
                 image_url=p.image_url,
+                cricheroes_player_id=p.cricheroes_player_id,
                 stats=p.stats,
                 created_at=p.created_at,
                 updated_at=p.updated_at,

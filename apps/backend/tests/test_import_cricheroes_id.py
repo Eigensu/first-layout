@@ -12,6 +12,7 @@ from beanie import PydanticObjectId
 from openpyxl import Workbook
 
 from app.models.admin.player import Player
+from app.models.admin.slot import Slot
 from app.models.player import Player as PublicPlayer
 from app.services.player_import.import_service import PlayerImportService
 from app.utils.import_players.import_parsers import normalize_header
@@ -63,7 +64,8 @@ def test_accepted_ids(raw, expected):
 
 
 @pytest.mark.parametrize(
-    "raw", ["abc", "2826925x", "2,826,925", 12.5, 0, -5, "-5", "0", True]
+    "raw",
+    ["abc", "2826925x", "2,826,925", 12.5, 0, -5, "-5", "0", True, "²", "2826925²"],
 )
 def test_rejected_ids(raw):
     with pytest.raises(ValidationError) as caught:
@@ -228,6 +230,53 @@ async def test_updating_onto_another_players_id_is_refused(client):
     assert (await _player("Warner")).cricheroes_player_id is None
 
 
+async def test_two_players_can_swap_ids_in_one_import(client):
+    """Mixed-up ids must be fixable by re-importing: each row is judged against
+    the tournament as it will be after the import, not before."""
+    await Player(name="Rohit", team="India", cricheroes_player_id=111).insert()
+    await Player(name="Warner", team="Australia", cricheroes_player_id=222).insert()
+
+    result = await _import(
+        client,
+        HEADER + "Rohit,India,100,222\nWarner,Australia,90,111\n",
+        conflict="update",
+    )
+
+    assert result["errors"] == [] and result["updated"] == 2
+    assert (await _player("Rohit")).cricheroes_player_id == 222
+    assert (await _player("Warner")).cricheroes_player_id == 111
+
+
+async def test_an_id_freed_in_the_same_import_can_go_to_a_new_player(client):
+    await Player(name="Rohit", team="India", cricheroes_player_id=111).insert()
+
+    result = await _import(
+        client,
+        HEADER + "Rohit,India,100,333\nNewcomer,India,50,111\n",
+        conflict="update",
+    )
+
+    assert result["errors"] == []
+    assert (result["created"], result["updated"]) == (1, 1)
+    assert (await _player("Rohit")).cricheroes_player_id == 333
+    assert (await _player("Newcomer")).cricheroes_player_id == 111
+
+
+async def test_a_holder_whose_row_keeps_their_id_still_blocks_it(client):
+    """A blank cell keeps the id, so the holder has not given it up."""
+    await Player(name="Rohit", team="India", cricheroes_player_id=111).insert()
+
+    result = await _import(
+        client,
+        HEADER + "Rohit,India,100,\nNewcomer,India,50,111\n",
+        conflict="update",
+    )
+
+    [error] = result["errors"]
+    assert (error["row"], error["field"]) == (3, "cricheroes_player_id")
+    assert await _player("Newcomer") is None
+
+
 async def test_ids_are_unique_per_tournament_not_across_them(db):
     alpha, bravo = PydanticObjectId(), PydanticObjectId()
     await Player(
@@ -258,6 +307,19 @@ async def test_the_admin_player_list_shows_the_id(client):
     await Player(name="Rohit", team="India", cricheroes_player_id=2826925).insert()
 
     response = await client.get("/api/admin/players")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["players"][0]["cricheroes_player_id"] == 2826925
+
+
+async def test_the_slot_player_list_shows_the_id(client):
+    slot = Slot(code="S1", name="Slot 1")
+    await slot.insert()
+    await Player(
+        name="Rohit", team="India", slot=str(slot.id), cricheroes_player_id=2826925
+    ).insert()
+
+    response = await client.get(f"/api/admin/slots/{slot.id}/players")
 
     assert response.status_code == 200, response.text
     assert response.json()["players"][0]["cricheroes_player_id"] == 2826925

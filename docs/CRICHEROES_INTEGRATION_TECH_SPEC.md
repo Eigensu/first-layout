@@ -299,6 +299,11 @@ return a 504 that says "upstream slow" than hold a worker for half a minute.
 This is a deviation from the upstream allowance, not an oversight — raise the
 env var if a specific endpoint proves legitimately slower.
 
+It is a deadline for the whole request. httpx's own timeout applies to each
+phase (connect, read, write) separately, so a response trickling in a byte at a
+time would never trip it; the client wraps each request in `asyncio.wait_for`
+as well.
+
 ### 6.5 Retry policy
 
 Applies to **429 only**. Transport errors and 5xx are not retried: they are
@@ -572,6 +577,11 @@ gating on tournament admin, and serialising by alias each turn tests red.
 which failure occurred: not configured, rejected, unreachable, or "credentials
 OK but this tournament has no data". Exits 0/1 so it can be a deploy smoke check.
 
+The doc does not say how CricHeroes reports bad credentials — possibly as an
+HTTP 200 carrying `status: false` — so the only refusal the script counts as
+success is code 96007 ("boundary count not found"), which proves the request
+was looked up. Any other refusal exits 1.
+
 ```bash
 cd apps/backend
 python scripts/check_cricheroes_credentials.py
@@ -626,12 +636,20 @@ allowance — far too late to change a polling interval cheaply.
      row error stops the import; the same CricHeroes player may hold their id
      in several tournaments;
    - on update, a blank cell keeps the existing id, so re-importing an older
-     sheet without the column unlinks nobody.
+     sheet without the column unlinks nobody;
+   - ids are judged against the tournament as it will be *after* the import,
+     so two players can swap ids, or an id can move to another player, in one
+     import — a holder whose own row gives them a new id frees theirs. All of
+     a file's ids are checked in one query.
 
    Uniqueness is enforced by the importer, not a database index: no other
-   write path sets the field yet. Admin player responses show it read-only;
-   the manual create and edit forms do not take it yet, so a wrong id is fixed
-   by re-importing that row with `conflict=update`. CricHeroes offers no
+   write path sets the field yet. That leaves a window between validating and
+   saving in which two simultaneous imports could both claim an id; a partial
+   unique index on `(tournament_id, cricheroes_player_id)` belongs with the
+   first other write path, such as the manual edit form. Admin player
+   responses show it read-only; the manual create and edit forms do not take
+   it yet, so a wrong id is fixed by re-importing the affected rows with
+   `conflict=update`. CricHeroes offers no
    tournament roster endpoint, so the import remains the source of the player
    pool — the ids have to come from the organiser's sheet.
 3. **Doc inconsistencies to confirm with CricHeroes.**

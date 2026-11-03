@@ -110,7 +110,9 @@ def validate_cricheroes_player_id(value: Any) -> Optional[int]:
         value = int(value)
     if isinstance(value, str):
         text = value.strip()
-        if not text.isdigit():
+        # isdecimal, not isdigit: isdigit also passes superscripts like "²",
+        # which int() then rejects.
+        if not text.isdecimal():
             raise error
         value = int(text)
     if not isinstance(value, int) or value <= 0:
@@ -281,12 +283,3 @@ async def validate_player_row(
 async def check_conflict(name: str, *, tournament_id: TenantId) -> Optional[Player]:
     """Check if player with name already exists in this tournament"""
     return await scoped_one(Player, tournament_id, Player.name == name)
-
-
-async def find_cricheroes_id_holder(
-    cricheroes_player_id: int, *, tournament_id: TenantId
-) -> Optional[Player]:
-    """The player in this tournament already linked to a CricHeroes id, if any."""
-    return await scoped_one(
-        Player, tournament_id, Player.cricheroes_player_id == cricheroes_player_id
-    )
