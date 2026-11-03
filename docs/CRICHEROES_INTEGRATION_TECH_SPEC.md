@@ -1,14 +1,15 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
 **Status:** Phases 1–3 implemented (§12), all 17 endpoints fully modelled from
-the API doc (§8). Not yet run against real credentials. MVP endpoint promised by
-CricHeroes for 4 November 2026 (§13.5).
+the API doc (§8). Not yet run against real credentials. CricHeroes will build an
+MVP endpoint and a fielding endpoint and share their request and response
+(§13.5–13.6).
 **Owner:** Backend
 **Scope:** `apps/backend`
 **Upstream:** `https://cricheroes.in/api/v1`, "Client" resource group (17 GET endpoints)
 **Sources:** the CricHeroes API doc (endpoints, payloads) and their written
-answers on plan, quota, rate limits and SLA (§6). Five questions remain
-outstanding with CricHeroes — §13.4–13.8.
+answers on plan, quota, rate limits and SLA (§6), and on the follow-up
+questions (§13.4–13.8).
 
 ---
 
@@ -35,7 +36,7 @@ it out.
 | Response model fidelity | Full fidelity, lenient — model every documented field, allow unknown extras |
 | Route access | **Platform admins only** (`get_platform_admin`) — §9. Originally "admin-only" via `get_admin_user`, which `main` has since replaced with separate platform and tournament admins |
 | Caching | Out of scope here (no caller yet), but a **hard precondition** on the first polling caller — §6.3 |
-| 429 handling | Own exception, ≤2 retries with backoff, surfaced as 429 — §6.5, §7 |
+| 429 handling | Own exception, surfaced as 429. **No automatic retry by default** — CricHeroes charge a 429 like a 200 (§6.5, §13.4) |
 
 ---
 
@@ -105,14 +106,14 @@ New settings on the existing `Settings` class, following the established
 | `cricheroes_secret_access_key` | `CRICHEROES_SECRET_ACCESS_KEY` | `None` | yes, at call time |
 | `cricheroes_udid` | `CRICHEROES_UDID` | `None` | yes, at call time |
 | `cricheroes_timeout_seconds` | `CRICHEROES_TIMEOUT_SECONDS` | `15.0` | no |
-| `cricheroes_max_retries` | `CRICHEROES_MAX_RETRIES` | `2` | no |
+| `cricheroes_max_retries` | `CRICHEROES_MAX_RETRIES` | `0` | no |
 
 The timeout must be positive and the retry count non-negative; a bad value fails
 at startup rather than at the first call.
 
 `cricheroes_timeout_seconds` defaults **below** the 30s upstream allows — see
-§6.4 for why. `cricheroes_max_retries` applies to 429 only (§6.5); set it to `0`
-to disable retrying entirely if a 429 turns out to consume quota.
+§6.4 for why. `cricheroes_max_retries` applies to 429 only (§6.5), and is `0` —
+no retries — because CricHeroes confirmed a 429 is charged against the quota.
 
 The three credentials are **optional at import time** and validated **at call
 time**. Making them required would break every existing deployment, every test
@@ -279,8 +280,11 @@ Batch refresh is affordable. Live polling is not, at per-client granularity.
 2. **Prefer batch over poll wherever the product allows.** Overnight or
    post-match refresh costs ~6% of the annual quota per tournament; the same
    data polled live costs an order of magnitude more.
-3. **429 gets its own exception and a bounded retry.** CricHeroes explicitly
-   expects exponential backoff. See §7.
+3. **429 gets its own exception, and is not retried by default.** CricHeroes
+   recommend exponential backoff but also charge every 429 against the quota
+   (§13.4), so an automatic retry is a paid call. The cheaper fix is not to
+   send above 50 RPS in the first place: any batch job must pace itself
+   (§6.5). See §7.
 4. **Instrument call volume from day one.** The 80% warning arrives from
    CricHeroes, which is late and out-of-band. A counter on our side — calls per
    day, per endpoint — is cheap now and expensive to retrofit after a bill.
@@ -300,8 +304,12 @@ Applies to **429 only**. Transport errors and 5xx are not retried: they are
 surfaced immediately, because a retry loop over a dead upstream turns one slow
 request into several.
 
-- Max **2** retries, exponential backoff with jitter (~0.5s, ~1.5s), capped so
-  worst-case added latency stays well inside the 15s timeout.
+- **Off by default** (`CRICHEROES_MAX_RETRIES=0`). CricHeroes confirmed that a
+  429 counts against the quota just like a 200 (§13.4), so each retry is a
+  paid call nobody asked for. A 429 goes straight back to the caller, with
+  `Retry-After` when CricHeroes send one.
+- When a caller opts in (`max_retries` > 0): exponential backoff with jitter
+  (~0.5s, ~1.5s, …), capped so the total wait stays inside the 15s timeout.
 - `Retry-After` (delta-seconds form) is honoured when present, in place of the
   backoff. If it asks for longer than the budget left, the client **gives up
   immediately** and passes the wait on to the caller, rather than sleep a
@@ -310,9 +318,12 @@ request into several.
   backoff applies.
 - The CLI credential check (§11) runs with retries off, so one invocation is
   exactly one call.
-- Retries are deliberately few: it is **unconfirmed whether a 429 response
-  counts against the quota** (§13.4). Until CricHeroes confirms it does not,
-  every retry is assumed to cost money.
+- **Batch jobs must pace themselves below 50 RPS** rather than lean on
+  retries. Admin traffic will never get near the limit; the only realistic
+  source of a 429 is a job firing calls concurrently — e.g. a full-squad
+  refresh with `asyncio.gather` over 180 calls. A semaphore or fixed rate in
+  that job prevents the 429s, and with them the wasted charges. One process
+  pacing itself is not a global limit, so run such a job in one place.
 
 ---
 
@@ -326,7 +337,7 @@ subclassing `CricHeroesError`:
 |---|---|---|---|
 | `CricHeroesConfigError` | credential missing, raised pre-flight | **503** | *We* are not configured |
 | `CricHeroesAuthError` | HTTP 401 / 403 | **502** | *Our* credentials were rejected |
-| `CricHeroesRateLimitError` | HTTP 429, after retries exhausted | **429** | We are over 50 RPS, or out of quota |
+| `CricHeroesRateLimitError` | HTTP 429 (after any opted-in retries) | **429** | We went over 50 RPS — and were charged for it |
 | `CricHeroesAPIError` | HTTP 200 + `status: false` | **404** | Upstream has no such tournament/match |
 | `CricHeroesTransportError` | timeout, DNS, connection reset | **504** | Never reached upstream |
 | `CricHeroesHTTPError` | any other non-2xx, or non-JSON body | **502** | Upstream is unhealthy |
@@ -355,10 +366,10 @@ Three mappings are deliberate and worth stating:
   signals. It also stays distinguishable from the 503 that means "not
   configured". `Retry-After` is passed through when upstream supplies one.
 
-  Note that 429 covers two very different conditions — a burst over 50 RPS
-  (transient, retry works) and an exhausted annual quota (retrying will never
-  work). We do not yet know how CricHeroes distinguishes them on the wire; see
-  §13.4. Until we do, the error detail says both are possible.
+  A 429 means the rate limit. CricHeroes' pricing answer has calls past the
+  annual quota billed pay-as-you-go rather than refused, so running out of
+  quota should not surface as a 429 (§13.4). The error detail says the request
+  was still charged.
 
 ---
 
@@ -543,7 +554,7 @@ together. Covers the gate (401 signed out; 403 for a signed-in non-admin; **403
 for a tournament admin**; 200 for a platform admin), each of the 8 routes,
 query-param forwarding, alias-free serialisation, pass-through of unmodelled
 fields, and every row of the error table in §7 including `Retry-After`
-pass-through.
+pass-through — and that, by default, a 429 reaches upstream exactly once.
 
 Both use the existing `client` / `anon_client` fixtures from `tests/conftest.py`
 unchanged.
@@ -580,7 +591,7 @@ It runs with retries off: one invocation is exactly one charged call.
 | 2 | Schemas + exceptions + client + unit tests | ✅ done |
 | 3 | Admin routes + route tests + wiring | ✅ done |
 | 3b | Complete the models from the API doc (§8.0) | ✅ done — all 17 endpoints; 1,001 tests passing |
-| 3c | MVP endpoint, once CricHeroes publish it (§13.5) | client method, model, doc example, tests |
+| 3c | MVP and fielding endpoints, once CricHeroes publish them (§13.5–13.6) | client method, model, doc example, tests for each |
 | 4 | Obtain real credentials, set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
 | 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
@@ -628,46 +639,47 @@ allowance — far too late to change a polling interval cheaply.
      as a 502 "non-JSON body" rather than a 404 "no data" — wrong, but loud.
    Because `get-tournament-stat-leaderboard-filter` returns the filters a given
    tournament actually supports, prefer calling it over hardcoding the lists.
-4. **Does a 429 consume quota?** Unanswered. CricHeroes confirmed that calls
-   failing due to *platform-side outages* are not charged, but said nothing
-   about throttled requests. This sets our retry budget (§6.5) — if a 429 is
-   free, we can retry more aggressively than the current 2.
-   Related and also open: how an exhausted annual quota presents on the wire.
-   If it is also a 429, we cannot tell "slow down" from "you are out of calls"
-   without asking.
+4. **Does a 429 consume quota? — Answered: yes.** CricHeroes: "Status code 429
+   and 200 status code will be treated as part of the API requests." A
+   throttled request is charged like a successful one, so automatic retries
+   are now off by default (§6.5). Calls failing from *platform-side* outages
+   are still not charged (§6.1).
+   Not asked directly: how an exhausted annual quota presents. Their pricing
+   answer bills calls past the quota pay-as-you-go rather than refusing them,
+   so a 429 should only ever mean the rate limit.
 
-5. **MVP / points endpoint: promised, not yet documented.** The full API doc
-   (aglio build of 30 May 2025) has no MVP endpoint, and the stats-filter
-   discovery endpoint returns only `season`, `batting`, `bowling` and `teams`
-   groups. CricHeroes have said they will add the MVP endpoint to the doc
-   **on 4 November 2026**. When it lands it needs, like the others: a
-   client method, a model built from its example, an entry in the doc-examples
-   fixture, and a route if a screen needs it. It decides whether we consume
-   their points or compute our own:
-   - If it exists, we also need to know whether the points formula is fixed or
-     configurable per tournament, since their MVP scoring is not necessarily
-     our fantasy scoring.
-   - If it does not, we compute points from batting + bowling stats, and the
-     fielding component has no source (see below).
+5. **MVP / points endpoint — CricHeroes will build it.** Their answer: "Currently,
+   the API does not cater this. We shall create the API and share the request
+   and response for the same." No date in the written answer. It is not in the
+   current doc (aglio build of 30 May 2025), and the stats-filter discovery
+   endpoint lists no MVP group. When it arrives it needs, like the others: a
+   client method, a model, its example added to the doc-examples fixture, and
+   a route if a screen needs it. It decides whether we consume their points or
+   compute our own:
+   - If its formula is fixed, their MVP scoring is not necessarily our fantasy
+     scoring — check before wiring it to `Player.points`.
+   - **It is not built yet, so this is the moment to ask for its shape** — see
+     §13.9.
 
-6. **No fielding data anywhere in the documented API.** Confirmed against the
-   full doc: catches, stumpings and run-outs appear on no endpoint; the
-   per-player tournament endpoints cover batting and bowling only. Any scoring formula with a fielding term needs a
-   second source (the existing Google Sheet, or manual admin entry). Product
-   decision, not a technical one. **Asked, awaiting answer.**
+6. **Fielding data — CricHeroes will build it.** Same answer as §13.5: not in the
+   current API (confirmed against the full doc — catches, stumpings and
+   run-outs appear on no endpoint), to be created with a request and response
+   shared. Until it exists, any scoring formula with a fielding term still needs
+   a second source (the Google Sheet, or manual admin entry).
 
-7. **No bulk per-match endpoint.** `get-player-tournament-match-batting-data`
-   is scoped to one player, so a full-squad refresh is one call per player per
-   discipline. At ~90 players that is 180 calls per refresh — affordable
-   nightly (§6.2), not affordable hourly. Asked whether a bulk variant exists.
+7. **Bulk per-match endpoint — Answered: no, per player only.** A full-squad
+   refresh stays one call per player per discipline: ~180 calls for ~90 players.
+   Affordable nightly (§6.2), not hourly, and it must be paced below 50 RPS
+   (§6.5).
 
-8. **Pagination is undocumented but declared mandatory.** CricHeroes' ops
-   answer states that "pagination and filtering parameters are mandatory" for
-   datasets approaching the 3 MB payload cap, yet no tournament endpoint in the
-   API doc documents a pagination parameter. Asked which endpoints support it
-   and what the parameter names are. Until answered, a large tournament's match
-   list is an unquantified truncation risk. Confirmed against the full doc: no
-   endpoint documents one.
+8. **Pagination — partly answered.** CricHeroes: "Some of the APIs where the
+   data size is huge will have paginations in the API." That does not say which
+   endpoints, what the parameters are called, or how a response signals that
+   more pages exist, and the current doc shows pagination on none. The client
+   reads one page per call, so an endpoint that starts paginating would return
+   page one silently — a large tournament's match list is the likeliest. Ask
+   for the specifics; until then, cross-check match-list counts against the
+   point table's `Matches`.
 
 9. **Per-match player rows cannot be tied to a match.** The two per-player
    match-data endpoints return one row per innings or spell, with runs, balls
@@ -676,8 +688,11 @@ allowance — far too late to change a polling interval cheaply.
    Ben Stokes has two rows against Australia and two against New Zealand, which
    nothing but their order distinguishes. Batting rows also carry no fours or
    sixes, and bowling rows no dot balls. For per-match fantasy points that is
-   the gap that matters most: ask CricHeroes whether these rows can carry
-   `match_id` (and boundaries), or whether the MVP endpoint will be per match.
+   the gap that matters most. Not yet asked. Since the MVP and fielding
+   endpoints are still to be built (§13.5–13.6), ask that they carry `match_id`
+   on every row and return a whole match or tournament per call rather than
+   one player — and whether the existing per-match rows can gain `match_id`
+   and boundaries too.
 
 10. **Scorecards.** Nothing in the API returns a match scorecard: the match list
     has innings totals only, and per-player figures come one player at a time.
@@ -698,7 +713,7 @@ allowance — far too late to change a polling interval cheaply.
 | API doc lost again | Its example bodies are checked in as a test fixture (§8.0) |
 | **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only routes, no public exposure; caching is a precondition on the first polling caller (§6.3); batch over poll; call counter from day one; CricHeroes warns at 80% |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
-| Throttling under burst | ≤2 retries with backoff on 429 (§6.5); 50 RPS is generous, so a 429 more likely signals a bug in our call pattern than legitimate load |
+| Throttling under burst | A 429 is charged (§13.4), so it is not retried by default; batch jobs pace themselves below 50 RPS (§6.5). At our volumes a 429 more likely signals a runaway loop than real load |
 | Response truncated at the 3 MB cap | Pagination undocumented (§13.8); until answered, treat large match lists as suspect and verify counts against the point table |
 | Upstream slow or down | 15s timeout → 504, distinct from a 502; deliberately below their 30s allowance (§6.4). Platform-side failures are not charged to quota |
 | Secrets leaking to logs | Only URL and query params are logged; headers never are |

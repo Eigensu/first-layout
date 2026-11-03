@@ -5,8 +5,10 @@ comments refer to it. One method per documented endpoint. Every call is a GET
 against `{base_url}/thirdparty/client/...` carrying the five documented headers.
 
 The annual call quota, not the rate limit, is what constrains this API (§6), so
-nothing here calls upstream more than asked: no prefetching, and retries only on
-429, few of them, and only while there is time budget left.
+nothing here calls upstream more than asked: no prefetching, and no retries by
+default. CricHeroes charge a throttled (429) request like a successful one, so a
+retry is a paid call; a caller that wants them sets max_retries, and they then
+happen on 429 only, with backoff, and only while there is time budget left.
 """
 
 import asyncio

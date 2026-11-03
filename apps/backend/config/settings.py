@@ -102,8 +102,10 @@ class Settings(BaseSettings):
     cricheroes_timeout_seconds: float = Field(
         default=15.0, gt=0, alias="CRICHEROES_TIMEOUT_SECONDS"
     )
-    # Retries on HTTP 429 only (spec §6.5); 0 turns retrying off.
-    cricheroes_max_retries: int = Field(default=2, ge=0, alias="CRICHEROES_MAX_RETRIES")
+    # Retries on HTTP 429 only (spec §6.5). Off by default: CricHeroes charge a
+    # throttled request against the quota just like a successful one, so every
+    # retry is a paid call nobody asked for.
+    cricheroes_max_retries: int = Field(default=0, ge=0, alias="CRICHEROES_MAX_RETRIES")
 
     # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")

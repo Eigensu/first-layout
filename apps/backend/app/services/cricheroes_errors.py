@@ -47,9 +47,10 @@ class CricHeroesAuthError(CricHeroesError):
 class CricHeroesRateLimitError(CricHeroesError):
     """CricHeroes answered 429 and the retries ran out.
 
-    A 429 can mean a burst over 50 requests per second, which passes, or an
-    exhausted annual quota, which does not. CricHeroes has not said how to tell
-    them apart (spec §13.4), so the message names both.
+    CricHeroes return 429 above 50 requests per second, and charge it against
+    the quota like a successful call (spec §13.4). Calls past the quota are
+    billed rather than refused, so a 429 is very likely the rate limit -- which,
+    at our volumes, more likely means a runaway loop than real load.
     """
 
     def __init__(self, retry_after: Optional[float] = None):
@@ -60,9 +61,9 @@ class CricHeroesRateLimitError(CricHeroesError):
             else ""
         )
         super().__init__(
-            "CricHeroes is throttling our requests (HTTP 429). Either we went "
-            "over 50 requests per second, or the annual call quota is used up; "
-            "the response does not say which." + wait
+            "CricHeroes is throttling our requests (HTTP 429): more than 50 "
+            "requests per second. Throttled requests are still charged against "
+            "the annual call quota." + wait
         )
 
 

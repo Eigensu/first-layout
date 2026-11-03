@@ -393,15 +393,17 @@ async def test_throttling_answers_429_with_retry_after(client, serve):
     assert "quota" in response.json()["detail"]
 
 
-async def test_throttling_without_retry_after_sends_none(client, serve):
+async def test_a_429_is_not_retried_by_default(client, serve):
+    """CricHeroes charge a throttled request like a successful one, so by
+    default nothing retries it: one charged call, and the 429 goes back."""
     upstream = serve(httpx.Response(429))
 
     response = await client.get(f"{PREFIX}/matches")
 
     assert response.status_code == 429
     assert "Retry-After" not in response.headers
-    # The configured retries ran before giving up.
-    assert len(upstream.requests) == 1 + settings.cricheroes_max_retries
+    assert settings.cricheroes_max_retries == 0
+    assert len(upstream.requests) == 1
 
 
 async def test_no_such_data_answers_404(client, serve):
