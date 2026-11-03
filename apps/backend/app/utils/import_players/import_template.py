@@ -19,6 +19,7 @@ TEMPLATE_COLUMNS = [
     "mobile",
     "status",
     "image_url",
+    "cricheroes_player_id",
     "matches",
     "runs",
     "wickets",
@@ -34,6 +35,7 @@ TEMPLATE_HEADERS = [
     "Mobile",
     "Status",
     "Image URL",
+    "CricHeroes Player ID",
     "Matches",
     "Runs",
     "Wickets",
@@ -83,9 +85,10 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
     ws.column_dimensions["G"].width = 16  # Mobile
     ws.column_dimensions["H"].width = 12  # Status
     ws.column_dimensions["I"].width = 30  # Image URL
-    ws.column_dimensions["J"].width = 12  # Matches
-    ws.column_dimensions["K"].width = 12  # Runs
-    ws.column_dimensions["L"].width = 12  # Wickets
+    ws.column_dimensions["J"].width = 22  # CricHeroes Player ID
+    ws.column_dimensions["K"].width = 12  # Matches
+    ws.column_dimensions["L"].width = 12  # Runs
+    ws.column_dimensions["M"].width = 12  # Wickets
 
     # Data validation for Status (column H)
     status_dv = DataValidation(
@@ -118,6 +121,9 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
         "9876543210",
         "Active",
         "https://example.com/player.jpg",
+        # CricHeroes Player ID: left blank, so an example row imported by
+        # mistake is not linked to a real CricHeroes player.
+        None,
         25,
         742,
         0,
@@ -152,6 +158,16 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
         ("• Mobile: Contact number for the player (digits only is recommended)", False),
         ("• Status: Active, Inactive, or Injured (default: Active)", False),
         ("• Image URL: Player image URL", False),
+        (
+            "• CricHeroes Player ID: the player's numeric id on CricHeroes, e.g. 12345678.",
+            False,
+        ),
+        ("  Links the player to their CricHeroes stats. Each player in a", False),
+        (
+            "  tournament needs their own. When updating existing players, a blank",
+            False,
+        ),
+        ("  cell keeps the ID they already have.", False),
         (
             "• Additional stats: Any extra columns (matches, runs, wickets, etc.) will be stored as stats",
             False,
@@ -197,6 +213,7 @@ def generate_csv_template() -> str:
             "9876543210",
             "Active",
             "https://example.com/player.jpg",
+            "",  # CricHeroes Player ID, blank like the xlsx example
             25,
             742,
             0,

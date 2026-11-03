@@ -36,6 +36,7 @@ class PlayerSample(BaseModel):
     points: float
     status: str = "Active"
     slot: Optional[str] = None
+    cricheroes_player_id: Optional[int] = None
 
 
 class ImportResponse(BaseModel):

@@ -18,6 +18,7 @@ from app.utils.import_players.import_parsers import detect_format, parse_csv, pa
 from app.utils.import_players.import_validators import (
     ValidationError,
     check_conflict,
+    find_cricheroes_id_holder,
     validate_player_row,
 )
 from app.utils.tenant import TenantId
@@ -107,6 +108,8 @@ class PlayerImportService:
         valid_data = []
         errors = []
         conflicts = []
+        # CricHeroes id -> the row that claimed it, for duplicates in the file.
+        cricheroes_ids_seen: Dict[int, int] = {}
 
         for row in rows:
             row_number = row.get("_row_number", 0)
@@ -159,9 +162,55 @@ class PlayerImportService:
                         )
                     )
 
+            # One CricHeroes id is one player in a tournament. Two of our
+            # players sharing one would both be credited with its stats.
+            cricheroes_id = validated_data.get("cricheroes_player_id")
+            if cricheroes_id is not None:
+                clash = await PlayerImportService._cricheroes_id_clash(
+                    cricheroes_id,
+                    row_number,
+                    cricheroes_ids_seen,
+                    existing=existing,
+                    tournament_id=tournament_id,
+                )
+                if clash:
+                    errors.append(
+                        RowError(
+                            row=row_number, field="cricheroes_player_id", message=clash
+                        )
+                    )
+                    continue
+                cricheroes_ids_seen[cricheroes_id] = row_number
+
             valid_data.append(validated_data)
 
         return valid_data, errors, conflicts
+
+    @staticmethod
+    async def _cricheroes_id_clash(
+        cricheroes_id: int,
+        row_number: int,
+        seen: Dict[int, int],
+        *,
+        existing: Optional[Player],
+        tournament_id: TenantId,
+    ) -> Optional[str]:
+        """Why this row may not take this CricHeroes id, or None if it may."""
+        if cricheroes_id in seen:
+            return (
+                f"CricHeroes player ID {cricheroes_id} is also on row "
+                f"{seen[cricheroes_id]}; each player needs their own"
+            )
+        holder = await find_cricheroes_id_holder(
+            cricheroes_id, tournament_id=tournament_id
+        )
+        # Updating the player who already holds it is fine; anyone else is not.
+        if holder and (existing is None or holder.id != existing.id):
+            return (
+                f"CricHeroes player ID {cricheroes_id} already belongs to "
+                f"'{holder.name}' in this tournament"
+            )
+        return None
 
     @staticmethod
     def get_samples(
@@ -177,6 +226,7 @@ class PlayerImportService:
                     points=data.get("price", 0),
                     status=data["status"],
                     slot=data.get("slot"),
+                    cricheroes_player_id=data.get("cricheroes_player_id"),
                 )
             )
         return samples
@@ -212,6 +262,12 @@ class PlayerImportService:
                     existing.points = validated_data["points"]
                     existing.slot = validated_data.get("slot")
                     existing.image_url = validated_data.get("image_url")
+                    # A blank cell keeps the id already linked: re-importing an
+                    # older sheet without the column must not unlink everyone.
+                    if validated_data.get("cricheroes_player_id") is not None:
+                        existing.cricheroes_player_id = validated_data[
+                            "cricheroes_player_id"
+                        ]
                     existing.stats = validated_data.get("stats")
                     existing.updated_at = datetime.utcnow()
                     await existing.save()
@@ -227,6 +283,7 @@ class PlayerImportService:
                         points=validated_data["points"],
                         slot=validated_data.get("slot"),
                         image_url=validated_data.get("image_url"),
+                        cricheroes_player_id=validated_data.get("cricheroes_player_id"),
                         stats=validated_data.get("stats"),
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow(),

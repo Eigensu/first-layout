@@ -84,6 +84,40 @@ def validate_number(value: Any, field: str, min_val: float = 0) -> float:
         raise ValidationError(field, f"Must be a number >= {min_val}")
 
 
+# Header spellings accepted for the CricHeroes id, after normalize_header. The
+# template writes the first; a hand-made sheet may well use the second.
+CRICHEROES_ID_COLUMNS = ("cricheroes_player_id", "cricheroes_id")
+
+
+def validate_cricheroes_player_id(value: Any) -> Optional[int]:
+    """A CricHeroes player id: a positive whole number, or None when blank.
+
+    Spreadsheets hand these over in several shapes -- 2826925 from a numeric
+    cell, 2826925.0 from one Excel stored as a decimal, "2826925" from a CSV --
+    and all mean the same id.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    error = ValidationError(
+        "cricheroes_player_id",
+        f"CricHeroes player ID must be a whole number, e.g. 12345678 (got {value!r})",
+    )
+    if isinstance(value, bool):
+        raise error
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise error
+        value = int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text.isdigit():
+            raise error
+        value = int(text)
+    if not isinstance(value, int) or value <= 0:
+        raise error
+    return value
+
+
 async def resolve_slot(
     slot_code: Optional[str],
     slot_name: Optional[str],
@@ -196,6 +230,7 @@ async def validate_player_row(
         "slot_name",
         "image_url",
         "image",
+        *CRICHEROES_ID_COLUMNS,
         "_row_number",
     }
 
@@ -212,6 +247,11 @@ async def validate_player_row(
         # Accept both "image" and "image_url" columns
         image_url = row.get("image_url") or row.get("image")
 
+        raw_cricheroes_id = next(
+            (row.get(c) for c in CRICHEROES_ID_COLUMNS if row.get(c) is not None),
+            None,
+        )
+
         data = {
             "name": validate_name(row.get("name")),
             "team": validate_team(row.get("team")),
@@ -219,6 +259,7 @@ async def validate_player_row(
             "price": price_value,
             "points": 0,  # Always start with 0 accumulated points
             "image_url": image_url,
+            "cricheroes_player_id": validate_cricheroes_player_id(raw_cricheroes_id),
             "stats": extract_stats(row, known_fields),
         }
 
@@ -240,3 +281,12 @@ async def validate_player_row(
 async def check_conflict(name: str, *, tournament_id: TenantId) -> Optional[Player]:
     """Check if player with name already exists in this tournament"""
     return await scoped_one(Player, tournament_id, Player.name == name)
+
+
+async def find_cricheroes_id_holder(
+    cricheroes_player_id: int, *, tournament_id: TenantId
+) -> Optional[Player]:
+    """The player in this tournament already linked to a CricHeroes id, if any."""
+    return await scoped_one(
+        Player, tournament_id, Player.cricheroes_player_id == cricheroes_player_id
+    )

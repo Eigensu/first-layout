@@ -17,6 +17,10 @@ class Player(Document):
     price: float = 0.0
     slot: Optional[str] = None  # Slot assignment for the player (Slot ObjectId string)
     image_url: Optional[str] = None
+    # The player's id on CricHeroes, set by the player import. It is what ties
+    # CricHeroes stats to this player (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md
+    # §13.2); unique within a tournament, which the importer enforces.
+    cricheroes_player_id: Optional[int] = None
     stats: Optional[dict] = None  # Batting avg, bowling avg, etc.
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

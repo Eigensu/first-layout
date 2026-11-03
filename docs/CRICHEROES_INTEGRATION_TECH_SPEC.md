@@ -54,7 +54,8 @@ it out.
 **Non-goals (this change)**
 
 - No persistence. Nothing is written to MongoDB; no new Beanie documents.
-- No mapping of CricHeroes players onto our `Player` collection.
+- No automatic mapping of CricHeroes players onto our `Player` collection.
+  Admins link them explicitly through the player import (§13.2).
 - No caching layer, no scheduled sync, no webhook ingestion. **Caching is
   deferred, not optional** — see §6.3; the first caller that polls has to bring
   one with it.
@@ -613,10 +614,26 @@ allowance — far too late to change a polling interval cheaply.
    CricHeroes tournament id today. Adding `cricheroes_tournament_id` to the
    `Tournament` document would let routes key off our own slug instead. Worth
    doing — but it is a schema change and a separate PR.
-2. **Player identity.** CricHeroes `player_id` has no relationship to our
-   `Player` documents. Anything that imports stats needs a mapping strategy
-   (explicit id column on import? name matching? both?). Out of scope here, and
-   the hard part of any future sync.
+2. **Player identity — decided: an explicit id, set at import.** `Player` has a
+   `cricheroes_player_id`, filled from a "CricHeroes Player ID" column in the
+   player import template (a `CricHeroes ID` header is accepted too). Name
+   matching was ruled out: names are not unique and are spelled differently
+   between systems. The import enforces the rules:
+   - a positive whole number (`2826925`, Excel's `2826925.0` and CSV's
+     `"2826925"` all accepted);
+   - unique within a tournament — a second row with the same id, or an id
+     another player in the tournament already holds, fails that row, and any
+     row error stops the import; the same CricHeroes player may hold their id
+     in several tournaments;
+   - on update, a blank cell keeps the existing id, so re-importing an older
+     sheet without the column unlinks nobody.
+
+   Uniqueness is enforced by the importer, not a database index: no other
+   write path sets the field yet. Admin player responses show it read-only;
+   the manual create and edit forms do not take it yet, so a wrong id is fixed
+   by re-importing that row with `conflict=update`. CricHeroes offers no
+   tournament roster endpoint, so the import remains the source of the player
+   pool — the ids have to come from the organiser's sheet.
 3. **Doc inconsistencies to confirm with CricHeroes.**
    - `MODB` ("Most Dot Balls") appears in the stats-filter response as a
      bowling-leaderboard filter, but is absent from that endpoint's documented
