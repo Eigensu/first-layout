@@ -34,6 +34,9 @@ class PlayerUpdate(BaseModel):
 
 class PlayerResponse(PlayerBase):
     id: str
+    # Read-only here: set by the player import, which checks it is unique in
+    # the tournament. Create and update do not take it.
+    cricheroes_player_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

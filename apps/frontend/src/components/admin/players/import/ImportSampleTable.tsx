@@ -4,6 +4,7 @@ interface PlayerSample {
   points: number;
   status: string;
   slot?: string;
+  cricheroes_player_id?: number | null;
 }
 
 interface ImportSampleTableProps {
@@ -37,6 +38,9 @@ export function ImportSampleTable({ samples }: ImportSampleTableProps) {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Slot
               </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                CricHeroes ID
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -56,6 +60,9 @@ export function ImportSampleTable({ samples }: ImportSampleTableProps) {
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {sample.slot || "-"}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {sample.cricheroes_player_id ?? "-"}
                 </td>
               </tr>
             ))}

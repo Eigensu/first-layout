@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from beanie.operators import In
 from fastapi import UploadFile
 
 from app.models.admin.import_log import ImportLog
@@ -20,7 +21,7 @@ from app.utils.import_players.import_validators import (
     check_conflict,
     validate_player_row,
 )
-from app.utils.tenant import TenantId
+from app.utils.tenant import TenantId, scoped
 
 # Configuration
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB for XLSX
@@ -107,6 +108,8 @@ class PlayerImportService:
         valid_data = []
         errors = []
         conflicts = []
+        # CricHeroes id -> the row that claimed it, for duplicates in the file.
+        cricheroes_ids_seen: Dict[int, int] = {}
 
         for row in rows:
             row_number = row.get("_row_number", 0)
@@ -159,9 +162,91 @@ class PlayerImportService:
                         )
                     )
 
+            # One CricHeroes id is one player in a tournament. Two of our
+            # players sharing one would both be credited with its stats.
+            cricheroes_id = validated_data.get("cricheroes_player_id")
+            if cricheroes_id is not None:
+                if cricheroes_id in cricheroes_ids_seen:
+                    errors.append(
+                        RowError(
+                            row=row_number,
+                            field="cricheroes_player_id",
+                            message=(
+                                f"CricHeroes player ID {cricheroes_id} is also on row "
+                                f"{cricheroes_ids_seen[cricheroes_id]}; each player "
+                                "needs their own"
+                            ),
+                        )
+                    )
+                    continue
+                cricheroes_ids_seen[cricheroes_id] = row_number
+
+            validated_data["_row_number"] = row_number
             valid_data.append(validated_data)
 
+        valid_data, held = await PlayerImportService._reject_held_cricheroes_ids(
+            valid_data, tournament_id=tournament_id
+        )
+        if held:
+            errors = sorted(errors + held, key=lambda error: error.row)
+
         return valid_data, errors, conflicts
+
+    @staticmethod
+    async def _reject_held_cricheroes_ids(
+        valid_data: List[Dict[str, Any]], *, tournament_id: TenantId
+    ) -> Tuple[List[Dict[str, Any]], List[RowError]]:
+        """Drop rows whose CricHeroes id another player in the tournament keeps.
+
+        Judged against the tournament as it will be after this import, not
+        before it: a player whose own row moves them to a different id gives
+        theirs up, so ids can be swapped or moved between players in one
+        import. One query covers every id in the file.
+        """
+        wanted = {
+            data["cricheroes_player_id"]: data
+            for data in valid_data
+            if data.get("cricheroes_player_id") is not None
+        }
+        if not wanted:
+            return valid_data, []
+
+        holders = await (
+            scoped(Player, tournament_id)
+            .find(In(Player.cricheroes_player_id, list(wanted)))
+            .to_list()
+        )
+        # Existing players this file gives an id: the one they hold now is freed.
+        new_id_of = {
+            data["_existing_player"].id: data["cricheroes_player_id"]
+            for data in valid_data
+            if data.get("_is_update") and data.get("cricheroes_player_id") is not None
+        }
+
+        errors, rejected = [], set()
+        for holder in holders:
+            row = wanted[holder.cricheroes_player_id]
+            claimant = row.get("_existing_player")
+            if claimant is not None and claimant.id == holder.id:
+                continue  # the row updates the holder itself
+            if new_id_of.get(holder.id, holder.cricheroes_player_id) != (
+                holder.cricheroes_player_id
+            ):
+                continue  # the holder moves to another id in this file
+            errors.append(
+                RowError(
+                    row=row["_row_number"],
+                    field="cricheroes_player_id",
+                    message=(
+                        f"CricHeroes player ID {holder.cricheroes_player_id} already "
+                        f"belongs to '{holder.name}' in this tournament"
+                    ),
+                )
+            )
+            rejected.add(id(row))
+
+        kept = [data for data in valid_data if id(data) not in rejected]
+        return kept, errors
 
     @staticmethod
     def get_samples(
@@ -177,6 +262,7 @@ class PlayerImportService:
                     points=data.get("price", 0),
                     status=data["status"],
                     slot=data.get("slot"),
+                    cricheroes_player_id=data.get("cricheroes_player_id"),
                 )
             )
         return samples
@@ -212,6 +298,12 @@ class PlayerImportService:
                     existing.points = validated_data["points"]
                     existing.slot = validated_data.get("slot")
                     existing.image_url = validated_data.get("image_url")
+                    # A blank cell keeps the id already linked: re-importing an
+                    # older sheet without the column must not unlink everyone.
+                    if validated_data.get("cricheroes_player_id") is not None:
+                        existing.cricheroes_player_id = validated_data[
+                            "cricheroes_player_id"
+                        ]
                     existing.stats = validated_data.get("stats")
                     existing.updated_at = datetime.utcnow()
                     await existing.save()
@@ -227,6 +319,7 @@ class PlayerImportService:
                         points=validated_data["points"],
                         slot=validated_data.get("slot"),
                         image_url=validated_data.get("image_url"),
+                        cricheroes_player_id=validated_data.get("cricheroes_player_id"),
                         stats=validated_data.get("stats"),
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow(),

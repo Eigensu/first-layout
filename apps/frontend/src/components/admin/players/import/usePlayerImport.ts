@@ -24,6 +24,7 @@ interface PlayerSample {
   points: number;
   status: string;
   slot?: string;
+  cricheroes_player_id?: number | null;
 }
 
 export interface ImportResponse {

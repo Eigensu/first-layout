@@ -18,6 +18,7 @@ from app.routes import (
     users_router,
 )
 from app.routes.admin import contests_router as admin_contests_router
+from app.routes.admin import cricheroes_router as admin_cricheroes_router
 from app.routes.admin import players_import_router as admin_players_import_router
 from app.routes.admin import players_router as admin_players_router
 from app.routes.admin import settings_router as admin_settings_router
@@ -89,6 +90,7 @@ app.include_router(admin_contests_router)
 app.include_router(admin_users_teams_router)
 app.include_router(admin_settings_router)
 app.include_router(admin_tournaments_router)
+app.include_router(admin_cricheroes_router)
 app.include_router(tournaments_router)
 app.include_router(players_router)
 app.include_router(players_hot_router)

@@ -54,6 +54,11 @@ TOURNAMENT_ADMIN_ROUTES = [
     "/api/v1/sponsors/available-priorities",
 ]
 REGISTRY = "/api/admin/tournaments"
+# Admin routes that belong to no one tournament, so only a platform admin may
+# use them. CricHeroes takes a CricHeroes tournament id, unrelated to ours, and
+# every call spends the platform's one annual quota
+# (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9).
+PLATFORM_ADMIN_PREFIXES = (REGISTRY, "/api/admin/cricheroes")
 
 
 @pytest.fixture
@@ -325,7 +330,7 @@ def test_every_admin_route_has_exactly_one_guard():
     for route in admin_routes:
         expected = (
             get_platform_admin
-            if route.path.startswith(REGISTRY)
+            if route.path.startswith(PLATFORM_ADMIN_PREFIXES)
             else get_tournament_admin
         )
         assert _guards(route) == {expected}, (route.methods, route.path)
