@@ -6,9 +6,14 @@ export interface User {
   mobile: string | null;
   is_active: boolean;
   is_verified: boolean;
-  is_admin: boolean; 
+  // Admin of the tournament this site serves.
+  is_admin: boolean;
+  // May manage the tournament registry. Older backends leave it out.
+  is_platform_admin?: boolean;
   created_at: string;
   avatar_url: string | null;
+  // "password", "google" or "apple": how the account was first created.
+  auth_provider?: string;
 }
 
 export interface LoginCredentials {
@@ -31,10 +36,6 @@ export interface AuthTokens {
   token_type: string;
 }
 
-export interface AuthResponse extends AuthTokens {
-  user?: User;
-}
-
 export interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -44,4 +45,6 @@ export interface AuthContextType {
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
+  // Replace the signed-in user with a newer copy, e.g. after changing the email.
+  updateUser: (user: User) => void;
 }

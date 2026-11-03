@@ -11,7 +11,9 @@ from app.utils.import_players.import_validators import validate_player_row
 async def _row(**fields):
     base = {"name": "Ankit Shah", "team": "DV SPARTANS", "status": "Active"}
     base.update(fields)
-    data, error = await validate_player_row(base, slot_strategy="ignore")
+    data, error = await validate_player_row(
+        base, slot_strategy="ignore", tournament_id=None
+    )
     return data, error
 
 
@@ -67,11 +69,11 @@ async def test_csv_example_row_matches_the_column_order(db):
     import csv
     import io
 
+    from app.utils.import_players.import_parsers import normalize_header
     from app.utils.import_players.import_template import (
         TEMPLATE_COLUMNS,
         generate_csv_template,
     )
-    from app.utils.import_players.import_parsers import normalize_header
 
     rows = list(csv.reader(io.StringIO(generate_csv_template())))
     header, example = rows[0], rows[1]
@@ -80,7 +82,9 @@ async def test_csv_example_row_matches_the_column_order(db):
     assert len(example) == len(TEMPLATE_COLUMNS)
 
     row = {normalize_header(h): v for h, v in zip(header, example)}
-    data, error = await validate_player_row(row, slot_strategy="ignore")
+    data, error = await validate_player_row(
+        row, slot_strategy="ignore", tournament_id=None
+    )
 
     assert error is None, f"generated example row does not import: {error}"
     assert data["price"] == 200_000
@@ -90,11 +94,11 @@ async def test_csv_example_row_matches_the_column_order(db):
 async def test_xlsx_example_row_matches_the_column_order(db):
     from openpyxl import load_workbook
 
+    from app.utils.import_players.import_parsers import normalize_header
     from app.utils.import_players.import_template import (
         TEMPLATE_HEADERS,
         generate_xlsx_template,
     )
-    from app.utils.import_players.import_parsers import normalize_header
 
     ws = load_workbook(await generate_xlsx_template())["Players"]
     header = [c.value for c in ws[1]]
@@ -104,7 +108,9 @@ async def test_xlsx_example_row_matches_the_column_order(db):
     assert len(example) == len(TEMPLATE_HEADERS)
 
     row = {normalize_header(str(h)): v for h, v in zip(header, example)}
-    data, error = await validate_player_row(row, slot_strategy="ignore")
+    data, error = await validate_player_row(
+        row, slot_strategy="ignore", tournament_id=None
+    )
 
     assert error is None, f"generated example row does not import: {error}"
     assert data["price"] == 200_000

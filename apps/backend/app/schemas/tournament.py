@@ -1,10 +1,12 @@
 import re
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
 from datetime import datetime
-from app.common.consts.index import TOURNAMENT_SLUG_PATTERN, RESERVED_SUBDOMAINS
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.common.consts.index import RESERVED_SUBDOMAINS, TOURNAMENT_SLUG_PATTERN
 from app.common.enums.tournaments import TournamentStatus
-from app.utils.timezone import to_ist, IST
+from app.utils.timezone import IST, to_ist
 
 SLUG_RE = re.compile(TOURNAMENT_SLUG_PATTERN)
 
@@ -24,7 +26,9 @@ def validate_slug(value: str) -> str:
     if slug in RESERVED_SUBDOMAINS:
         raise ValueError(f"'{slug}' is a reserved subdomain and cannot be used")
     if slug.startswith("api-") or slug.endswith("-api"):
-        raise ValueError("Slugs starting with 'api-' or ending with '-api' are reserved for backend hosts")
+        raise ValueError(
+            "Slugs starting with 'api-' or ending with '-api' are reserved for backend hosts"
+        )
     return slug
 
 
@@ -149,3 +153,22 @@ class PublicTournamentResponse(BaseModel):
         if isinstance(v, datetime):
             return to_ist(v)
         return v
+
+
+class TournamentAdminAppoint(BaseModel):
+    # Whatever the person signs in with: a mobile number, an email, or (while
+    # usernames last) a username.
+    identifier: str = Field(..., min_length=1)
+
+
+class TournamentAdminResponse(BaseModel):
+    user_id: str
+    username: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    # The name they go by in this tournament, which need not be their username.
+    display_name: str
+
+
+class TournamentAdminListResponse(BaseModel):
+    admins: List[TournamentAdminResponse]

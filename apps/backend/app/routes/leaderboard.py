@@ -1,39 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
-from typing import Optional, List, Tuple
-from app.models.user import User
-from app.models.team import Team
-from app.schemas.leaderboard import LeaderboardResponseSchema, LeaderboardEntrySchema
-from app.utils.security import decode_token
-from beanie import PydanticObjectId
-from app.models.player import Player as PublicPlayer
 from datetime import datetime
+from typing import List, Optional, Tuple
+
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.models.player import Player as PublicPlayer
+from app.models.team import Team
+from app.models.user import User
+from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
+from app.utils.dependencies import get_optional_current_user
+from app.utils.tenant import TenantId, get_tenant, scoped
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
 
-async def get_optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
-    """Get current user if authenticated, otherwise return None"""
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    
-    try:
-        token = authorization.replace("Bearer ", "")
-        payload = decode_token(token)
-        if payload is None:
-            return None
-        
-        username = payload.get("sub")
-        if not username or not isinstance(username, str):
-            return None
-        
-        # Find user in MongoDB
-        user = await User.find_one(User.username == username)
-        return user
-    except Exception:
-        return None
-
-
-async def _compute_team_points(team: Team) -> float:
+async def _compute_team_points(team: Team, *, tournament_id: TenantId) -> float:
     """Sum current points of all players in a team."""
     player_object_ids = []
     for pid in team.player_ids:
@@ -43,21 +24,26 @@ async def _compute_team_points(team: Team) -> float:
             continue
     if not player_object_ids:
         return 0.0
-    players = await PublicPlayer.find({"_id": {"$in": player_object_ids}}).to_list()
+    players = (
+        await scoped(PublicPlayer, tournament_id)
+        .find({"_id": {"$in": player_object_ids}})
+        .to_list()
+    )
     return float(sum(float(p.points or 0.0) for p in players))
 
 
 @router.get("", response_model=LeaderboardResponseSchema)
 async def get_leaderboard(
     current_user: Optional[User] = Depends(get_optional_current_user),
+    tournament_id: TenantId = Depends(get_tenant),
 ) -> LeaderboardResponseSchema:
     """
-    Get the global leaderboard with all teams ranked by total points.
+    Get this tournament's leaderboard with all its teams ranked by total points.
     If user is authenticated, also returns their position.
     """
     try:
-        # Fetch all teams
-        teams = await Team.find_all().to_list()
+        # Fetch all of this tournament's teams
+        teams = await scoped(Team, tournament_id).to_list()
 
         # If no teams exist, return mock data for development
         if not teams:
@@ -66,7 +52,7 @@ async def get_leaderboard(
         # Build leaderboard entries
         entries = []
         current_user_entry = None
-        
+
         # Compute points for all teams with a single players query to avoid N+1
         # 1) Collect all player ObjectIds across teams
         all_player_ids: set[PydanticObjectId] = set()
@@ -84,7 +70,11 @@ async def get_leaderboard(
         # 2) Fetch all needed players once
         players = []
         if all_player_ids:
-            players = await PublicPlayer.find({"_id": {"$in": list(all_player_ids)}}).to_list()
+            players = (
+                await scoped(PublicPlayer, tournament_id)
+                .find({"_id": {"$in": list(all_player_ids)}})
+                .to_list()
+            )
 
         # 3) Build a points lookup
         player_points_map = {str(p.id): float(p.points or 0.0) for p in players}
@@ -93,7 +83,9 @@ async def get_leaderboard(
         team_points_list: List[Tuple[Team, float]] = []
         for team in teams:
             ids_for_team = team_player_ids_map.get(str(team.id), [])
-            computed_points = sum(player_points_map.get(str(obj_id), 0.0) for obj_id in ids_for_team)
+            computed_points = sum(
+                player_points_map.get(str(obj_id), 0.0) for obj_id in ids_for_team
+            )
             team_points_list.append((team, float(computed_points)))
             # Sync stored total if differs
             try:
@@ -113,7 +105,7 @@ async def get_leaderboard(
             user = await User.get(team.user_id)
             if not user:
                 continue
-            
+
             entry = LeaderboardEntrySchema(
                 rank=rank,
                 username=user.username,
@@ -123,16 +115,15 @@ async def get_leaderboard(
                 rankChange=team.rank_change,
                 avatarUrl=user.avatar_url if hasattr(user, "avatar_url") else None,
             )
-            
+
             entries.append(entry)
-            
+
             # Check if this is the current user's team
             if current_user and str(team.user_id) == str(current_user.id):
                 current_user_entry = entry
-        
+
         return LeaderboardResponseSchema(
-            entries=entries,
-            currentUserEntry=current_user_entry
+            entries=entries, currentUserEntry=current_user_entry
         )
     except Exception as e:
         # In case of error, return mock data

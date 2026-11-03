@@ -79,7 +79,10 @@ def test_players_without_a_team_are_not_capped():
 
 def test_contest_override_beats_global_setting(db):
     contest = Contest(
-        code="c", name="c", start_at=now_ist(), end_at=now_ist(),
+        code="c",
+        name="c",
+        start_at=now_ist(),
+        end_at=now_ist(),
         max_players_per_team=4,
     )
     settings = GlobalSettings(max_players_per_team=7)
@@ -108,7 +111,7 @@ async def _seed_pool(count_per_team: int, teams: list[str], price: float = 1000)
 async def test_feasible_config_passes(db):
     await _seed_pool(count_per_team=4, teams=["A", "B", "C"])
     await assert_auction_config_feasible(
-        squad_size=6, purse=1_000_000, max_per_team=4
+        squad_size=6, purse=1_000_000, max_per_team=4, tournament_id=None
     )
 
 
@@ -117,7 +120,7 @@ async def test_rejects_when_pool_too_small(db):
     await _seed_pool(count_per_team=2, teams=["A"])
     with pytest.raises(HTTPException) as exc:
         await assert_auction_config_feasible(
-            squad_size=11, purse=1_000_000, max_per_team=4
+            squad_size=11, purse=1_000_000, max_per_team=4, tournament_id=None
         )
     assert exc.value.status_code == 400
     assert "auctioned player" in str(exc.value.detail)
@@ -129,7 +132,7 @@ async def test_rejects_when_too_few_teams_for_the_cap(db):
     await _seed_pool(count_per_team=6, teams=["A", "B"])
     with pytest.raises(HTTPException) as exc:
         await assert_auction_config_feasible(
-            squad_size=11, purse=1_000_000, max_per_team=4
+            squad_size=11, purse=1_000_000, max_per_team=4, tournament_id=None
         )
     assert exc.value.status_code == 400
     assert "at least 3 teams" in str(exc.value.detail)
@@ -140,7 +143,7 @@ async def test_rejects_when_purse_cannot_cover_cheapest_squad(db):
     await _seed_pool(count_per_team=4, teams=["A", "B", "C"], price=100_000)
     with pytest.raises(HTTPException) as exc:
         await assert_auction_config_feasible(
-            squad_size=11, purse=1_000_000, max_per_team=4
+            squad_size=11, purse=1_000_000, max_per_team=4, tournament_id=None
         )
     assert exc.value.status_code == 400
     assert "too small" in str(exc.value.detail)
@@ -155,7 +158,7 @@ async def test_unauctioned_players_do_not_count_towards_the_pool(db):
 
     with pytest.raises(HTTPException) as exc:
         await assert_auction_config_feasible(
-            squad_size=11, purse=1_000_000, max_per_team=4
+            squad_size=11, purse=1_000_000, max_per_team=4, tournament_id=None
         )
     assert "Only 2 auctioned player(s)" in str(exc.value.detail)
 
@@ -164,7 +167,7 @@ async def test_unauctioned_players_do_not_count_towards_the_pool(db):
 async def test_squad_size_required(db):
     with pytest.raises(HTTPException) as exc:
         await assert_auction_config_feasible(
-            squad_size=None, purse=1_000_000, max_per_team=4
+            squad_size=None, purse=1_000_000, max_per_team=4, tournament_id=None
         )
     assert "squad_size is required" in str(exc.value.detail)
 
@@ -209,7 +212,10 @@ async def test_squad_over_purse_is_rejected(db):
     players = [_P(price=400_000, team=t, name=t) for t in ("A", "B", "C", "D")]
     with pytest.raises(HTTPException) as exc:
         await validate_auction_squad(
-            players, _auction_contest(purse=1_000_000), submitted_count=4, max_per_team=4
+            players,
+            _auction_contest(purse=1_000_000),
+            submitted_count=4,
+            max_per_team=4,
         )
     assert exc.value.detail["over_by"] == 600_000
 

@@ -1,7 +1,8 @@
-from beanie import Document, Indexed
-from pydantic import Field, field_validator
 from datetime import datetime
 from typing import Optional, Union
+
+from beanie import Document, Indexed, PydanticObjectId
+from pydantic import Field, field_validator
 
 
 class Player(Document):
@@ -20,7 +21,7 @@ class Player(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    @field_validator('slot', mode='before')
+    @field_validator("slot", mode="before")
     @classmethod
     def convert_slot_to_string(cls, v):
         """Convert slot to string if it's an integer"""
@@ -28,11 +29,18 @@ class Player(Document):
             return v
         if isinstance(v, int):
             return str(v)
-        raise ValueError(f"Invalid type for slot: {type(v).__name__}. Expected str or int.")
+        raise ValueError(
+            f"Invalid type for slot: {type(v).__name__}. Expected str or int."
+        )
+
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
 
     class Settings:
         name = "players"
         indexes = [
+            "tournament_id",
             "name",
             "team",
             "slot",

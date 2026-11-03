@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -11,27 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "./Input";
 import { Button } from "@/components/ui/Button";
 import { GoogleSignInButton } from "./GoogleSignInButton";
-// Removed legacy ForgotPasswordModal in favor of new OTP flow pages
-
-// Validation schema: allow username (>=3 chars) OR mobile number (10-20 digits)
-const loginSchema = z.object({
-  username: z
-    .string()
-    .min(1, "Enter username or mobile number")
-    .refine(
-      (v) => {
-        const isMobile = /^[0-9]{10,20}$/.test(v.trim());
-        const isUsername = v.trim().length >= 3;
-        return isMobile || isUsername;
-      },
-      {
-        message: "Enter a valid username (>= 3 chars) or mobile number",
-      }
-    ),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
+import { loginSchema, type LoginFormData } from "./loginSchema";
 
 export function LoginForm() {
   const router = useRouter();
@@ -107,16 +86,22 @@ export function LoginForm() {
             </div>
           )}
 
-          <Input
-            {...register("username")}
-            type="text"
-            placeholder="Enter username or mobile number"
-            icon="user"
-            error={errors.username?.message}
-            disabled={isLoading}
-            variant="light"
-            autoComplete="username"
-          />
+          <div>
+            <Input
+              {...register("username")}
+              type="text"
+              placeholder="Mobile number or email"
+              icon="user"
+              error={errors.username?.message}
+              disabled={isLoading}
+              variant="light"
+              autoComplete="username"
+            />
+            <p className="mt-1.5 px-1 text-xs text-text-muted">
+              One account for every Wall-E Arena tournament. Used a username
+              before? It still works for now.
+            </p>
+          </div>
 
           <Input
             {...register("password")}

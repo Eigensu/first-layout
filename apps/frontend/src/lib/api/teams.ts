@@ -1,5 +1,6 @@
 import { NEXT_PUBLIC_API_URL } from "@/config/env";
 import { extractErrorMessage } from "@/utils/errors";
+import { tenantHeaders } from "@/common/consts";
 
 export interface TeamData {
   team_name: string;
@@ -39,6 +40,7 @@ export async function createTeam(teamData: TeamData, token: string): Promise<Tea
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...tenantHeaders(),
     },
     body: JSON.stringify(teamData),
   });
@@ -60,6 +62,7 @@ export async function getUserTeams(token: string, skip = 0, limit = 100): Promis
     {
       headers: {
         Authorization: `Bearer ${token}`,
+        ...tenantHeaders(),
       },
     }
   );
@@ -79,6 +82,7 @@ export async function getTeam(teamId: string, token: string): Promise<TeamRespon
   const response = await fetch(`${NEXT_PUBLIC_API_URL}/api/teams/${teamId}`, {
     headers: {
       Authorization: `Bearer ${token}`,
+      ...tenantHeaders(),
     },
   });
 
@@ -103,6 +107,7 @@ export async function updateTeam(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...tenantHeaders(),
     },
     body: JSON.stringify(teamData),
   });
@@ -129,6 +134,7 @@ export async function renameTeam(
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
+        ...tenantHeaders(),
       },
     }
   );
@@ -149,6 +155,7 @@ export async function deleteTeam(teamId: string, token: string): Promise<void> {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
+      ...tenantHeaders(),
     },
   });
 

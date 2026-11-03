@@ -1,35 +1,68 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from pydantic import EmailStr, ValidationError
+from pymongo.errors import DuplicateKeyError
 
+from app.models.password_reset import CHANNEL_EMAIL, CHANNEL_SMS
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
+    ASCII_DIGITS,
+    AppleAuth,
     ChangePassword,
     ForgotPasswordRequest,
     ForgotPasswordReset,
     ForgotPasswordVerify,
     GoogleAuth,
-    ResetPasswordByMobile,
     Token,
     UserLogin,
     UserRegister,
 )
 from app.schemas.user import UserResponse
+from app.services.auth import email_otp, twofactor
+from app.services.auth.apple import (
+    AppleTokenError,
+    find_or_create_apple_user,
+    verify_apple_identity_token,
+)
 from app.services.auth.google import (
     GoogleTokenError,
     find_or_create_google_user,
     verify_google_id_token,
 )
+from app.services.auth.identity import (
+    AmbiguousIdentifier,
+    promote_legacy_password,
+    resolve_login_identity,
+    set_new_password,
+    verify_user_password,
+)
 from app.services.auth.password_reset import reset_password as pr_reset_password
+from app.services.auth.password_reset import (
+    start_email_session as pr_start_email_session,
+)
 from app.services.auth.password_reset import start_session as pr_start_session
+from app.services.auth.password_reset import (
+    verify_email_otp_and_issue_token as pr_verify_email,
+)
 from app.services.auth.password_reset import (
     verify_otp_and_issue_token as pr_verify_and_issue,
 )
-from app.utils.dependencies import get_current_active_user
+from app.services.membership import record_sign_in
+from app.utils.dependencies import get_current_active_user, subject_claims
 from app.utils.gridfs import upload_avatar_to_gridfs
+from app.utils.rate_limit import IDENTIFIER, IP, rate_limit
 from app.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -37,6 +70,7 @@ from app.utils.security import (
     get_password_hash,
     verify_password,
 )
+from app.utils.tenant import TenantId, get_optional_tenant, tournament_name
 from config.settings import get_settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -46,14 +80,17 @@ logger = logging.getLogger("app.auth")
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(
+    request: Request,
     username: str = Form(...),
     email: EmailStr = Form(...),
     password: str = Form(...),
     full_name: Optional[str] = Form(None),
     mobile: str = Form(...),
     avatar: Optional[UploadFile] = File(None),
+    tournament_id: TenantId = Depends(get_optional_tenant),
 ):
     """Register a new user"""
+    await rate_limit("register", request)
 
     # Validate fields with existing schema
     try:
@@ -97,6 +134,11 @@ async def register(
     new_user = User(
         username=user_data.username.lower(),
         email=user_data.email,
+        # Populated from the start so new accounts are already in the shape the
+        # backfill is working towards, and are covered by the unique identity
+        # indexes immediately rather than only once the migration reaches them.
+        emails=[str(user_data.email).lower()],
+        mobiles=[user_data.mobile] if user_data.mobile else [],
         hashed_password=hashed_password,
         full_name=user_data.full_name,
         mobile=user_data.mobile,
@@ -105,7 +147,17 @@ async def register(
     )
 
     # Save to MongoDB
-    await new_user.insert()
+    try:
+        await new_user.insert()
+    except DuplicateKeyError:
+        # The checks above are read-then-write, so a concurrent registration
+        # can take the username, email or mobile in between. The unique
+        # indexes reject the loser; surface that as the same 400 those checks
+        # return rather than a 500.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username, email or mobile already registered",
+        )
 
     # If avatar uploaded, save to GridFS and update user
     if avatar is not None:
@@ -118,8 +170,8 @@ async def register(
         await new_user.save()
 
     # Generate tokens
-    access_token = create_access_token(data={"sub": new_user.username})
-    refresh_token = create_refresh_token(data={"sub": new_user.username})
+    access_token = create_access_token(data=subject_claims(new_user))
+    refresh_token = create_refresh_token(data=subject_claims(new_user))
 
     # Store refresh token in database
     refresh_token_doc = RefreshToken(
@@ -128,6 +180,7 @@ async def register(
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(new_user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -137,29 +190,49 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin):
+async def login(
+    request: Request,
+    user_data: UserLogin,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Login with username (or mobile) and password"""
 
     identifier = (user_data.username or "").strip()
 
-    # First try username lookup (lowercased)
-    user = await User.find_one(User.username == identifier.lower())
+    # The address first, so a client already over its limit is refused before
+    # the account lookup, which for an unknown number scans stored mobiles.
+    await rate_limit("login", request, axes=(IP,))
+    ambiguous = False
+    try:
+        user = await resolve_login_identity(identifier)
+    except AmbiguousIdentifier:
+        user, ambiguous = None, True
+    # Then the account the identifier reached, so every spelling of a number is
+    # one bucket and a look-alike username is never someone else's. Before the
+    # password check either way: that is what the limit protects.
+    await rate_limit(
+        "login", request, identifier=identifier, account=user, axes=(IDENTIFIER,)
+    )
 
-    # If not found and identifier looks like a mobile, try matching by mobile digits
-    if not user:
-        input_digits = "".join(ch for ch in identifier if ch.isdigit())
-        if input_digits:
-            async for u in User.find(User.mobile != None):
-                digits = "".join(ch for ch in (u.mobile or "") if ch.isdigit())
-                if digits and digits == input_digits:
-                    user = u
-                    break
+    if ambiguous:
+        # Structured on purpose: extractErrorMessage renders `message`, so the
+        # user is told what to do instead of being shown a generic failure for
+        # credentials that were actually correct.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ambiguous_identifier",
+                "message": (
+                    "That username belongs to more than one account. "
+                    "Please sign in with your mobile number or email instead."
+                ),
+            },
+        )
 
-    if (
-        not user
-        or not user.hashed_password
-        or not verify_password(user_data.password, user.hashed_password)
-    ):
+    password_ok, used_legacy = (
+        verify_user_password(user, user_data.password) if user else (False, False)
+    )
+    if not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -172,13 +245,19 @@ async def login(user_data: UserLogin):
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    # Update last login
-    user.last_login = datetime.utcnow()
-    await user.save()
+    if used_legacy:
+        # They signed in with a password carried over from one of the accounts
+        # this one was merged from. Promote it now so the merged account ends
+        # up with exactly one valid password rather than several.
+        await promote_legacy_password(user, user_data.password)
 
-    # Generate tokens
-    access_token = create_access_token(data={"sub": user.username})
-    refresh_token = create_refresh_token(data={"sub": user.username})
+    # Only the field this writes: a whole-document save would put back any
+    # field changed since the account was read, such as an email change
+    # confirmed on another device a moment ago.
+    await user.set({User.last_login: datetime.now(timezone.utc)})
+
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
 
     # Store refresh token
     refresh_token_doc = RefreshToken(
@@ -187,6 +266,7 @@ async def login(user_data: UserLogin):
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -196,8 +276,13 @@ async def login(user_data: UserLogin):
 
 
 @router.post("/google", response_model=Token)
-async def google_auth(payload: GoogleAuth):
+async def google_auth(
+    request: Request,
+    payload: GoogleAuth,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
     """Sign up or log in using a Google Identity Services ID token."""
+    await rate_limit("google", request)
     try:
         token_payload = verify_google_id_token(payload.id_token)
     except GoogleTokenError as e:
@@ -210,11 +295,10 @@ async def google_auth(payload: GoogleAuth):
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    user.last_login = datetime.utcnow()
-    await user.save()
+    await user.set({User.last_login: datetime.now(timezone.utc)})
 
-    access_token = create_access_token(data={"sub": user.username})
-    refresh_token = create_refresh_token(data={"sub": user.username})
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
 
     refresh_token_doc = RefreshToken(
         user_id=user.id,
@@ -222,6 +306,47 @@ async def google_auth(payload: GoogleAuth):
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/apple", response_model=Token)
+async def apple_auth(
+    request: Request,
+    payload: AppleAuth,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
+    """Sign up or log in using an Apple identity token from expo-apple-authentication."""
+    await rate_limit("apple", request)
+    try:
+        token_payload = await verify_apple_identity_token(payload.identity_token)
+    except AppleTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+    user = await find_or_create_apple_user(token_payload, payload.full_name)
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
+        )
+
+    await user.set({User.last_login: datetime.now(timezone.utc)})
+
+    access_token = create_access_token(data=subject_claims(user))
+    refresh_token = create_refresh_token(data=subject_claims(user))
+
+    refresh_token_doc = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+    )
+    await refresh_token_doc.insert()
+    await record_sign_in(user, tournament_id)
 
     return {
         "access_token": access_token,
@@ -231,8 +356,9 @@ async def google_auth(payload: GoogleAuth):
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(refresh_token: str):
+async def refresh_token(request: Request, refresh_token: str):
     """Refresh access token using refresh token"""
+    await rate_limit("refresh", request)
 
     # Decode and validate refresh token
     payload = decode_token(refresh_token)
@@ -258,22 +384,24 @@ async def refresh_token(refresh_token: str):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
         )
 
-    # Get user
-    username = payload.get("sub")
-    user = await User.find_one(User.username == username)
+    # Whose token this is comes from its stored record, not from `sub`: a
+    # token minted before SUBJECT_KIND_CLAIM existed cannot say whether its
+    # subject is an id or a username, and the record never had that ambiguity.
+    user = await User.get(token_doc.user_id)
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
-    # Revoke old refresh token
-    token_doc.revoked = True
-    await token_doc.save()
+    # Revoke every stored copy, not just the one found: tokens minted before
+    # they carried a jti can be stored twice, and a surviving copy would let
+    # this token refresh again.
+    await _revoke_refresh_token(refresh_token)
 
     # Generate new tokens
-    new_access_token = create_access_token(data={"sub": user.username})
-    new_refresh_token = create_refresh_token(data={"sub": user.username})
+    new_access_token = create_access_token(data=subject_claims(user))
+    new_refresh_token = create_refresh_token(data=subject_claims(user))
 
     # Store new refresh token
     new_token_doc = RefreshToken(
@@ -294,69 +422,112 @@ async def refresh_token(refresh_token: str):
 async def logout(refresh_token: str):
     """Logout and revoke refresh token"""
 
-    # Find and revoke refresh token
-    token_doc = await RefreshToken.find_one(RefreshToken.token == refresh_token)
-
-    if token_doc:
-        token_doc.revoked = True
-        await token_doc.save()
+    await _revoke_refresh_token(refresh_token)
 
     return {"message": "Successfully logged out"}
 
 
-@router.post("/reset-password-mobile")
-async def reset_password_by_mobile(payload: ResetPasswordByMobile):
-    """Reset password by verifying the provided mobile number matches a stored user."""
-    # Normalize input by digits to compare fairly
-    input_digits = "".join(ch for ch in payload.mobile if ch.isdigit())
-
-    matched_user = None
-    # Since mobile may be stored with symbols/spaces, scan users with a mobile set
-    async for u in User.find(User.mobile != None):
-        digits = "".join(ch for ch in (u.mobile or "") if ch.isdigit())
-        if digits and digits == input_digits:
-            matched_user = u
-            break
-
-    if not matched_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with provided mobile not found",
-        )
-
-    matched_user.hashed_password = get_password_hash(payload.new_password)
-    matched_user.updated_at = datetime.utcnow()
-    await matched_user.save()
-
-    return {"message": "Password updated successfully"}
+async def _revoke_refresh_token(refresh_token: str) -> None:
+    await RefreshToken.find(RefreshToken.token == refresh_token).update(
+        {"$set": {"revoked": True}}
+    )
 
 
-@router.post("/forgot-password/request")
-async def forgot_password_request(payload: ForgotPasswordRequest):
-    """Start forgot password flow by sending OTP to the provided phone.
+RESET_CHANNEL_NAMES = {CHANNEL_SMS: "mobile number", CHANNEL_EMAIL: "email"}
+
+GENERIC_RESET_MESSAGES = {
+    CHANNEL_SMS: "If the phone exists, an OTP has been sent.",
+    CHANNEL_EMAIL: "If the email exists, a code has been sent.",
+}
+
+
+def reset_channels() -> dict:
+    return {
+        CHANNEL_SMS: twofactor.is_configured(),
+        CHANNEL_EMAIL: email_otp.is_configured(),
+    }
+
+
+def _channel_unavailable(channel: str) -> HTTPException:
+    other = CHANNEL_EMAIL if channel == CHANNEL_SMS else CHANNEL_SMS
+    message = (
+        f"Password reset by {RESET_CHANNEL_NAMES[channel]} isn't available right now."
+    )
+    if reset_channels()[other]:
+        message += f" Use your {RESET_CHANNEL_NAMES[other]} instead."
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": "channel_unavailable", "message": message},
+    )
+
+
+@router.get("/forgot-password/channels")
+async def forgot_password_channels():
+    """Which ways this service can deliver a reset code.
+
+    So the website offers only those. A reset that could not be delivered used
+    to answer "an OTP has been sent" all the same, which left fifth's players
+    waiting on a code that never came (spec §1.1a). Says nothing about any
+    account.
+    """
+    return reset_channels()
+
+
+@router.post(
+    "/forgot-password/request",
+    responses={503: {"description": "That channel is not configured here"}},
+)
+async def forgot_password_request(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    tournament_id: TenantId = Depends(get_optional_tenant),
+):
+    """Start forgot password flow by sending a code to the phone or email.
     Always return generic response to avoid user enumeration."""
-    logger.info("POST /api/auth/forgot-password/request body={'phone':'[redacted]'}")
+    channel = CHANNEL_EMAIL if payload.email is not None else CHANNEL_SMS
+    logger.info("POST /api/auth/forgot-password/request channel=%s", channel)
+    # Before any account is looked up, so the refusal depends on this
+    # service's configuration alone and says nothing about who exists.
+    if not reset_channels()[channel]:
+        raise _channel_unavailable(channel)
+    # Outside the try below: its catch-all turns every failure into the generic
+    # success message, which would swallow the 429 (and the 503 this route
+    # returns when the limiter cannot count, since every call sends a message).
+    await rate_limit("forgot_password_request", request, identifier=payload.identifier)
     try:
-        await pr_start_session(payload.phone)
+        if channel == CHANNEL_EMAIL:
+            await pr_start_email_session(
+                str(payload.email), brand=await tournament_name(tournament_id)
+            )
+        else:
+            await pr_start_session(payload.phone)
         logger.info(
-            "Response 200 /api/auth/forgot-password/request body={'message':'If the phone exists, an OTP has been sent.'}"
+            "Response 200 /api/auth/forgot-password/request channel=%s", channel
         )
-    except Exception as e:
-        # Intentionally return generic message regardless of internal failures
+    except Exception:
+        # Intentionally return generic message regardless of internal failures:
+        # a send is only attempted for an account that exists, so even a
+        # provider failure would tell the caller one does.
         logger.exception(
             "Internal error during forgot-password request; responding with generic message"
         )
-    return {"message": "If the phone exists, an OTP has been sent."}
+    return {"message": GENERIC_RESET_MESSAGES[channel]}
 
 
 @router.post("/forgot-password/verify")
-async def forgot_password_verify(payload: ForgotPasswordVerify):
+async def forgot_password_verify(request: Request, payload: ForgotPasswordVerify):
     """Verify OTP and issue short-lived reset token."""
     logger.info(
-        "POST /api/auth/forgot-password/verify body={'phone':'[redacted]','otp':'[redacted]'}"
+        "POST /api/auth/forgot-password/verify channel=%s",
+        CHANNEL_EMAIL if payload.email is not None else CHANNEL_SMS,
     )
+    # Outside the try below, which turns every failure into a 400.
+    await rate_limit("forgot_password_verify", request, identifier=payload.identifier)
     try:
-        reset_token, ttl = await pr_verify_and_issue(payload.phone, payload.otp)
+        if payload.email is not None:
+            reset_token, ttl = await pr_verify_email(str(payload.email), payload.otp)
+        else:
+            reset_token, ttl = await pr_verify_and_issue(payload.phone, payload.otp)
         logger.info(
             "Response 200 /api/auth/forgot-password/verify body={'reset_token':'[redacted]','expires_in_sec':%s}",
             ttl,
@@ -418,9 +589,14 @@ async def change_password(
             detail="New password must be different from current password",
         )
 
-    # Update password
-    current_user.hashed_password = get_password_hash(payload.new_password)
-    current_user.updated_at = datetime.utcnow()
-    await current_user.save()
+    # Update password -- those fields only, so a concurrent email change stays.
+    set_new_password(current_user, payload.new_password)
+    await current_user.set(
+        {
+            User.hashed_password: current_user.hashed_password,
+            User.legacy_hashes: current_user.legacy_hashes,
+            User.updated_at: datetime.now(timezone.utc),
+        }
+    )
 
     return {"message": "Password changed successfully"}

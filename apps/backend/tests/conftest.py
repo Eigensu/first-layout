@@ -7,26 +7,47 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-not-for-production-0000
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
 from beanie import init_beanie
+from httpx import ASGITransport, AsyncClient
+from mongomock.collection import BulkOperationBuilder
 from mongomock_motor import AsyncMongoMockClient
 
-from app.models.user import User, RefreshToken, UserProfile
-from app.models.sponsor import Sponsor
-from app.models.carousel import CarouselImage
-from app.models.team import Team
-from app.models.contest import Contest
-from app.models.team_contest_enrollment import TeamContestEnrollment
+
+def _accept_unset_sort(method):
+    """pymongo 4.10+ hands UpdateOne's and ReplaceOne's `sort` to the bulk
+    builder, always, even unset; mongomock 4.3 (the latest) predates the
+    keyword and rejects it. Accept it unset, and refuse a real sort -- a
+    MongoDB 8 feature nothing here uses -- rather than silently drop it."""
+
+    def wrapper(self, *args, sort=None, **kwargs):
+        if sort is not None:
+            raise NotImplementedError("mongomock does not emulate sort in bulk writes")
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+BulkOperationBuilder.add_update = _accept_unset_sort(BulkOperationBuilder.add_update)
+BulkOperationBuilder.add_replace = _accept_unset_sort(BulkOperationBuilder.add_replace)
+
+from app.models.admin.audit_log import AdminActionLog
+from app.models.admin.import_log import ImportLog
 from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
-from app.models.admin.import_log import ImportLog
-from app.models.admin.audit_log import AdminActionLog
+from app.models.carousel import CarouselImage
+from app.models.contest import Contest
+from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
-from app.models.password_reset import PasswordResetSession, PasswordResetToken
+from app.models.rate_limit import RateLimitCounter
 from app.models.settings import GlobalSettings
+from app.models.sponsor import Sponsor
+from app.models.team import Team
+from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
-from app.utils.dependencies import get_admin_user
+from app.models.tournament_membership import TournamentMembership
+from app.models.user import RefreshToken, User, UserProfile
+from app.utils.dependencies import get_platform_admin, get_tournament_admin
 
 DOCUMENT_MODELS = [
     User,
@@ -47,15 +68,57 @@ DOCUMENT_MODELS = [
     PasswordResetToken,
     GlobalSettings,
     Tournament,
+    TournamentMembership,
+    RateLimitCounter,
 ]
+
+
+# mongomock ignores partialFilterExpression and applies a unique index to every
+# document, so User's uniq_mobile would collide on the shared null of any two
+# accounts without a mobile -- which real MongoDB excludes from the index
+# entirely. Drop these for tests rather than forcing every fixture to invent a
+# distinct value. The routes' DuplicateKeyError handling is covered directly in
+# tests/test_users_patch_me.py.
+#
+# The identity-array indexes are here for the same reason and one more: their
+# partial filters are what stop the unique constraint from applying to accounts
+# the backfill has not reached yet, so emulating them without the filter tests
+# the opposite of the intended behaviour. Their real shape is asserted
+# structurally in tests/test_user_identity.py.
+_UNEMULATED_INDEXES = {
+    "uniq_mobile",
+    "uniq_emails",
+    "uniq_mobiles",
+    "uniq_google_ids",
+    "uniq_apple_ids",
+    "uniq_legacy_row",
+}
 
 
 @pytest_asyncio.fixture
 async def db():
-    """Fresh in-memory MongoDB (via mongomock) and Beanie init per test."""
+    """Fresh in-memory MongoDB (via mongomock) and Beanie init per test.
+
+    Applies to every model rather than just User: TournamentMembership relies on
+    a partial filter for the same reason, and the next model to need one should
+    not have to rediscover why its tests fail.
+    """
+    originals = {
+        model: list(getattr(model.Settings, "indexes", [])) for model in DOCUMENT_MODELS
+    }
+    for model, original in originals.items():
+        model.Settings.indexes = [
+            idx
+            for idx in original
+            if getattr(idx, "document", {}).get("name") not in _UNEMULATED_INDEXES
+        ]
     client = AsyncMongoMockClient()
-    await init_beanie(database=client["test-db"], document_models=DOCUMENT_MODELS)
-    yield client
+    try:
+        await init_beanie(database=client["test-db"], document_models=DOCUMENT_MODELS)
+        yield client
+    finally:
+        for model, original in originals.items():
+            model.Settings.indexes = original
 
 
 @pytest.fixture
@@ -83,11 +146,13 @@ async def client(db, admin_user):
     async def _fake_admin_user():
         return admin_user
 
-    app.dependency_overrides[get_admin_user] = _fake_admin_user
+    app.dependency_overrides[get_tournament_admin] = _fake_admin_user
+    app.dependency_overrides[get_platform_admin] = _fake_admin_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.pop(get_admin_user, None)
+    app.dependency_overrides.pop(get_tournament_admin, None)
+    app.dependency_overrides.pop(get_platform_admin, None)
 
 
 @pytest_asyncio.fixture

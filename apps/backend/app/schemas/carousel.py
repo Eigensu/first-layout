@@ -1,19 +1,24 @@
-from pydantic import BaseModel, HttpUrl, Field
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class CarouselImageCreate(BaseModel):
     """Schema for creating a new carousel image"""
+
     title: Optional[str] = None
     subtitle: Optional[str] = None
     link_url: Optional[HttpUrl] = None
-    display_order: Optional[int] = Field(None, ge=0, description="Display order (0 or higher)")
+    display_order: Optional[int] = Field(
+        None, ge=0, description="Display order (0 or higher)"
+    )
     active: bool = True
 
 
 class CarouselImageUpdate(BaseModel):
     """Schema for updating carousel image metadata"""
+
     title: Optional[str] = None
     subtitle: Optional[str] = None
     link_url: Optional[HttpUrl] = None
@@ -23,6 +28,7 @@ class CarouselImageUpdate(BaseModel):
 
 class CarouselImageResponse(BaseModel):
     """Schema for carousel image API response"""
+
     id: str = Field(serialization_alias="_id")
     title: Optional[str] = None
     subtitle: Optional[str] = None
@@ -38,6 +44,7 @@ class CarouselImageResponse(BaseModel):
 
 class CarouselImagesListResponse(BaseModel):
     """Schema for paginated list of carousel images"""
+
     images: List[CarouselImageResponse]
     total: int
     page: int
@@ -46,10 +53,14 @@ class CarouselImagesListResponse(BaseModel):
 
 class UploadResponse(BaseModel):
     """Schema for image upload response"""
+
     url: str
     message: str
 
 
 class ReorderRequest(BaseModel):
     """Schema for batch reordering carousel images"""
-    image_orders: List[dict] = Field(..., description="List of {id: str, display_order: int}")
+
+    image_orders: List[dict] = Field(
+        ..., description="List of {id: str, display_order: int}"
+    )

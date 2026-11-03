@@ -22,11 +22,12 @@ from typing import Iterable, List, Optional, Sequence
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
 
+from app.common.enums.contests import ContestFormat
 from app.models.admin.player import Player as AdminPlayer
 from app.models.contest import Contest
 from app.models.settings import GlobalSettings
 from app.models.team import Team
-from app.common.enums.contests import ContestFormat
+from app.utils.tenant import TenantId, scoped
 
 ACTIVE_STATUS = "Active"
 
@@ -39,10 +40,7 @@ def is_auction_eligible(player) -> bool:
 
 
 def is_auction_contest(contest: Optional[Contest]) -> bool:
-    return (
-        contest is not None
-        and contest.contest_format == ContestFormat.AUCTION_PURSE
-    )
+    return contest is not None and contest.contest_format == ContestFormat.AUCTION_PURSE
 
 
 def resolve_max_players_per_team(
@@ -100,6 +98,8 @@ def to_pool_entries(players: Iterable) -> List[PoolEntry]:
 
 
 async def load_eligible_pool(
+    *,
+    tournament_id: TenantId,
     allowed_teams: Optional[Sequence[str]] = None,
 ) -> List[AdminPlayer]:
     """
@@ -110,7 +110,7 @@ async def load_eligible_pool(
     its teams, the rest of the collection is off limits and must not count
     towards feasibility.
     """
-    players = await AdminPlayer.find_all().to_list()
+    players = await scoped(AdminPlayer, tournament_id).to_list()
     eligible = [p for p in players if is_auction_eligible(p)]
     if allowed_teams:
         permitted = set(allowed_teams)
@@ -123,6 +123,8 @@ async def assert_auction_config_feasible(
     purse: float,
     max_per_team: int,
     allowed_teams: Optional[Sequence[str]] = None,
+    *,
+    tournament_id: TenantId,
 ) -> None:
     """
     Reject an auction configuration no participant could actually satisfy.
@@ -137,11 +139,11 @@ async def assert_auction_config_feasible(
             detail="squad_size is required for an auction contest",
         )
 
-    pool = await load_eligible_pool(allowed_teams)
+    pool = await load_eligible_pool(
+        tournament_id=tournament_id, allowed_teams=allowed_teams
+    )
     scope = (
-        f" from the allowed teams ({', '.join(allowed_teams)})"
-        if allowed_teams
-        else ""
+        f" from the allowed teams ({', '.join(allowed_teams)})" if allowed_teams else ""
     )
 
     if len(pool) < squad_size:
@@ -166,9 +168,7 @@ async def assert_auction_config_feasible(
             ),
         )
 
-    minimum_cost = cheapest_squad_cost(
-        to_pool_entries(pool), squad_size, max_per_team
-    )
+    minimum_cost = cheapest_squad_cost(to_pool_entries(pool), squad_size, max_per_team)
     if minimum_cost is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -246,9 +246,7 @@ def evaluate_squad(
     if squad_size is not None and count != squad_size:
         return SquadViolation(
             summary=f"has {count} player(s), needs exactly {squad_size}",
-            detail=(
-                f"This contest requires exactly {squad_size} players, got {count}"
-            ),
+            detail=(f"This contest requires exactly {squad_size} players, got {count}"),
         )
 
     team_counts = Counter(p.team for p in players if p.team)
@@ -268,9 +266,7 @@ def evaluate_squad(
     total_value = sum(p.price or 0.0 for p in players)
     if total_value > purse:
         return SquadViolation(
-            summary=(
-                f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"
-            ),
+            summary=(f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"),
             detail={
                 "message": "Squad exceeds the contest purse",
                 "purse": purse,
@@ -317,6 +313,8 @@ async def find_teams_breaking_auction_rules(
     purse: float,
     max_per_team: int,
     allowed_teams: Optional[Sequence[str]] = None,
+    *,
+    tournament_id: TenantId,
 ) -> List[str]:
     """
     Existing squads in this contest that the given rules would invalidate.
@@ -325,7 +323,11 @@ async def find_teams_breaking_auction_rules(
     or a cap after teams exist would otherwise leave those squads enrolled and
     scoring under rules they no longer satisfy.
     """
-    teams = await Team.find(Team.contest_id == str(contest_id)).to_list()
+    teams = (
+        await scoped(Team, tournament_id)
+        .find(Team.contest_id == str(contest_id))
+        .to_list()
+    )
     if not teams:
         return []
 
@@ -338,7 +340,9 @@ async def find_teams_breaking_auction_rules(
             except Exception:
                 continue
     players = (
-        await AdminPlayer.find({"_id": {"$in": list(referenced)}}).to_list()
+        await scoped(AdminPlayer, tournament_id)
+        .find({"_id": {"$in": list(referenced)}})
+        .to_list()
         if referenced
         else []
     )

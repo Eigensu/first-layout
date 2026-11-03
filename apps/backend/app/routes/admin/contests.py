@@ -1,57 +1,67 @@
-from fastapi import APIRouter, Depends, HTTPException, status as http_status, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
-from typing import Optional, List
-from beanie import PydanticObjectId
+import re
 from datetime import datetime
 from io import BytesIO
-import re
+from typing import List, Optional
 from urllib.parse import quote
-from bson import ObjectId
-from pymongo.errors import DuplicateKeyError
-from app.utils.timezone import now_ist, to_ist
-from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs
-from pydantic import BaseModel
-from openpyxl import Workbook
 
+from beanie import PydanticObjectId
+from bson import ObjectId
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import status as http_status
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
+
+from app.common.enums.contests import ContestFormat, ContestStatus, ContestVisibility
+from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
-from app.models.team import Team
 from app.models.player import Player
 from app.models.player_contest_points import PlayerContestPoints
+from app.models.settings import GlobalSettings, default_logo_path
+from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
-from app.services.contest_status import sync_contest_status, contest_status_filter_clauses
-from app.common.enums.contests import ContestStatus, ContestVisibility, ContestFormat
-from app.models.settings import GlobalSettings
+from app.models.user import User
+from app.routes.teams import find_teams_breaking_slot_rules
+from app.schemas.contest import (
+    ContestCreate,
+    ContestListResponse,
+    ContestResponse,
+    ContestUpdate,
+)
+from app.schemas.enrollment import (
+    EnrollmentBulkRequest,
+    EnrollmentResponse,
+    UnenrollBulkRequest,
+)
 from app.services.auction import (
     assert_auction_config_feasible,
     find_teams_breaking_auction_rules,
     resolve_max_players_per_team,
 )
-from app.routes.teams import find_teams_breaking_slot_rules
-from app.common.enums.enrollments import EnrollmentStatus
-from app.schemas.contest import (
-    ContestCreate,
-    ContestUpdate,
-    ContestResponse,
-    ContestListResponse,
+from app.services.contest_status import (
+    contest_status_filter_clauses,
+    sync_contest_status,
 )
-from app.schemas.enrollment import (
-    EnrollmentBulkRequest,
-    UnenrollBulkRequest,
-    EnrollmentResponse,
+from app.utils.dependencies import get_tournament_admin
+from app.utils.gridfs import (
+    delete_contest_logo_from_gridfs,
+    upload_contest_logo_to_gridfs,
 )
-from app.utils.dependencies import get_admin_user
-from app.models.user import User
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
+from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
+
 async def to_response(contest: Contest) -> ContestResponse:
     status = await sync_contest_status(contest, persist=False)
-    settings = await GlobalSettings.get_instance()
+    settings = await GlobalSettings.get_for_tournament(contest.tournament_id)
     logo_url = contest.logo_url
     if not logo_url and not contest.logo_file_id:
         # Fallback to default tournament logo
         if settings.default_contest_logo_file_id:
-            logo_url = "/api/settings/logo"
+            logo_url = default_logo_path(contest.tournament_id)
 
     return ContestResponse(
         id=str(contest.id),
@@ -77,22 +87,22 @@ async def to_response(contest: Contest) -> ContestResponse:
     )
 
 
-
 @router.post("", response_model=ContestResponse, status_code=201)
 async def create_contest(
     data: ContestCreate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     if data.start_at >= data.end_at:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
-    existing = await Contest.find_one(Contest.code == data.code)
+    existing = await scoped_one(Contest, tournament_id, Contest.code == data.code)
     if existing:
         raise HTTPException(status_code=400, detail="Contest code already exists")
 
     # Reject an auction setup no participant could satisfy, before it is saved.
     if data.contest_format == ContestFormat.AUCTION_PURSE:
-        settings = await GlobalSettings.get_instance()
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
         await assert_auction_config_feasible(
             squad_size=data.squad_size,
             purse=data.purse,
@@ -102,10 +112,12 @@ async def create_contest(
             allowed_teams=(
                 data.allowed_teams if data.contest_type == "daily" else None
             ),
+            tournament_id=tournament_id,
         )
 
     now = now_ist()
     contest = Contest(
+        tournament_id=tournament_id,
         code=data.code,
         name=data.name,
         description=data.description,
@@ -133,7 +145,8 @@ async def list_contests(
     page_size: int = Query(10, ge=1, le=100),
     status: Optional[ContestStatus] = Query(None),
     search: Optional[str] = Query(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     conditions = []
     if status:
@@ -141,10 +154,16 @@ async def list_contests(
 
     if search:
         from beanie.operators import Or, RegEx
-        conditions.append(Or(RegEx(Contest.code, search, options="i"), RegEx(Contest.name, search, options="i")))
 
-    query = Contest.find(conditions[0]) if conditions else Contest.find_all()
-    for cond in conditions[1:]:
+        conditions.append(
+            Or(
+                RegEx(Contest.code, search, options="i"),
+                RegEx(Contest.name, search, options="i"),
+            )
+        )
+
+    query = scoped(Contest, tournament_id)
+    for cond in conditions:
         query = query.find(cond)
 
     total = await query.count()
@@ -159,8 +178,12 @@ async def list_contests(
 
 
 @router.get("/{contest_id}", response_model=ContestResponse)
-async def get_contest(contest_id: str, current_user: User = Depends(get_admin_user)):
-    contest = await Contest.get(contest_id)
+async def get_contest(
+    contest_id: str,
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
+):
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
     return await to_response(contest)
@@ -186,9 +209,10 @@ async def update_contest(
     contest_id: str,
     data: ContestUpdate,
     force: bool = Query(False),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
@@ -219,8 +243,10 @@ async def update_contest(
     )
 
     if new_format == ContestFormat.AUCTION_PURSE:
-        settings = await GlobalSettings.get_instance()
-        new_max = update_fields.get("max_players_per_team", contest.max_players_per_team)
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
+        new_max = update_fields.get(
+            "max_players_per_team", contest.max_players_per_team
+        )
         new_squad_size = update_fields.get("squad_size", contest.squad_size)
         new_purse = update_fields.get("purse", contest.purse)
         new_type = update_fields.get("contest_type", contest.contest_type)
@@ -233,6 +259,7 @@ async def update_contest(
             purse=new_purse,
             max_per_team=effective_max,
             allowed_teams=effective_allowed,
+            tournament_id=tournament_id,
         )
 
         # Tightening the rules must not silently strand squads that were legal
@@ -244,6 +271,7 @@ async def update_contest(
                 purse=new_purse,
                 max_per_team=effective_max,
                 allowed_teams=effective_allowed,
+                tournament_id=tournament_id,
             )
             if broken:
                 shown = broken[:5]
@@ -266,7 +294,9 @@ async def update_contest(
         # auction_purse (or an edit while already slot_based) must not leave
         # existing squads enrolled and scoring against slot rules they were
         # never checked against.
-        broken = await find_teams_breaking_slot_rules(contest_id=str(contest.id))
+        broken = await find_teams_breaking_slot_rules(
+            contest_id=str(contest.id), tournament_id=tournament_id
+        )
         if broken:
             shown = broken[:5]
             more = len(broken) - len(shown)
@@ -278,8 +308,7 @@ async def update_contest(
                         f"rules. Fix or remove them, or repeat the request with "
                         f"force=true to apply anyway."
                     ),
-                    "broken_teams": shown
-                    + ([f"and {more} more"] if more > 0 else []),
+                    "broken_teams": shown + ([f"and {more} more"] if more > 0 else []),
                 },
             )
 
@@ -294,29 +323,41 @@ async def update_contest(
 async def delete_contest(
     contest_id: str,
     force: bool = Query(False),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
-    active_enrollments = await TeamContestEnrollment.find({
-        "contest_id": contest.id,
-        "status": EnrollmentStatus.ACTIVE,
-    }).count()
+    active_enrollments = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "contest_id": contest.id,
+                "status": EnrollmentStatus.ACTIVE,
+            }
+        )
+        .count()
+    )
 
     # If there are active enrollments, honor force=true to unenroll and proceed.
     if active_enrollments > 0:
         if force:
             # mark all active enrollments removed
-            async for enr in TeamContestEnrollment.find({
-                "contest_id": contest.id,
-                "status": EnrollmentStatus.ACTIVE,
-            }):
+            async for enr in scoped(TeamContestEnrollment, tournament_id).find(
+                {
+                    "contest_id": contest.id,
+                    "status": EnrollmentStatus.ACTIVE,
+                }
+            ):
                 enr.status = EnrollmentStatus.REMOVED
                 enr.removed_at = now_ist()
                 await enr.save()
         else:
-            raise HTTPException(status_code=409, detail="Contest has active enrollments. Use force=true to unenroll and delete.")
+            raise HTTPException(
+                status_code=409,
+                detail="Contest has active enrollments. Use force=true to unenroll and delete.",
+            )
 
     await contest.delete()
     return {"message": "Contest deleted"}
@@ -326,9 +367,10 @@ async def delete_contest(
 async def enroll_teams(
     contest_id: str,
     body: EnrollmentBulkRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
@@ -342,30 +384,38 @@ async def enroll_teams(
             oid = PydanticObjectId(tid)
         except Exception:
             raise HTTPException(status_code=400, detail=f"Invalid team id: {tid}")
-        team = await Team.get(oid)
+        team = await get_scoped(Team, tournament_id, oid)
         if not team:
             raise HTTPException(status_code=404, detail=f"Team not found: {tid}")
 
         # Ensure no duplicate active enrollment
-        existing = await TeamContestEnrollment.find_one(
-            (TeamContestEnrollment.team_id == team.id)
-            & (TeamContestEnrollment.contest_id == contest.id)
-            & (TeamContestEnrollment.status == "active")
+        # Separate arguments, which find_one ANDs together. Beanie's operators
+        # do not support `&`: joined with it, this raised TypeError for every
+        # team, so the endpoint could never enroll one.
+        existing = await scoped_one(
+            TeamContestEnrollment,
+            tournament_id,
+            TeamContestEnrollment.team_id == team.id,
+            TeamContestEnrollment.contest_id == contest.id,
+            TeamContestEnrollment.status == "active",
         )
         if existing:
             # skip duplicates silently
             continue
 
-        existing_for_user = await TeamContestEnrollment.find_one(
-            (TeamContestEnrollment.user_id == team.user_id)
-            & (TeamContestEnrollment.contest_id == contest.id)
-            & (TeamContestEnrollment.status == EnrollmentStatus.ACTIVE)
+        existing_for_user = await scoped_one(
+            TeamContestEnrollment,
+            tournament_id,
+            TeamContestEnrollment.user_id == team.user_id,
+            TeamContestEnrollment.contest_id == contest.id,
+            TeamContestEnrollment.status == EnrollmentStatus.ACTIVE,
         )
         if existing_for_user:
             # one active team per user per contest
             continue
 
         enr = TeamContestEnrollment(
+            tournament_id=tournament_id,
             team_id=team.id,
             user_id=team.user_id,
             contest_id=contest.id,
@@ -405,20 +455,22 @@ async def enroll_teams(
 async def unenroll(
     contest_id: str,
     body: UnenrollBulkRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
     count = 0
     # Collect affected team ids to batch-check for remaining active enrollments
     from typing import Set
+
     affected_team_ids: Set[PydanticObjectId] = set()
 
     if body.enrollment_ids:
         for eid in body.enrollment_ids:
-            enr = await TeamContestEnrollment.get(eid)
+            enr = await get_scoped(TeamContestEnrollment, tournament_id, eid)
             if enr and enr.contest_id == contest.id and enr.status == "active":
                 enr.status = "removed"
                 enr.removed_at = now_ist()
@@ -432,10 +484,12 @@ async def unenroll(
                 toid = PydanticObjectId(tid)
             except Exception:
                 continue
-            enr = await TeamContestEnrollment.find_one(
-                (TeamContestEnrollment.team_id == toid)
-                & (TeamContestEnrollment.contest_id == contest.id)
-                & (TeamContestEnrollment.status == EnrollmentStatus.ACTIVE)
+            enr = await scoped_one(
+                TeamContestEnrollment,
+                tournament_id,
+                TeamContestEnrollment.team_id == toid,
+                TeamContestEnrollment.contest_id == contest.id,
+                TeamContestEnrollment.status == EnrollmentStatus.ACTIVE,
             )
             if enr:
                 enr.status = EnrollmentStatus.REMOVED
@@ -449,17 +503,21 @@ async def unenroll(
         try:
             # Find teams that still have at least one active enrollment for this contest
             still_active_team_ids: Set[PydanticObjectId] = set()
-            async for active in TeamContestEnrollment.find({
-                "team_id": {"$in": list(affected_team_ids)},
-                "contest_id": contest.id,
-                "status": "active",
-            }):
+            async for active in scoped(TeamContestEnrollment, tournament_id).find(
+                {
+                    "team_id": {"$in": list(affected_team_ids)},
+                    "contest_id": contest.id,
+                    "status": "active",
+                }
+            ):
                 still_active_team_ids.add(active.team_id)
 
             # Teams to clear = affected - still_active
-            to_clear_ids = [tid for tid in affected_team_ids if tid not in still_active_team_ids]
+            to_clear_ids = [
+                tid for tid in affected_team_ids if tid not in still_active_team_ids
+            ]
             for tid in to_clear_ids:
-                team = await Team.get(tid)
+                team = await get_scoped(Team, tournament_id, tid)
                 if team and team.contest_id is not None:
                     team.contest_id = None
                     team.updated_at = now_ist()
@@ -471,9 +529,10 @@ async def unenroll(
     return {"unenrolled": count}
 
 
+from typing import Dict
+
 # -------- Per-Contest Player Points Management --------
 from pydantic import BaseModel
-from typing import Dict
 
 
 class PlayerPointsItem(BaseModel):
@@ -493,43 +552,59 @@ class PlayerPointsResponseItem(BaseModel):
     updated_at: datetime
 
 
-@router.get("/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem])
+@router.get(
+    "/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem]
+)
 async def get_player_points(
     contest_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
-    docs = await PlayerContestPoints.find({"contest_id": contest.id}).to_list()
+    docs = (
+        await scoped(PlayerContestPoints, tournament_id)
+        .find({"contest_id": contest.id})
+        .to_list()
+    )
     # fetch player details in batch
     pid_set = [doc.player_id for doc in docs]
     players_by_id: Dict[str, Player] = {}
     if pid_set:
-        players = await Player.find({"_id": {"$in": pid_set}}).to_list()
+        players = (
+            await scoped(Player, tournament_id)
+            .find({"_id": {"$in": pid_set}})
+            .to_list()
+        )
         players_by_id = {str(p.id): p for p in players}
 
     resp: list[PlayerPointsResponseItem] = []
     for doc in docs:
         p = players_by_id.get(str(doc.player_id))
-        resp.append(PlayerPointsResponseItem(
-            player_id=str(doc.player_id),
-            name=(p.name if p else None) if p else None,
-            team=(p.team if p else None) if p else None,
-            points=float(doc.points or 0.0),
-            updated_at=doc.updated_at,
-        ))
+        resp.append(
+            PlayerPointsResponseItem(
+                player_id=str(doc.player_id),
+                name=(p.name if p else None) if p else None,
+                team=(p.team if p else None) if p else None,
+                points=float(doc.points or 0.0),
+                updated_at=doc.updated_at,
+            )
+        )
     return resp
 
 
-@router.put("/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem])
+@router.put(
+    "/{contest_id}/player-points", response_model=list[PlayerPointsResponseItem]
+)
 async def upsert_player_points(
     contest_id: str,
     body: PlayerPointsBulkUpsertRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
@@ -542,17 +617,23 @@ async def upsert_player_points(
         try:
             poid = PydanticObjectId(item.player_id)
         except Exception:
-            raise HTTPException(status_code=400, detail=f"Invalid player id: {item.player_id}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid player id: {item.player_id}"
+            )
         valid_items.append((poid, float(item.points)))
 
     # Upsert
     updated_docs: list[PlayerContestPoints] = []
     now = now_ist()
     for poid, pts in valid_items:
-        existing = await PlayerContestPoints.find_one({
-            "contest_id": contest.id,
-            "player_id": poid,
-        })
+        existing = await scoped_one(
+            PlayerContestPoints,
+            tournament_id,
+            {
+                "contest_id": contest.id,
+                "player_id": poid,
+            },
+        )
         if existing:
             existing.points = pts
             existing.updated_at = now
@@ -560,6 +641,7 @@ async def upsert_player_points(
             updated_docs.append(existing)
         else:
             doc = PlayerContestPoints(
+                tournament_id=tournament_id,
                 contest_id=contest.id,
                 player_id=poid,
                 points=pts,
@@ -572,26 +654,32 @@ async def upsert_player_points(
     pid_set = [doc.player_id for doc in updated_docs]
     players_by_id: Dict[str, Player] = {}
     if pid_set:
-        players = await Player.find({"_id": {"$in": pid_set}}).to_list()
+        players = (
+            await scoped(Player, tournament_id)
+            .find({"_id": {"$in": pid_set}})
+            .to_list()
+        )
         players_by_id = {str(p.id): p for p in players}
 
     resp: list[PlayerPointsResponseItem] = []
     for doc in updated_docs:
         p = players_by_id.get(str(doc.player_id))
-        resp.append(PlayerPointsResponseItem(
-            player_id=str(doc.player_id),
-            name=(p.name if p else None) if p else None,
-            team=(p.team if p else None) if p else None,
-            points=float(doc.points or 0.0),
-            updated_at=doc.updated_at,
-        ))
+        resp.append(
+            PlayerPointsResponseItem(
+                player_id=str(doc.player_id),
+                name=(p.name if p else None) if p else None,
+                team=(p.team if p else None) if p else None,
+                points=float(doc.points or 0.0),
+                updated_at=doc.updated_at,
+            )
+        )
     # If this is a full contest (not daily), mirror these points into Player.points
     try:
         if contest.contest_type != "daily" and updated_docs:
             # Batch update players so that Player.points equals the contest total for this contest
             for doc in updated_docs:
                 try:
-                    player = await Player.get(doc.player_id)
+                    player = await get_scoped(Player, tournament_id, doc.player_id)
                     if player:
                         player.points = float(doc.points or 0.0)
                         player.updated_at = now_ist()
@@ -613,13 +701,15 @@ class UploadResponse(BaseModel):
     url: str
     message: str
 
+
 @router.post("/{contest_id}/upload-logo", response_model=UploadResponse)
 async def upload_contest_logo(
     contest_id: str,
     file: UploadFile = File(..., description="Contest logo image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
@@ -629,24 +719,21 @@ async def upload_contest_logo(
 
     # Save new logo to GridFS
     try:
-        file_id = await upload_contest_logo_to_gridfs(file, filename_prefix=f"contest_{contest_id}")
+        file_id = await upload_contest_logo_to_gridfs(
+            file, filename_prefix=f"contest_{contest_id}"
+        )
         # Update contest with API URL and file id
         contest.logo_file_id = file_id
         contest.logo_url = f"/api/contests/{contest_id}/logo"
         contest.updated_at = now_ist()
         await contest.save()
         return UploadResponse(
-            url=contest.logo_url,
-            message="Logo uploaded successfully"
+            url=contest.logo_url, message="Logo uploaded successfully"
         )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload logo: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to upload logo: {str(e)}")
 
 
 @router.get(
@@ -658,25 +745,34 @@ async def upload_contest_logo(
 )
 async def export_contest_leaderboard_excel(
     contest_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """
     Export a contest's leaderboard as an .xlsx file.
     Requires authentication.
     """
-    contest = await Contest.get(contest_id)
+    contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
 
-    enrollments = await TeamContestEnrollment.find(
-        {
-            "contest_id": contest.id,
-            "status": EnrollmentStatus.ACTIVE,
-        }
-    ).to_list()
+    enrollments = (
+        await scoped(TeamContestEnrollment, tournament_id)
+        .find(
+            {
+                "contest_id": contest.id,
+                "status": EnrollmentStatus.ACTIVE,
+            }
+        )
+        .to_list()
+    )
 
     team_ids = [enr.team_id for enr in enrollments]
-    teams = await Team.find({"_id": {"$in": team_ids}}).to_list() if team_ids else []
+    teams = (
+        await scoped(Team, tournament_id).find({"_id": {"$in": team_ids}}).to_list()
+        if team_ids
+        else []
+    )
     teams_by_id = {str(t.id): t for t in teams}
 
     user_ids = list({t.user_id for t in teams})
@@ -702,19 +798,25 @@ async def export_contest_leaderboard_excel(
 
     pcp_docs = []
     if all_player_ids:
-        pcp_docs = await PlayerContestPoints.find(
-            {
-                "contest_id": contest.id,
-                "player_id": {"$in": list(all_player_ids)},
-            }
-        ).to_list()
+        pcp_docs = (
+            await scoped(PlayerContestPoints, tournament_id)
+            .find(
+                {
+                    "contest_id": contest.id,
+                    "player_id": {"$in": list(all_player_ids)},
+                }
+            )
+            .to_list()
+        )
     pcp_points_map = {str(doc.player_id): float(doc.points or 0.0) for doc in pcp_docs}
 
     players_by_id = {}
     if all_player_ids:
-        player_docs = await Player.find(
-            {"_id": {"$in": list(all_player_ids)}}
-        ).to_list()
+        player_docs = (
+            await scoped(Player, tournament_id)
+            .find({"_id": {"$in": list(all_player_ids)}})
+            .to_list()
+        )
         players_by_id = {str(p.id): p for p in player_docs}
 
     computed_rows = []
@@ -824,7 +926,7 @@ async def export_contest_leaderboard_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=\"{filename_ascii}\"; "
+                f'attachment; filename="{filename_ascii}"; '
                 f"filename*=UTF-8''{filename_star}"
             )
         },

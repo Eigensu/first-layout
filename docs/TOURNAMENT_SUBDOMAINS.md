@@ -43,7 +43,7 @@ Backend pieces:
   one document per tournament, `slug` unique.
 - Admin CRUD: `POST/GET/PUT/DELETE /api/admin/tournaments` plus
   `GET /api/admin/tournaments/check-slug/{slug}` for the live availability
-  check in the create form. Admin-only (`get_admin_user`).
+  check in the create form. Platform admins only (`get_platform_admin`).
 - Public resolution: `GET /api/tournaments/by-slug/{slug}` and
   `GET /api/tournaments` (non-archived list). No auth.
 
@@ -143,12 +143,24 @@ change touches those services. To fold them in over time:
    shared cluster), archive its Railway service. Goal state: one Railway
    service, zero per-tournament variables.
 
-> Note on data: tournament-scoped *data* isolation today comes from each
-> legacy deployment having its own database. The shared backend currently has
-> one database, so contests/teams/players there are shared across subdomains.
-> Scoping those collections by tournament (adding `tournament_id`, using the
-> `x-tournament-slug` header the middleware already forwards) is the natural
-> next step once tournaments run on the shared backend.
+> Note on data: every tenant collection (contests, teams, players, slots,
+> enrolments, points, sponsors, carousel, import and audit logs) carries a
+> `tournament_id`, and every query goes through `app/utils/tenant.py`. The
+> frontend sends the subdomain's slug in `X-Tournament-Slug` on every API
+> request. How the backend uses it depends on `TENANCY`:
+>
+> - `shared` — the one backend on `walle_arena`. The slug must name a
+>   non-archived tournament in the registry, and each request sees only that
+>   tournament's data.
+> - `single` (the default) — a legacy deployment with its own database. The
+>   header is ignored and the deployment sees all of its own data, as before.
+>
+> A service whose `TENANCY` does not match its database refuses to start
+> (`config/startup_checks.py`). Admin lives on each subdomain. Under `shared`
+> you are admin there if your membership in that tournament has the admin
+> role, or if you are a platform admin; only platform admins see the
+> Tournaments tab. Under `single`, the global `is_admin` flag decides, as
+> before (§4.7 of `docs/UNIFIED_AUTH_SPEC.md`).
 
 ## Local development
 

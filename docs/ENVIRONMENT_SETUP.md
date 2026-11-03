@@ -98,6 +98,12 @@ JWT_EXPIRE_MINUTES=1440
 MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=world-tower
 
+# Tenancy: "single" (default) for a legacy per-tournament service, whose
+# database holds one tournament; "shared" for the one backend on walle_arena,
+# where each request names its tournament in X-Tournament-Slug. The service
+# refuses to start if this does not match what the database holds.
+TENANCY=single
+
 # CORS
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 

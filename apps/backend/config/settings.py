@@ -2,7 +2,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -28,9 +28,33 @@ class Settings(BaseSettings):
     # Google OAuth (Sign in with Google)
     google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
 
+    # Apple Sign In — the native mobile identity token's `aud` claim is the
+    # app's iOS bundle identifier (not a web "Services ID"), so this must
+    # equal the mobile app's ios.bundleIdentifier.
+    apple_bundle_id: Optional[str] = Field(default=None, alias="APPLE_BUNDLE_ID")
+
     # MongoDB Database
     mongodb_url: str = Field(default="mongodb://localhost:27017", alias="MONGODB_URL")
     mongodb_db_name: str = Field(default="world-tower", alias="MONGODB_DB_NAME")
+
+    # Tenancy (app/utils/tenant.py). "single" is a legacy per-tournament
+    # service: one database holds one tournament, whose documents carry no
+    # tournament_id. "shared" is the one backend serving every tournament from
+    # walle_arena, where each request names its tournament. The default keeps
+    # the live services unchanged; the unified backend sets "shared".
+    tenancy: Literal["single", "shared"] = Field(default="single", alias="TENANCY")
+
+    # Rate limits on the auth routes (docs/RATE_LIMITING_SPEC.md). Enabled but
+    # not enforcing by default: the limiter counts and logs what it would have
+    # blocked, and RATE_LIMIT_ENFORCE=true turns that into 429s once the logs
+    # show real users are clear of the limits. RATE_LIMIT_ENFORCE_RULES names
+    # rules to enforce on their own first, comma-separated, e.g.
+    # "forgot_password_request". Proxy hops is how many proxies in front of the
+    # service append to X-Forwarded-For (spec §4.1).
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    rate_limit_enforce: bool = Field(default=False, alias="RATE_LIMIT_ENFORCE")
+    rate_limit_enforce_rules: str = Field(default="", alias="RATE_LIMIT_ENFORCE_RULES")
+    rate_limit_proxy_hops: int = Field(default=1, alias="RATE_LIMIT_PROXY_HOPS")
 
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
@@ -47,7 +71,6 @@ class Settings(BaseSettings):
     payment_gateway_key: Optional[str] = Field(
         default=None, alias="PAYMENT_GATEWAY_KEY"
     )
-    email_service_key: Optional[str] = Field(default=None, alias="EMAIL_SERVICE_KEY")
 
     # Cloudinary
     cloudinary_cloud_name: Optional[str] = Field(
@@ -73,6 +96,13 @@ class Settings(BaseSettings):
     otp_expiry_seconds: int = Field(default=600, alias="OTP_EXPIRY_SECONDS")
     otp_max_attempts: int = Field(default=5, alias="OTP_MAX_ATTEMPTS")
     reset_token_ttl_seconds: int = Field(default=600, alias="RESET_TOKEN_TTL_SECONDS")
+
+    # Resend, the email channel for reset and change-email codes (spec §5.4).
+    # Both must be set for the channel to be offered; until then the email
+    # option answers 503 and the website hides it.
+    resend_api_key: Optional[str] = Field(default=None, alias="RESEND_API_KEY")
+    resend_from_email: Optional[str] = Field(default=None, alias="RESEND_FROM_EMAIL")
+    resend_reply_to: Optional[str] = Field(default=None, alias="RESEND_REPLY_TO")
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -110,6 +140,11 @@ class Settings(BaseSettings):
 
         combined = "^(?:" + "|".join(patterns) + ")$"
         return combined
+
+    @property
+    def shared_tenancy(self) -> bool:
+        """True on the one backend that serves every tournament."""
+        return self.tenancy == "shared"
 
     @property
     def is_production(self) -> bool:

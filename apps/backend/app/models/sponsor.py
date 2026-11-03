@@ -1,13 +1,15 @@
-from beanie import Document, Indexed
-from pydantic import Field, HttpUrl, ConfigDict
 from datetime import datetime
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
+from beanie import Document, PydanticObjectId
+from pydantic import ConfigDict, Field, HttpUrl
 from pymongo import IndexModel
 
 
 class SponsorTier(str, Enum):
     """Sponsor tier levels"""
+
     PLATINUM = "platinum"
     GOLD = "gold"
     SILVER = "silver"
@@ -17,7 +19,10 @@ class SponsorTier(str, Enum):
 class Sponsor(Document):
     """Sponsor document model for MongoDB using Beanie ODM"""
 
-    name: Indexed(str, unique=True)  # type: ignore
+    # Not unique: the field-level unique was shadowed by the "name" entry in
+    # Settings.indexes and never built (spec §13.8, R22). Two tournaments may well
+    # share a sponsor.
+    name: str
     tier: SponsorTier
     # Public URL to logo served via API; will be '/api/v1/sponsors/{id}/logo'
     logo: Optional[str] = None
@@ -36,17 +41,31 @@ class Sponsor(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "sponsors"  # MongoDB collection name
         use_state_management = False  # Disabled to avoid HttpUrl encoding issues
         indexes = [
+            "tournament_id",
             "name",
             "tier",
             [("display_order", 1)],
             [("created_at", -1)],
             # Enforce uniqueness of priority per group (featured vs non-featured)
             # Partial index so it only applies when priority > 0 (before migration many docs have 0)
-            IndexModel([("featured", 1), ("priority", 1)], unique=True, partialFilterExpression={"priority": {"$gt": 0}}),
+            # Per tournament: in one database, two tournaments' sponsors may
+            # both be priority 3. The tournament-blind first version stopped
+            # the migration at the second tournament (spec §13.11, R38);
+            # config/database.py drops it where it was built.
+            IndexModel(
+                [("tournament_id", 1), ("featured", 1), ("priority", 1)],
+                unique=True,
+                partialFilterExpression={"priority": {"$gt": 0}},
+                name="uniq_sponsor_priority_per_tournament",
+            ),
         ]
 
     def __repr__(self):

@@ -1,7 +1,8 @@
-from beanie import Document
-from pydantic import Field
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+from beanie import Document, PydanticObjectId
+from pydantic import Field
 
 
 class AdminActionLog(Document):
@@ -17,9 +18,14 @@ class AdminActionLog(Document):
     details: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Tenant scope -- see app/utils/tenant.py. Optional only until the
+    # backfill fills it in; None means "written before the migration".
+    tournament_id: Optional[PydanticObjectId] = None
+
     class Settings:
         name = "admin_action_logs"
         indexes = [
+            "tournament_id",
             "admin_id",
             "target_id",
             [("created_at", -1)],

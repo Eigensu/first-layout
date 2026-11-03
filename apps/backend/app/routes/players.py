@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
+
 from beanie import PydanticObjectId
-from app.models.player import Player
-from app.models.contest import Contest
-from app.schemas.player import PlayerOut
+from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.common.enums.contests import ContestFormat
+from app.models.contest import Contest
+from app.models.player import Player
+from app.schemas.player import PlayerOut
 from app.services.auction import ACTIVE_STATUS
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped
 
 router = APIRouter(prefix="/api/players", tags=["players"])
+
 
 def serialize_player(player: Player) -> PlayerOut:
     """Convert Player model to PlayerOut schema"""
@@ -26,12 +30,18 @@ def serialize_player(player: Player) -> PlayerOut:
         created_at=player.created_at,
     )
 
+
 @router.get("", response_model=List[PlayerOut])
 async def list_players(
-    slot: Optional[str] = Query(None, description="Filter players by Slot ObjectId string"),
-    contest_id: Optional[str] = Query(None, description="If provided, filter by allowed teams for daily contest"),
+    slot: Optional[str] = Query(
+        None, description="Filter players by Slot ObjectId string"
+    ),
+    contest_id: Optional[str] = Query(
+        None, description="If provided, filter by allowed teams for daily contest"
+    ),
     limit: int = Query(1000, ge=1, le=5000),
     skip: int = Query(0, ge=0),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """Get list of players with optional filtering by slot (ObjectId string)."""
     query = {}
@@ -39,10 +49,7 @@ async def list_players(
         query = {"slot": str(slot)}
     # If contest_id provided and contest is daily with restrictions, apply allowed team filter
     if contest_id:
-        try:
-            contest = await Contest.get(PydanticObjectId(contest_id))
-        except Exception:
-            contest = None
+        contest = await get_scoped(Contest, tournament_id, contest_id)
         if contest and contest.contest_type == "daily" and contest.allowed_teams:
             # add team in allowed_teams filter together with slot if present
             team_filter = {"team": {"$in": contest.allowed_teams}}
@@ -58,19 +65,30 @@ async def list_players(
                 "price": {"$gt": 0},
                 "$or": [{"status": ACTIVE_STATUS}, {"status": None}],
             }
-            query = {"$and": [query, eligibility_filter]} if query else eligibility_filter
+            query = (
+                {"$and": [query, eligibility_filter]} if query else eligibility_filter
+            )
 
-    players = await Player.find(query).sort("+name").skip(skip).limit(limit).to_list()
+    players = (
+        await scoped(Player, tournament_id)
+        .find(query)
+        .sort("+name")
+        .skip(skip)
+        .limit(limit)
+        .to_list()
+    )
     return [serialize_player(player) for player in players]
 
+
 @router.get("/{id}", response_model=PlayerOut)
-async def get_player(id: str):
+async def get_player(id: str, tournament_id: TenantId = Depends(get_tenant)):
     try:
-        player = await Player.get(PydanticObjectId(id))
+        PydanticObjectId(id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid player ID")
-    
+    player = await get_scoped(Player, tournament_id, id)
+
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    
+
     return serialize_player(player)

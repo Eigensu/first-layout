@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.models.admin.slot import Slot
 from app.models.player import Player
-from app.schemas.slot import SlotPublic, SlotListPublic
+from app.schemas.slot import SlotListPublic, SlotPublic
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped
 
 router = APIRouter(prefix="/api/slots", tags=["slots"])
 
@@ -27,23 +29,24 @@ def to_public(slot: Slot, player_count: int) -> SlotPublic:
 async def list_slots(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    total = await Slot.find_all().count()
+    total = await scoped(Slot, tournament_id).count()
     skip = (page - 1) * page_size
-    slots = await Slot.find_all().skip(skip).limit(page_size).to_list()
+    slots = await scoped(Slot, tournament_id).skip(skip).limit(page_size).to_list()
 
     results: list[SlotPublic] = []
     for s in slots:
-        cnt = await Player.find(Player.slot == str(s.id)).count()
+        cnt = await scoped(Player, tournament_id).find(Player.slot == str(s.id)).count()
         results.append(to_public(s, cnt))
 
     return {"slots": results, "total": total}
 
 
 @router.get("/{slot_id}", response_model=SlotPublic)
-async def get_slot(slot_id: str):
-    slot = await Slot.get(slot_id)
+async def get_slot(slot_id: str, tournament_id: TenantId = Depends(get_tenant)):
+    slot = await get_scoped(Slot, tournament_id, slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
-    cnt = await Player.find(Player.slot == str(slot.id)).count()
+    cnt = await scoped(Player, tournament_id).find(Player.slot == str(slot.id)).count()
     return to_public(slot, cnt)

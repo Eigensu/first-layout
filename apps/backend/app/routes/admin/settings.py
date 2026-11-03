@@ -1,13 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
-from app.models.settings import GlobalSettings
-from app.models.user import User
-from app.utils.dependencies import get_admin_user
-from app.utils.gridfs import upload_contest_logo_to_gridfs, delete_contest_logo_from_gridfs, open_contest_logo_stream
-from app.utils.timezone import now_ist
-from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
+from app.models.settings import GlobalSettings, default_logo_path
+from app.models.user import User
+from app.schemas.settings import GlobalSettingsResponse, GlobalSettingsUpdate
+from app.utils.dependencies import get_tournament_admin
+from app.utils.gridfs import (
+    delete_contest_logo_from_gridfs,
+    open_contest_logo_stream,
+    upload_contest_logo_to_gridfs,
+)
+from app.utils.tenant import TenantId, get_tenant
+from app.utils.timezone import now_ist
+
 router = APIRouter(prefix="/api/admin/settings", tags=["Admin - Settings"])
+
 
 class UploadResponse(BaseModel):
     url: str
@@ -24,20 +31,22 @@ def _to_settings_response(settings: GlobalSettings) -> GlobalSettingsResponse:
 
 @router.get("", response_model=GlobalSettingsResponse)
 async def get_settings(
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    """Get the global settings singleton."""
-    settings = await GlobalSettings.get_instance()
+    """Get this tournament's settings, or the defaults it still tracks."""
+    settings = await GlobalSettings.get_for_tournament(tournament_id)
     return _to_settings_response(settings)
 
 
 @router.put("", response_model=GlobalSettingsResponse)
 async def update_settings(
     data: GlobalSettingsUpdate,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    """Update the global team-composition settings."""
-    settings = await GlobalSettings.get_instance()
+    """Update this tournament's team-composition settings."""
+    settings = await GlobalSettings.get_own_for_tournament(tournament_id)
 
     new_min = (
         data.min_players_per_team
@@ -67,30 +76,44 @@ async def update_settings(
 @router.post("/logo", response_model=UploadResponse)
 async def upload_default_logo(
     file: UploadFile = File(..., description="Default contest logo image"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
-    settings = await GlobalSettings.get_instance()
+    settings = await GlobalSettings.get_own_for_tournament(tournament_id)
 
     import logging
+
     logger = logging.getLogger(__name__)
 
-    # Delete old logo if it exists
-    if settings.default_contest_logo_file_id:
+    # Delete old logo if it exists -- unless another settings document still
+    # shows it. A tournament's own row starts as a copy of the platform
+    # default, logo included, so its "old" logo can be the default every other
+    # tournament is still using.
+    old_logo = settings.default_contest_logo_file_id
+    shared = old_logo and await GlobalSettings.find_one(
+        GlobalSettings.default_contest_logo_file_id == old_logo,
+        GlobalSettings.id != settings.id,
+    )
+    if old_logo and not shared:
         try:
             await delete_contest_logo_from_gridfs(settings.default_contest_logo_file_id)
         except Exception as e:
-            logger.warning(f"Failed to delete old default logo {settings.default_contest_logo_file_id}: {e}")
+            logger.warning(
+                f"Failed to delete old default logo {settings.default_contest_logo_file_id}: {e}"
+            )
 
     # Save new logo
     try:
-        file_id = await upload_contest_logo_to_gridfs(file, filename_prefix="default_contest_logo")
+        file_id = await upload_contest_logo_to_gridfs(
+            file, filename_prefix="default_contest_logo"
+        )
         settings.default_contest_logo_file_id = file_id
         settings.updated_at = now_ist()
         await settings.save()
-        
+
         return UploadResponse(
-            url="/api/settings/logo",
-            message="Default logo uploaded successfully"
+            url=default_logo_path(tournament_id),
+            message="Default logo uploaded successfully",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload logo: {str(e)}")

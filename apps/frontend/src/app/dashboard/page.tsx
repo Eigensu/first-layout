@@ -12,8 +12,11 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE_URL, LS_KEYS } from "@/common/consts";
+import { API_BASE_URL, LS_KEYS, tenantHeaders } from "@/common/consts";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
+import { getMyTournaments, type MyTournaments } from "@/lib/api/tournaments";
+import { MyTournamentsSection } from "@/components/dashboard/MyTournamentsSection";
+import { getImageUrl } from "@/lib/utils";
 import {
   publicContestsApi,
   type Contest,
@@ -21,6 +24,8 @@ import {
 } from "@/lib/api/public/contests";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
+import { ChangeEmailSection } from "@/components/dashboard/ChangeEmailSection";
+import { getResetChannels } from "@/lib/api/emailCodes";
 
 type PastContestSummary = {
   contestId: string;
@@ -41,11 +46,14 @@ export default function DashboardPage() {
 }
 
 function DashboardContent() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, updateUser } = useAuth();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamResponse[]>([]);
   const [pastContests, setPastContests] = useState<PastContestSummary[]>([]);
+  const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
+    null,
+  );
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -53,6 +61,19 @@ function DashboardContent() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Changing the email needs the email channel; until this service has one,
+  // the form stays hidden rather than failing on submit.
+  const [emailChannel, setEmailChannel] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getResetChannels().then((channels) => {
+      if (active) setEmailChannel(channels.email);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return "-";
@@ -182,6 +203,22 @@ function DashboardContent() {
     loadDashboardData();
   }, [isAuthenticated, user]);
 
+  // Apart from the load above, so a slow /me/tournaments never holds the rest
+  // of the dashboard behind its loading screen. A backend without memberships
+  // (a single-tournament one, or one from before them) leaves the section out.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    let active = true;
+    getMyTournaments()
+      .catch(() => null)
+      .then((found) => {
+        if (active) setMyTournaments(found);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, user]);
+
   const pastContestIdSet = useMemo(
     () => new Set(pastContests.map((item) => item.contestId)),
     [pastContests],
@@ -240,6 +277,7 @@ function DashboardContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...tenantHeaders(),
         },
         body: JSON.stringify({
           current_password: currentPassword,
@@ -398,11 +436,7 @@ function DashboardContent() {
                 <div className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-2xl overflow-hidden bg-slate-200 flex items-center justify-center text-xl font-bold text-slate-700 shrink-0">
                   {user?.avatar_url ? (
                     <img
-                      src={
-                        user.avatar_url.startsWith("/api")
-                          ? `${API_BASE_URL}${user.avatar_url}`
-                          : user.avatar_url
-                      }
+                      src={getImageUrl(user.avatar_url)}
                       alt={user?.username || "avatar"}
                       className="h-full w-full object-cover"
                     />
@@ -438,6 +472,13 @@ function DashboardContent() {
             </section>
 
             <section className="xl:col-span-8 space-y-6">
+              {myTournaments && (
+                <MyTournamentsSection
+                  tournaments={myTournaments}
+                  username={user?.username}
+                />
+              )}
+
               <div className="rounded-2xl sm:rounded-3xl border border-white/70 bg-white/85 shadow-lg p-4 sm:p-7">
                 <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 mb-3 sm:mb-4">
                   <Users className="h-5 w-5 text-cyan-600" />
@@ -607,6 +648,14 @@ function DashboardContent() {
                   </button>
                 </form>
               </div>
+
+              {emailChannel && (
+                <ChangeEmailSection
+                  currentEmail={user?.email}
+                  authProvider={user?.auth_provider}
+                  onChanged={updateUser}
+                />
+              )}
             </section>
           </div>
         )}

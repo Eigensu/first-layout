@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Settings, LogOut } from "lucide-react";
+import { getImageUrl } from "@/lib/utils";
 
 interface MobileUserMenuProps {
   onClose?: () => void;
@@ -35,7 +36,7 @@ function MobileUserMenu({ onClose }: MobileUserMenuProps = {}) {
             {user.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={user.avatar_url}
+                src={getImageUrl(user.avatar_url)}
                 alt={user.username}
                 className="w-full h-full object-cover"
               />

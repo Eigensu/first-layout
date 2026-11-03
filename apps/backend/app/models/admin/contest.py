@@ -1,7 +1,8 @@
+from datetime import datetime
+from typing import List, Optional
+
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field
-from datetime import datetime
-from typing import Optional, List
 
 
 class Contest(Document):

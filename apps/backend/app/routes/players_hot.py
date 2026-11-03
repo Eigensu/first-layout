@@ -1,12 +1,14 @@
-from typing import List, Optional, Literal
-from fastapi import APIRouter, HTTPException, Query
-from beanie import PydanticObjectId
+from typing import List, Literal, Optional
 
-from app.schemas.player_hot import PlayerHot, PlayerHotIds, PlayerHotSingle
-from app.schemas.player import PlayerOut
-from app.models.player import Player
-from app.services import hot_players as svc
+from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.common.consts.index import HOT_PLAYER_TEAM_SELECTIONS_THRESHOLD
+from app.models.player import Player
+from app.schemas.player import PlayerOut
+from app.schemas.player_hot import PlayerHot, PlayerHotIds, PlayerHotSingle
+from app.services import hot_players as svc
+from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped
 
 router = APIRouter(prefix="/api/players", tags=["players", "hot"])
 
@@ -36,6 +38,7 @@ async def list_hot_players(
     limit: int = Query(200, ge=1, le=1000),
     skip: int = Query(0, ge=0),
     sort: Literal["count_desc", "name_asc"] = Query("count_desc"),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     """List players with their selection counts and hot flag.
 
@@ -44,13 +47,21 @@ async def list_hot_players(
     thr = threshold or HOT_PLAYER_TEAM_SELECTIONS_THRESHOLD
 
     if contest_id:
-        rows = await svc.aggregate_hot_in_contest(contest_id, skip=skip, limit=limit)
+        rows = await svc.aggregate_hot_in_contest(
+            contest_id, skip=skip, limit=limit, tournament_id=tournament_id
+        )
     else:
-        rows = await svc.aggregate_hot_global(skip=skip, limit=limit)
+        rows = await svc.aggregate_hot_global(
+            skip=skip, limit=limit, tournament_id=tournament_id
+        )
 
     player_ids = [r["_id"] for r in rows if r.get("_id")]
     # Fetch Players in one query
-    players = await Player.find({"_id": {"$in": [PydanticObjectId(pid) for pid in player_ids if pid]}}).to_list()
+    players = (
+        await scoped(Player, tournament_id)
+        .find({"_id": {"$in": [PydanticObjectId(pid) for pid in player_ids if pid]}})
+        .to_list()
+    )
     players_by_id = {str(p.id): p for p in players}
 
     items: List[PlayerHot] = []
@@ -83,14 +94,23 @@ async def list_hot_player_ids(
     threshold: Optional[int] = Query(None, ge=1),
     limit: int = Query(1000, ge=1, le=5000),
     skip: int = Query(0, ge=0),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     thr = threshold or HOT_PLAYER_TEAM_SELECTIONS_THRESHOLD
     if contest_id:
-        rows = await svc.aggregate_hot_in_contest(contest_id, skip=skip, limit=limit)
+        rows = await svc.aggregate_hot_in_contest(
+            contest_id, skip=skip, limit=limit, tournament_id=tournament_id
+        )
     else:
-        rows = await svc.aggregate_hot_global(skip=skip, limit=limit)
+        rows = await svc.aggregate_hot_global(
+            skip=skip, limit=limit, tournament_id=tournament_id
+        )
 
-    ids = [str(r["_id"]) for r in rows if int(r.get("selection_count", 0)) >= thr and r.get("_id")]
+    ids = [
+        str(r["_id"])
+        for r in rows
+        if int(r.get("selection_count", 0)) >= thr and r.get("_id")
+    ]
     return PlayerHotIds(player_ids=ids, threshold=thr)
 
 
@@ -99,18 +119,20 @@ async def get_player_hot(
     player_id: str,
     contest_id: Optional[str] = Query(None),
     threshold: Optional[int] = Query(None, ge=1),
+    tournament_id: TenantId = Depends(get_tenant),
 ):
     thr = threshold or HOT_PLAYER_TEAM_SELECTIONS_THRESHOLD
 
     # Validate player exists
     try:
-        p = await Player.get(PydanticObjectId(player_id))
+        PydanticObjectId(player_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid player ID")
+    p = await get_scoped(Player, tournament_id, player_id)
     if not p:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    global_count = await svc.count_global(player_id)
+    global_count = await svc.count_global(player_id, tournament_id=tournament_id)
     result: PlayerHotSingle | None = PlayerHotSingle(
         player_id=player_id,
         selection_count_global=global_count,
@@ -118,7 +140,9 @@ async def get_player_hot(
     )
 
     if contest_id:
-        contest_count = await svc.count_in_contest(player_id, contest_id)
+        contest_count = await svc.count_in_contest(
+            player_id, contest_id, tournament_id=tournament_id
+        )
         result.selection_count_contest = contest_count
         result.is_hot_contest = contest_count >= thr
 

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class ContestBase(BaseModel):
@@ -11,7 +12,9 @@ class ContestBase(BaseModel):
     max_participants: int = Field(default=100, ge=1)
     start_date: datetime
     end_date: Optional[datetime] = None
-    status: str = Field(default="Live", description="Live, Ongoing, Completed, Cancelled")
+    status: str = Field(
+        default="Live", description="Live, Ongoing, Completed, Cancelled"
+    )
     description: Optional[str] = None
     rules: Optional[dict] = None
     prize_distribution: Optional[dict] = None

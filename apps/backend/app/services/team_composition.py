@@ -1,5 +1,5 @@
 """
-Team composition rules driven by GlobalSettings.
+Team composition rules driven by the tournament's GlobalSettings.
 
 Limits how many players a fantasy squad may draw from a single real-world
 team. Used by both the create and update paths in routes/teams.py so the
@@ -15,6 +15,7 @@ from app.models.contest import Contest
 from app.models.player import Player
 from app.models.settings import GlobalSettings
 from app.services.auction import resolve_max_players_per_team
+from app.utils.tenant import TenantId
 
 
 def _pluralize(count: int, noun: str) -> str:
@@ -26,6 +27,8 @@ async def validate_team_composition(
     contest: Optional[Contest],
     squad_size: int,
     max_players_allowed: Optional[int],
+    *,
+    tournament_id: TenantId,
 ) -> None:
     """
     Enforce per-real-world-team limits on a squad selection.
@@ -36,13 +39,13 @@ async def validate_team_composition(
 
     - Maximum (always checked): no real-world team may contribute more than
       ``max_players_per_team`` players, taken from the contest override when
-      set and from GlobalSettings otherwise.
+      set and from this tournament's settings otherwise.
     - Minimum (only on a complete squad): for a daily contest between exactly
       two teams, each must contribute at least ``min_players_per_team``. This
       is deferred until the squad is full so partially-built teams are not
       rejected mid-selection.
     """
-    settings = await GlobalSettings.get_instance()
+    settings = await GlobalSettings.get_for_tournament(tournament_id)
     max_per_team = resolve_max_players_per_team(contest, settings)
     team_counts = Counter(p.team for p in players if p.team)
 
