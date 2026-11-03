@@ -1,6 +1,7 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
-**Status:** Proposed — awaiting approval before implementation
+**Status:** Phases 1–3 implemented (§12). Not yet run against real credentials.
+Response models are deliberately partial until the API doc is re-checked (§8).
 **Owner:** Backend
 **Scope:** `apps/backend`
 **Upstream:** `https://cricheroes.in/api/v1`, "Client" resource group (17 GET endpoints)
@@ -31,7 +32,7 @@ it out.
 |---|---|
 | Which endpoints get routes | Tournament-level set (8), client covers all 17 |
 | Response model fidelity | Full fidelity, lenient — model every documented field, allow unknown extras |
-| Route access | Admin-only, via the existing `get_admin_user` dependency |
+| Route access | **Platform admins only** (`get_platform_admin`) — §9. Originally "admin-only" via `get_admin_user`, which `main` has since replaced with separate platform and tournament admins |
 | Caching | Out of scope here (no caller yet), but a **hard precondition** on the first polling caller — §6.3 |
 | 429 handling | Own exception, ≤2 retries with backoff, surfaced as 429 — §6.5, §7 |
 
@@ -68,7 +69,7 @@ it out.
 apps/backend/
 ├── config/settings.py                        (modified)  CRICHEROES_* settings
 ├── app/
-│   ├── schemas/cricheroes.py                 (new)  ~30 response models
+│   ├── schemas/cricheroes.py                 (new)  response models (§8)
 │   ├── services/
 │   │   ├── cricheroes_client.py              (new)  CricHeroesClient, 17 methods
 │   │   └── cricheroes_errors.py              (new)  exception taxonomy
@@ -105,7 +106,8 @@ New settings on the existing `Settings` class, following the established
 | `cricheroes_timeout_seconds` | `CRICHEROES_TIMEOUT_SECONDS` | `15.0` | no |
 | `cricheroes_max_retries` | `CRICHEROES_MAX_RETRIES` | `2` | no |
 
-Plus a `cricheroes_is_configured` property (all three credentials present).
+The timeout must be positive and the retry count non-negative; a bad value fails
+at startup rather than at the first call.
 
 `cricheroes_timeout_seconds` defaults **below** the 30s upstream allows — see
 §6.4 for why. `cricheroes_max_retries` applies to 429 only (§6.5); set it to `0`
@@ -204,7 +206,7 @@ to omitting it upstream. Python-side names are snake_case (`team_id`,
 | `get_tournament_boundary_count(tournament_id)` | `get-tournament-boundary-count/{id}` |
 | `get_player_tournament_match_batting_data(tournament_id, player_id)` | `get-player-tournament-match-batting-data/{tid}/{pid}` |
 | `get_player_tournament_match_bowling_data(tournament_id, player_id)` | `get-player-tournament-match-bowling-data/{tid}/{pid}` |
-| `get_tournament_match_list(tournament_id, type=, team_id=, order=)` | `get-tournament-match-list/{id}` |
+| `get_tournament_match_list(tournament_id, match_type=, team_id=, order=)` | `get-tournament-match-list/{id}` — `match_type` is sent as `type` |
 | `get_tournament_point_table(tournament_id, round_id=, group_id=)` | `get-tournament-point-table/{id}` |
 
 **Leaderboards (5)**
@@ -299,7 +301,14 @@ request into several.
 
 - Max **2** retries, exponential backoff with jitter (~0.5s, ~1.5s), capped so
   worst-case added latency stays well inside the 15s timeout.
-- `Retry-After` is honoured when present, up to the timeout budget.
+- `Retry-After` (delta-seconds form) is honoured when present, in place of the
+  backoff. If it asks for longer than the budget left, the client **gives up
+  immediately** and passes the wait on to the caller, rather than sleep a
+  shortened interval: coming back early would only earn a second 429 — and
+  maybe a second charge. An HTTP-date `Retry-After` is ignored and the normal
+  backoff applies.
+- The CLI credential check (§11) runs with retries off, so one invocation is
+  exactly one call.
 - Retries are deliberately few: it is **unconfirmed whether a 429 response
   counts against the quota** (§13.4). Until CricHeroes confirms it does not,
   every retry is assumed to cost money.
@@ -309,7 +318,7 @@ request into several.
 ## 7. Error taxonomy
 
 A single generic exception would make the most common failure — placeholder
-credentials — indistinguishable from an unknown tournament id. Six types, all
+credentials — indistinguishable from an unknown tournament id. Seven types, all
 subclassing `CricHeroesError`:
 
 | Exception | Trigger | Route status | Meaning |
@@ -320,6 +329,13 @@ subclassing `CricHeroesError`:
 | `CricHeroesAPIError` | HTTP 200 + `status: false` | **404** | Upstream has no such tournament/match |
 | `CricHeroesTransportError` | timeout, DNS, connection reset | **504** | Never reached upstream |
 | `CricHeroesHTTPError` | any other non-2xx, or non-JSON body | **502** | Upstream is unhealthy |
+| `CricHeroesSchemaError` | HTTP 200, but `data` does not fit our model | **502** | Our model of the response is wrong |
+
+`CricHeroesSchemaError` subclasses `CricHeroesHTTPError`, so it maps to 502 with
+no extra route code; it exists so the message names the endpoint and the field
+that did not fit. Given §8, it is the error most likely to appear on the first
+run against real credentials, and it should be read as "fix the model", not
+"CricHeroes is down".
 
 Three mappings are deliberate and worth stating:
 
@@ -346,13 +362,43 @@ Three mappings are deliberate and worth stating:
 
 ## 8. Response models
 
-`app/schemas/cricheroes.py`, ~30 models on a shared base:
-`model_config = ConfigDict(populate_by_name=True, extra="allow")`.
+`app/schemas/cricheroes.py`, on a shared base:
+`ConfigDict(populate_by_name=True, extra="allow", coerce_numbers_to_str=True)`.
 
 **Lenient on purpose.** CricHeroes adds keys without notice. A strict model
 turns an additive upstream change into a 500 on our side. Extras are *kept*, not
 just tolerated, so they survive into our own responses instead of being silently
 dropped — a new upstream field is visible to the frontend before we model it.
+`coerce_numbers_to_str` keeps a field the doc shows as a string (`"92.2"`) a
+string if a row arrives with a bare number, instead of failing the response.
+
+### 8.0 What is modelled, and why it is partial
+
+> **Implementation note.** The first implementation was built from the full API
+> doc and then parked when this spec was requested. The parked code and the
+> pasted doc were both lost with the session container, so the implementation
+> was rebuilt from this spec alone. This spec records the aliases (§8.1) and type
+> traps (§8.2) but not every endpoint's full field list.
+
+So a field is declared only when it needs an alias, carries a type trap, or
+comes from an example body that is still on hand (the batting leaderboard and
+the stats filter). Every other field **passes through as an extra** under its
+upstream name. For a field whose upstream name is already a clean identifier
+that loses nothing on the wire — the frontend sees the same key either way —
+and guessing its type could only make valid responses fail. Declared fields
+whose exact type is unconfirmed are typed `Loose = Union[int, float, str]`,
+which keeps whatever arrives.
+
+Five endpoints have no model at all and return the raw `data`: playing squad,
+manhattan graph, worm graph, and the two per-player match-data endpoints. Even
+whether their `data` is an object or a list is not on hand. None has a route
+or a caller, so their return types are free to change.
+
+**To finish:** re-supply the API doc, add each endpoint's remaining fields
+(tightening `Loose` where the examples settle it), and model the five raw
+endpoints. Running the routes against real credentials (§11) is the other way
+to find out — a wrong model shows up as a `CricHeroesSchemaError` naming the
+endpoint and field.
 
 ### 8.1 Fields needing an alias
 
@@ -371,8 +417,8 @@ safe attribute name plus an `alias`:
 
 ### 8.2 Type traps found in the documented payloads
 
-These are the ones that would break a naively-typed model. Each gets a
-regression test built from the doc's own example body.
+These are the ones that would break a naively-typed model. Each has a
+regression test, using the values the doc shows for that field.
 
 | Field | Trap |
 |---|---|
@@ -398,8 +444,8 @@ still come through under their original upstream names.
 
 ## 9. Routes
 
-`/api/admin/cricheroes`, tagged `Admin - CricHeroes`, with `get_admin_user` as a
-**router-level** dependency so no individual route can be added ungated by
+`/api/admin/cricheroes`, tagged `Admin - CricHeroes`, with `get_platform_admin`
+as a **router-level** dependency so no individual route can be added ungated by
 mistake.
 
 | Route | Query params |
@@ -424,6 +470,22 @@ not control the rate limits of, and this data feeds tournament setup and imports
 rather than public browsing. Public exposure would put our quota on the open
 internet with no caching in front of it.
 
+**Why platform admins, not tournament admins.** Since this spec was first
+written, `main` split admin into platform admins (who run the registry) and
+per-tournament admins, and every `/api/admin` route outside the registry is
+guarded by `get_tournament_admin`. These routes are deliberately the exception:
+
+- `{id}` is a CricHeroes id. Being admin of one of *our* tournaments says
+  nothing about it — a tournament admin could query any CricHeroes tournament.
+- The quota is one per account. A tournament admin's polling would spend every
+  other tournament's budget.
+
+`tests/test_tournament_admin.py` asserts every admin route has exactly one,
+correct guard; `/api/admin/cricheroes` is listed there alongside the registry
+as platform-admin territory. Once §13.1 links CricHeroes ids to our
+`Tournament` documents, a tournament-scoped variant keyed on our own slug can be
+opened to tournament admins.
+
 **Not surfaced:** the 5 match-detail and 4 player-stats endpoints. Available on
 the client for server-side use; they get routes when a screen needs them.
 
@@ -431,9 +493,11 @@ the client for server-side use; they get routes when a screen needs them.
 
 ## 10. Testing
 
-Two files, no network, `httpx.MockTransport` throughout. Every fixture body is a
-trimmed copy of an example from the API doc. The backoff sleep is injectable so
-the retry tests assert on attempt counts without actually waiting.
+Two files, 81 tests, no network, `httpx.MockTransport` throughout. The
+batting-leaderboard and stats-filter fixtures are trimmed from the API doc's own
+examples; the rest are minimal bodies using the values the doc shows for the
+field under test (§8.0). The backoff sleep is injectable so the retry tests
+assert on attempt counts without actually waiting.
 
 **`test_cricheroes_client.py`** — headers and config (all five headers sent;
 missing credentials raise pre-flight and name the missing vars; partial
@@ -443,19 +507,30 @@ with a message pointing at the env vars; 500 → HTTP error, *not* auth;
 transport error; non-JSON body → HTTP error); retries (429 then 200 succeeds
 without surfacing; 429 throughout raises the rate-limit error after exactly
 `max_retries` attempts; `max_retries=0` raises on the first 429; a 500 is *not*
-retried; `Retry-After` is honoured but clamped to the timeout budget); URLs and
-params (optional params
-omitted when unset; upstream param spellings; the shared partnership path);
-payload parsing (each alias group above; each type trap above; unknown fields
-kept); lifecycle (owned client closed, injected client not).
+retried, nor is a transport error; `Retry-After` is honoured, a `Retry-After`
+beyond the budget gives up without retrying, total waiting stays within the
+budget, an HTTP-date `Retry-After` falls back to backoff); credentials never
+appear in logs; URLs and params (optional params omitted when unset; upstream
+param spellings; leaderboard paths; the shared partnership path); shapes
+(boundary-count unwrapping; a list endpoint answering an object, and a field
+that does not fit, both raise the schema error naming the endpoint); payload
+parsing (each alias group above; each type trap above; unknown fields kept);
+lifecycle (owned client closed, injected client not).
 
-**`test_cricheroes_routes.py`** — runs against the real FastAPI app with the
-client dependency overridden. Covers the admin gate (401 unauthenticated), each
-of the 8 routes, query-param forwarding, alias-free serialisation, and every row
-of the error table in §7.
+**`test_cricheroes_routes.py`** — runs against the real FastAPI app, with the
+client dependency overridden by a *real* `CricHeroesClient` over a scripted
+upstream, so each test exercises gate, route, client, model and serialisation
+together. Covers the gate (401 signed out; 403 for a signed-in non-admin; **403
+for a tournament admin**; 200 for a platform admin), each of the 8 routes,
+query-param forwarding, alias-free serialisation, pass-through of unmodelled
+fields, and every row of the error table in §7 including `Retry-After`
+pass-through.
 
 Both use the existing `client` / `anon_client` fixtures from `tests/conftest.py`
 unchanged.
+
+Both files were mutation-checked: disabling retries, mistyping a trap field,
+gating on tournament admin, and serialising by alias each turn tests red.
 
 ---
 
@@ -474,6 +549,7 @@ python scripts/check_cricheroes_credentials.py --tournament-id <your-id>
 
 It sets placeholder `SECRET_KEY` / `JWT_SECRET_KEY` before importing settings, so
 a missing app secret cannot fail the script for a reason unrelated to CricHeroes.
+It runs with retries off: one invocation is exactly one charged call.
 
 ---
 
@@ -481,9 +557,10 @@ a missing app secret cannot fail the script for a reason unrelated to CricHeroes
 
 | Phase | Work | Gate |
 |---|---|---|
-| 1 | Settings, `.env.example`, `httpx` reclassified | merged, no behaviour change |
-| 2 | Schemas + exceptions + client + unit tests | green suite, still no routes |
-| 3 | Admin routes + route tests + wiring | green suite |
+| 1 | Settings, `.env.example`, `httpx` reclassified | ✅ done |
+| 2 | Schemas + exceptions + client + unit tests | ✅ done — models partial, see §8.0 |
+| 3 | Admin routes + route tests + wiring | ✅ done — 978 passing |
+| 3b | Complete the models from the API doc (§8.0) | every routed endpoint fully modelled |
 | 4 | Obtain real credentials, set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
 | 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
@@ -568,7 +645,8 @@ allowance — far too late to change a polling interval cheaply.
 |---|---|
 | Placeholder credentials mistaken for real ones | Dedicated exception, error text naming the env vars, smoke script |
 | Upstream adds fields | `extra="allow"`; extras pass through rather than 500 |
-| Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; a mismatch surfaces as a 404 with the validation error, not a 500 |
+| Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` and `Loose` absorb the likeliest drift; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |
+| Models wrong on first contact (§8.0) | Fields we could not verify pass through untyped rather than being guessed; the schema error says exactly what to fix |
 | **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only routes, no public exposure; caching is a precondition on the first polling caller (§6.3); batch over poll; call counter from day one; CricHeroes warns at 80% |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
 | Throttling under burst | ≤2 retries with backoff on 429 (§6.5); 50 RPS is generous, so a 429 more likely signals a bug in our call pattern than legitimate load |

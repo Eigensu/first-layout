@@ -1,4 +1,5 @@
 from .contests import router as contests_router
+from .cricheroes import router as cricheroes_router
 from .players import router as players_router
 from .players_import import router as players_import_router
 from .settings import router as settings_router
@@ -14,4 +15,5 @@ __all__ = [
     "users_teams_router",
     "settings_router",
     "tournaments_router",
+    "cricheroes_router",
 ]

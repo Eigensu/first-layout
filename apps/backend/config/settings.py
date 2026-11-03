@@ -85,6 +85,26 @@ class Settings(BaseSettings):
         default="walle", alias="CLOUDINARY_DEFAULT_FOLDER"
     )
 
+    # CricHeroes third-party tournament API (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md).
+    # The credentials are optional here and checked when a call is made, so a
+    # deployment without them still boots and the admin routes answer 503
+    # naming what is missing. The values printed in the CricHeroes API doc are
+    # examples and will be rejected.
+    cricheroes_base_url: str = Field(
+        default="https://cricheroes.in/api/v1", alias="CRICHEROES_BASE_URL"
+    )
+    cricheroes_api_key: Optional[str] = Field(default=None, alias="CRICHEROES_API_KEY")
+    cricheroes_secret_access_key: Optional[str] = Field(
+        default=None, alias="CRICHEROES_SECRET_ACCESS_KEY"
+    )
+    cricheroes_udid: Optional[str] = Field(default=None, alias="CRICHEROES_UDID")
+    # Deliberately below the 30s CricHeroes allows (spec §6.4).
+    cricheroes_timeout_seconds: float = Field(
+        default=15.0, gt=0, alias="CRICHEROES_TIMEOUT_SECONDS"
+    )
+    # Retries on HTTP 429 only (spec §6.5); 0 turns retrying off.
+    cricheroes_max_retries: int = Field(default=2, ge=0, alias="CRICHEROES_MAX_RETRIES")
+
     # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")
     twofactor_template_name: Optional[str] = Field(
