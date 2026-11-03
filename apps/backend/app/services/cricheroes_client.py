@@ -7,11 +7,6 @@ against `{base_url}/thirdparty/client/...` carrying the five documented headers.
 The annual call quota, not the rate limit, is what constrains this API (§6), so
 nothing here calls upstream more than asked: no prefetching, and retries only on
 429, few of them, and only while there is time budget left.
-
-Five endpoints return raw JSON rather than a model. Their response shapes are
-not on hand to model from (§8), and guessing a shape could only make a valid
-response fail. They gain models when the API doc is checked again; nothing calls
-them yet, so their return types are free to change.
 """
 
 import asyncio
@@ -28,12 +23,17 @@ from app.schemas.cricheroes import (
     InningBattingLeaderboardEntry,
     InningBowlingLeaderboardEntry,
     LeaderboardStatsFilter,
+    ManhattanGraph,
     MatchPartnership,
     PlayerBattingSeason,
     PlayerBowlingSeason,
+    PlayerMatchBattingData,
+    PlayerMatchBowlingData,
     PointTableRow,
+    SquadTeam,
     TournamentBoundaryCount,
     TournamentMatch,
+    WormGraph,
 )
 from app.services.cricheroes_errors import (
     CricHeroesAPIError,
@@ -268,10 +268,10 @@ class CricHeroesClient:
 
     async def get_match_playing_squad(
         self, match_id: int, team_id: Optional[int] = None
-    ) -> Any:
-        """The playing XI for a match. Raw JSON: shape not yet modelled."""
-        return await self._request(
-            f"get-match-playing-squad/{match_id}", {"teamId": team_id}
+    ) -> List[SquadTeam]:
+        """Each side's XI for a match, or one side's with `team_id`."""
+        return await self._get_model_list(
+            f"get-match-playing-squad/{match_id}", SquadTeam, {"teamId": team_id}
         )
 
     async def get_match_current_partnership(self, match_id: int) -> MatchPartnership:
@@ -292,13 +292,15 @@ class CricHeroesClient:
             f"get-match-current-partnership/{match_id}/{team_id}", MatchPartnership
         )
 
-    async def get_match_manhattan_graph(self, match_id: int) -> Any:
-        """Runs per over. Raw JSON: shape not yet modelled."""
-        return await self._request(f"get-match-manhattan-graph/{match_id}")
+    async def get_match_manhattan_graph(self, match_id: int) -> ManhattanGraph:
+        """Runs and wickets per over, for both innings."""
+        return await self._get_model(
+            f"get-match-manhattan-graph/{match_id}", ManhattanGraph
+        )
 
-    async def get_match_worm_graph(self, match_id: int) -> Any:
-        """Cumulative runs per over. Raw JSON: shape not yet modelled."""
-        return await self._request(f"get-match-worm-graph/{match_id}")
+    async def get_match_worm_graph(self, match_id: int) -> WormGraph:
+        """The manhattan's overs plus running total and run rate."""
+        return await self._get_model(f"get-match-worm-graph/{match_id}", WormGraph)
 
     # -- tournament ---------------------------------------------------------
 
@@ -312,18 +314,26 @@ class CricHeroesClient:
 
     async def get_player_tournament_match_batting_data(
         self, tournament_id: int, player_id: int
-    ) -> Any:
-        """One player's batting, match by match. Raw JSON: not yet modelled."""
-        return await self._request(
-            f"get-player-tournament-match-batting-data/{tournament_id}/{player_id}"
+    ) -> PlayerMatchBattingData:
+        """One player's batting in a tournament, one row per innings.
+
+        The rows carry no match id or date (§13.9).
+        """
+        return await self._get_model(
+            f"get-player-tournament-match-batting-data/{tournament_id}/{player_id}",
+            PlayerMatchBattingData,
         )
 
     async def get_player_tournament_match_bowling_data(
         self, tournament_id: int, player_id: int
-    ) -> Any:
-        """One player's bowling, match by match. Raw JSON: not yet modelled."""
-        return await self._request(
-            f"get-player-tournament-match-bowling-data/{tournament_id}/{player_id}"
+    ) -> PlayerMatchBowlingData:
+        """One player's bowling in a tournament, one row per spell.
+
+        The rows carry no match id or date (§13.9).
+        """
+        return await self._get_model(
+            f"get-player-tournament-match-bowling-data/{tournament_id}/{player_id}",
+            PlayerMatchBowlingData,
         )
 
     async def get_tournament_match_list(

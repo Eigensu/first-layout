@@ -1,7 +1,8 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
-**Status:** Phases 1–3 implemented (§12). Not yet run against real credentials.
-Response models are deliberately partial until the API doc is re-checked (§8).
+**Status:** Phases 1–3 implemented (§12), all 17 endpoints fully modelled from
+the API doc (§8). Not yet run against real credentials. MVP endpoint promised by
+CricHeroes for 4 November 2026 (§13.5).
 **Owner:** Backend
 **Scope:** `apps/backend`
 **Upstream:** `https://cricheroes.in/api/v1`, "Client" resource group (17 GET endpoints)
@@ -333,9 +334,10 @@ subclassing `CricHeroesError`:
 
 `CricHeroesSchemaError` subclasses `CricHeroesHTTPError`, so it maps to 502 with
 no extra route code; it exists so the message names the endpoint and the field
-that did not fit. Given §8, it is the error most likely to appear on the first
-run against real credentials, and it should be read as "fix the model", not
-"CricHeroes is down".
+that did not fit. The models match the doc's examples (§8.0), but the live API
+has not been called yet; if it disagrees with its own doc, this is the error
+that says so, and it should be read as "fix the model", not "CricHeroes is
+down".
 
 Three mappings are deliberate and worth stating:
 
@@ -372,33 +374,33 @@ dropped — a new upstream field is visible to the frontend before we model it.
 `coerce_numbers_to_str` keeps a field the doc shows as a string (`"92.2"`) a
 string if a row arrives with a bare number, instead of failing the response.
 
-### 8.0 What is modelled, and why it is partial
+### 8.0 Where the models come from
 
-> **Implementation note.** The first implementation was built from the full API
-> doc and then parked when this spec was requested. The parked code and the
-> pasted doc were both lost with the session container, so the implementation
-> was rebuilt from this spec alone. This spec records the aliases (§8.1) and type
-> traps (§8.2) but not every endpoint's full field list.
+Every documented field of all 17 endpoints is modelled, from the example bodies
+in the CricHeroes API doc. Those bodies are checked in, verbatim with long lists
+trimmed, as `apps/backend/tests/fixtures/cricheroes_doc_examples.json`, so the
+models and the evidence for them now live together.
 
-So a field is declared only when it needs an alias, carries a type trap, or
-comes from an example body that is still on hand (the batting leaderboard and
-the stats filter). Every other field **passes through as an extra** under its
-upstream name. For a field whose upstream name is already a clean identifier
-that loses nothing on the wire — the frontend sees the same key either way —
-and guessing its type could only make valid responses fail. Declared fields
-whose exact type is unconfirmed are typed `Loose = Union[int, float, str]`,
-which keeps whatever arrives.
+A test parses each of the 17 examples through the real client method and walks
+the result: any key that lands as an extra, at any depth, fails it, naming the
+path. So "every documented field is modelled" is checked, not asserted, and a
+field dropped from a model by mistake is caught.
 
-Five endpoints have no model at all and return the raw `data`: playing squad,
-manhattan graph, worm graph, and the two per-player match-data endpoints. Even
-whether their `data` is an object or a list is not on hand. None has a route
-or a caller, so their return types are free to change.
+> **History.** The first implementation was built from the doc, then parked
+> when this spec was requested; the parked code and the pasted doc were lost
+> with the session container. A rebuild from this spec alone shipped with
+> deliberately partial models, then the doc was re-supplied and the models
+> completed. Checking the partial models against the doc found one wrong guess
+> — `revised_target` / `revised_overs` are per *innings*, not per match — and
+> three point-table columns (`Drawn`, `Tied`, `Quotient`) that the original
+> alias table had missed. Keeping the doc's examples in the repository is so
+> that this cannot happen again.
 
-**To finish:** re-supply the API doc, add each endpoint's remaining fields
-(tightening `Loose` where the examples settle it), and model the five raw
-endpoints. Running the routes against real credentials (§11) is the other way
-to find out — a wrong model shows up as a `CricHeroesSchemaError` naming the
-endpoint and field.
+**Typing policy.** Types follow the examples, including where they disagree
+between endpoints (§8.2); values are passed on as sent, not normalised. Identity
+fields (ids, names) are required; every statistic is optional, so a row with a
+missing figure still parses. Flags stay the 0/1 integers CricHeroes sends, and
+timestamps stay ISO-8601 strings.
 
 ### 8.1 Fields needing an alias
 
@@ -407,31 +409,42 @@ safe attribute name plus an `alias`:
 
 | Upstream key | Attribute | Where |
 |---|---|---|
-| `4s`, `6s`, `50s`, `100s` | `fours`, `sixes`, `fifties`, `hundreds` | batting leaderboards, season stats |
-| `3_wickets`, `4_wickets`, `5_wickets` | `three_wickets`, `four_wickets`, `five_wickets` | bowling leaderboards, season stats |
+| `4s`, `6s` | `fours`, `sixes` | batting leaderboards, batting season |
+| `50s`, `100s` | `fifties`, `hundreds` | tournament batting leaderboard, batting season |
+| `3_wickets` | `three_wickets` | bowling leaderboards (not bowling season) |
+| `4_wickets`, `5_wickets` | `four_wickets`, `five_wickets` | bowling leaderboards, bowling season |
 | `Team Name`, `Net RR`, `N/R`, `Last 5` | `team_name`, `net_rr`, `no_result`, `last_5` | point table |
-| `Group`, `Matches`, `Won`, `Lost`, `Points`, `GroupID`, `RoundID`, `RoundName` | lowercased | point table |
-| `SR`, `avg` | `strike_rate`, `average` | bowling leaderboard |
+| `Group`, `Matches`, `Won`, `Lost`, `Drawn`, `Tied`, `Points`, `Quotient`, `GroupID`, `RoundID`, `RoundName` | lowercased / snake_case | point table |
+| `SR`, `avg` | `strike_rate`, `average` | tournament bowling leaderboard |
+| `bbf` | `best_bowling_figure` | innings bowling leaderboard |
 | `mat`, `no`, `hs`, `bf`, `sr`, `avg` | `matches`, `not_outs`, `highest_score`, `balls_faced`, `strike_rate`, `average` | batting season |
-| `bbm`, `ave`, `econ` | `best_bowling`, `average`, `economy` | bowling season |
+| `mat`, `bbm`, `ave`, `econ`, `sr` | `matches`, `best_bowling`, `average`, `economy`, `strike_rate` | bowling season |
 
 ### 8.2 Type traps found in the documented payloads
 
-These are the ones that would break a naively-typed model. Each has a
-regression test, using the values the doc shows for that field.
+These are the ones that would break a naively-typed model, or that a consumer
+would reasonably get wrong. Each has a regression test using the doc's values.
 
 | Field | Trap |
 |---|---|
 | `winning_team_id` (match list) | A **string**, not an int — `""` for an abandoned match, `"0"` for a no-result, `"362504"` otherwise |
-| `to_over` (partnership) | A **string** — `"-"` while the stand is unfinished |
-| `balls` (bowling season) | **`int` on the `Career` row, `str` on season rows** — must accept both |
-| `strike_rate` | **`str`** (`"98.33"`) on the tournament batting leaderboard, **`float`** (`112.925`) on the inning batting leaderboard |
-| `overs` | `float` (`2.5`) in per-player data, `str` (`"92.2"`) in the bowling leaderboard |
-| `average` / `avg` | `str` (`"81.00"`) for batting, `float` (`18.63`) for bowling |
+| `revised_target` / `revised_overs` | On each **innings**, not the match. `0` means "not revised" |
+| `to_over` (partnership) | Only on the per-team list, not the current partnership. A **string** — `"-"` while the stand is unbroken |
+| `balls` | **`str`** on both leaderboards (`"554"`); in bowling season, **`int` on the `Career` row and `str` on season rows** |
+| `overs` | **`str`** (`"92.2"`) on the tournament bowling leaderboard; **number** (`9.1`, `10`) on the innings leaderboard and in per-player data. Cricket notation either way: 9.1 is 9 overs and 1 ball |
+| `economy` | **`str`** (`"5.45"`) on the tournament bowling leaderboard, **number** (`3.82`) on the innings one |
+| `strike_rate` | **`str`** on the tournament batting (`"98.33"`) and bowling (`"20.52"`) leaderboards and in season stats; **float** on the innings batting leaderboard — with single-precision noise (`112.92500305175781`) |
+| `average` | **`str`** for batting (`"81.00"`) and in season stats (`"-"` when none); **float** on the bowling leaderboard (`18.63`) |
+| `highest_score` (`hs`, batting season) | A **string** (`"64"`) |
 | `highest_run_with_not_out` | `"*"` or `""`, not a bool |
 | `year` (season stats) | `"Career"` for the aggregate row, otherwise `"2023"` — not an int |
+| Placeholders (bowling season) | `bbm` is `""` on one row and `"-"` on the next; `ave` is `"-"` on `Career` and `"0.00"` on the season |
+| `match_result` | Free text, inconsistently cased: `"Resulted"`, `"Abandoned"`, `"abandoned"`. Use `winning_team_id`, not this, to classify results |
+| `Last 5` (point table) | Holds every result so far (`"W-L-W-W-W-L-L-W-W"`), not five |
 | boundary count `data` | A one-element **list** wrapping a single object |
-| `revised_target` / `revised_overs` | `0` means "not revised", not "target zero" |
+
+If CricHeroes sends a bare number where the doc shows a string, the base model's
+`coerce_numbers_to_str` keeps the field a string instead of failing the response.
 
 ### 8.3 Serialisation
 
@@ -493,11 +506,17 @@ the client for server-side use; they get routes when a screen needs them.
 
 ## 10. Testing
 
-Two files, 81 tests, no network, `httpx.MockTransport` throughout. The
-batting-leaderboard and stats-filter fixtures are trimmed from the API doc's own
-examples; the rest are minimal bodies using the values the doc shows for the
-field under test (§8.0). The backoff sleep is injectable so the retry tests
-assert on attempt counts without actually waiting.
+Two files, 104 tests, no network, `httpx.MockTransport` throughout. Response
+bodies come from the API doc's examples
+(`tests/fixtures/cricheroes_doc_examples.json`); hand-made bodies are used only
+for what the doc does not show — errors, and drift from the documented types.
+The backoff sleep is injectable so the retry tests assert on attempt counts
+without actually waiting.
+
+The anchor is a check run once per endpoint: the doc's example goes through the
+real client method, the request path is asserted, and the parsed result must
+contain no unmodelled key at any depth (§8.0). A companion test fails if an
+example exists without a matching call, or the reverse.
 
 **`test_cricheroes_client.py`** — headers and config (all five headers sent;
 missing credentials raise pre-flight and name the missing vars; partial
@@ -558,9 +577,10 @@ It runs with retries off: one invocation is exactly one charged call.
 | Phase | Work | Gate |
 |---|---|---|
 | 1 | Settings, `.env.example`, `httpx` reclassified | ✅ done |
-| 2 | Schemas + exceptions + client + unit tests | ✅ done — models partial, see §8.0 |
-| 3 | Admin routes + route tests + wiring | ✅ done — 978 passing |
-| 3b | Complete the models from the API doc (§8.0) | every routed endpoint fully modelled |
+| 2 | Schemas + exceptions + client + unit tests | ✅ done |
+| 3 | Admin routes + route tests + wiring | ✅ done |
+| 3b | Complete the models from the API doc (§8.0) | ✅ done — all 17 endpoints; 1,001 tests passing |
+| 3c | MVP endpoint, once CricHeroes publish it (§13.5) | client method, model, doc example, tests |
 | 4 | Obtain real credentials, set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
 | 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
@@ -594,7 +614,18 @@ allowance — far too late to change a polling interval cheaply.
      "maximum Overs in tournament" in the leaderboard endpoint's list.
    - `BB` and `MBBF` are both described as best bowling figures.
    - The match-list `type` parameter is documented with `Example: 2826556` (a
-     player id) while the description says `1. live 2. upcoming 3. past`.
+     player id) while the description says `1. live 2. upcoming 3. past`. The
+     example response settles it: a past match has `"type": 3`.
+   - `sort_filter` is documented as `number` on every leaderboard, but every
+     value is a string code (`RUN`, `WICKET`).
+   - The playing-squad example asks for `?teamId=362504` and returns *both*
+     teams. Either the filter is ignored or the example was not regenerated.
+   - Called for tournament 1493258 ("Client 2025"), the stats filter's `teams`
+     list holds the six sides once each for 702687 (2023) and 1029866 (2024),
+     and none for 2025 itself.
+   - The boundary-count error example is not valid JSON (unquoted keys, single
+     quotes). If the live API really answers like that, the client reports it
+     as a 502 "non-JSON body" rather than a 404 "no data" — wrong, but loud.
    Because `get-tournament-stat-leaderboard-filter` returns the filters a given
    tournament actually supports, prefer calling it over hardcoding the lists.
 4. **Does a 429 consume quota?** Unanswered. CricHeroes confirmed that calls
@@ -605,23 +636,23 @@ allowance — far too late to change a polling interval cheaply.
    If it is also a 429, we cannot tell "slow down" from "you are out of calls"
    without asking.
 
-5. **No MVP / points endpoint exists in this API.** Confirmed, not assumed:
-   `get-tournament-stat-leaderboard-filter` is CricHeroes' own discovery
-   endpoint for what a tournament supports, and it returns only `season`,
-   `batting`, `bowling` and `teams` groups. No MVP entry, no fielding group.
-   The CricHeroes app *does* show an MVP tab on tournament leaderboards, so an
-   endpoint may exist outside the `thirdparty/client` group — **asked, awaiting
-   answer**. This matters because it decides whether we consume their points or
-   compute our own:
+5. **MVP / points endpoint: promised, not yet documented.** The full API doc
+   (aglio build of 30 May 2025) has no MVP endpoint, and the stats-filter
+   discovery endpoint returns only `season`, `batting`, `bowling` and `teams`
+   groups. CricHeroes have said they will add the MVP endpoint to the doc
+   **on 4 November 2026**. When it lands it needs, like the others: a
+   client method, a model built from its example, an entry in the doc-examples
+   fixture, and a route if a screen needs it. It decides whether we consume
+   their points or compute our own:
    - If it exists, we also need to know whether the points formula is fixed or
      configurable per tournament, since their MVP scoring is not necessarily
      our fantasy scoring.
    - If it does not, we compute points from batting + bowling stats, and the
      fielding component has no source (see below).
 
-6. **No fielding data anywhere in the documented API.** Catches, stumpings and
-   run-outs appear on no endpoint; the per-player tournament endpoints cover
-   batting and bowling only. Any scoring formula with a fielding term needs a
+6. **No fielding data anywhere in the documented API.** Confirmed against the
+   full doc: catches, stumpings and run-outs appear on no endpoint; the
+   per-player tournament endpoints cover batting and bowling only. Any scoring formula with a fielding term needs a
    second source (the existing Google Sheet, or manual admin entry). Product
    decision, not a technical one. **Asked, awaiting answer.**
 
@@ -635,7 +666,24 @@ allowance — far too late to change a polling interval cheaply.
    datasets approaching the 3 MB payload cap, yet no tournament endpoint in the
    API doc documents a pagination parameter. Asked which endpoints support it
    and what the parameter names are. Until answered, a large tournament's match
-   list is an unquantified truncation risk.
+   list is an unquantified truncation risk. Confirmed against the full doc: no
+   endpoint documents one.
+
+9. **Per-match player rows cannot be tied to a match.** The two per-player
+   match-data endpoints return one row per innings or spell, with runs, balls
+   and strike rate (batting) or overs, maidens, runs and wickets (bowling) —
+   and the opposition's *name*. No match id, no date. In the doc's own example
+   Ben Stokes has two rows against Australia and two against New Zealand, which
+   nothing but their order distinguishes. Batting rows also carry no fours or
+   sixes, and bowling rows no dot balls. For per-match fantasy points that is
+   the gap that matters most: ask CricHeroes whether these rows can carry
+   `match_id` (and boundaries), or whether the MVP endpoint will be per match.
+
+10. **Scorecards.** Nothing in the API returns a match scorecard: the match list
+    has innings totals only, and per-player figures come one player at a time.
+    Combined with §13.7 and §13.9, building per-match points for a full squad
+    from this API costs one call per player per discipline, and still cannot
+    say which match each row belongs to.
 
 ---
 
@@ -645,8 +693,9 @@ allowance — far too late to change a polling interval cheaply.
 |---|---|
 | Placeholder credentials mistaken for real ones | Dedicated exception, error text naming the env vars, smoke script |
 | Upstream adds fields | `extra="allow"`; extras pass through rather than 500 |
-| Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` and `Loose` absorb the likeliest drift; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |
-| Models wrong on first contact (§8.0) | Fields we could not verify pass through untyped rather than being guessed; the schema error says exactly what to fix |
+| Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` absorbs a number arriving where a string is documented; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |
+| Live API disagrees with its own doc | Models are built from the doc's examples, never called live yet. Statistics are optional, so only a wrong type or a missing id fails a response — with a schema error that says exactly what to fix |
+| API doc lost again | Its example bodies are checked in as a test fixture (§8.0) |
 | **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only routes, no public exposure; caching is a precondition on the first polling caller (§6.3); batch over poll; call counter from day one; CricHeroes warns at 80% |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
 | Throttling under burst | ≤2 retries with backoff on 429 (§6.5); 50 RPS is generous, so a 429 more likely signals a bug in our call pattern than legitimate load |

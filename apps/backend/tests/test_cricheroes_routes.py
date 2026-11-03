@@ -1,9 +1,12 @@
-"""The CricHeroes admin routes, against the real app.
+"""The CricHeroes admin routes, against the real app and the API doc's examples.
 
 The route dependency is overridden with a real CricHeroesClient over a scripted
 upstream, so each test runs the whole path: gate, route, client, models,
 serialisation.
 """
+
+import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -23,6 +26,10 @@ from config.settings import settings
 BASE = "https://cricheroes.test/api/v1"
 CREDS = {"api_key": "k", "secret_access_key": "s", "udid": "u"}
 PREFIX = "/api/admin/cricheroes/tournaments/1493258"
+
+DOC = json.loads(
+    (Path(__file__).parent / "fixtures" / "cricheroes_doc_examples.json").read_text()
+)
 
 ROUTES = [
     "matches",
@@ -179,130 +186,150 @@ async def test_a_platform_admin_is_let_through(signed_in, serve, monkeypatch):
     assert len(upstream.requests) == 1
 
 
-# -- each route ------------------------------------------------------------
+# -- each route, against the doc's example ---------------------------------
+
+# (route, the doc example it serves)
+ROUTE_EXAMPLES = [
+    ("matches", "get-tournament-match-list"),
+    ("point-table", "get-tournament-point-table"),
+    ("batting-leaderboard", "get-tournament-batting-leaderboard"),
+    ("inning-batting-leaderboard", "get-tournament-inning-batting-leaderboard"),
+    ("bowling-leaderboard", "get-tournament-bowling-leaderboard"),
+    ("inning-bowling-leaderboard", "get-tournament-inning-bowling-leaderboard"),
+    ("stats-filter", "get-tournament-stat-leaderboard-filter"),
+    ("boundary-count", "get-tournament-boundary-count"),
+]
+
+# Upstream keys that are not usable names, which our responses must not echo.
+UPSTREAM_ONLY_KEYS = {
+    "4s",
+    "6s",
+    "50s",
+    "100s",
+    "3_wickets",
+    "4_wickets",
+    "5_wickets",
+    "SR",
+    "avg",
+    "bbf",
+    "Group",
+    "Team Name",
+    "Matches",
+    "Won",
+    "Lost",
+    "Drawn",
+    "Tied",
+    "N/R",
+    "Points",
+    "Net RR",
+    "Last 5",
+    "GroupID",
+    "RoundID",
+    "RoundName",
+    "Quotient",
+}
 
 
-async def test_matches(client, serve):
-    serve(ok([{"match_id": 1, "winning_team_id": "362504", "revised_target": 0}]))
+def keys_anywhere(value) -> set:
+    if isinstance(value, dict):
+        found = set(value)
+        for item in value.values():
+            found |= keys_anywhere(item)
+        return found
+    if isinstance(value, list):
+        return set().union(*(keys_anywhere(item) for item in value)) if value else set()
+    return set()
 
-    response = await client.get(f"{PREFIX}/matches")
+
+def test_every_route_has_an_example():
+    assert [r for r, _ in ROUTE_EXAMPLES] == ROUTES
+
+
+@pytest.mark.parametrize("route, endpoint", ROUTE_EXAMPLES, ids=ROUTES)
+async def test_each_route_serves_its_documented_example(client, serve, route, endpoint):
+    upstream = serve(httpx.Response(200, json=DOC[endpoint]))
+
+    response = await client.get(f"{PREFIX}/{route}")
 
     assert response.status_code == 200, response.text
-    [match] = response.json()
-    assert match["winning_team_id"] == "362504"
-    assert match["match_id"] == 1
+    assert upstream.requests[0].url.path.endswith(f"/{endpoint}/1493258")
+    body = response.json()
+    assert body
+    assert keys_anywhere(body) & UPSTREAM_ONLY_KEYS == set()
 
 
 async def test_point_table_uses_clean_names(client, serve):
-    serve(
-        ok(
-            [
-                {
-                    "Team Name": "PUNERI BAPPA",
-                    "Net RR": "+1.234",
-                    "N/R": 0,
-                    "Last 5": "WWLWW",
-                }
-            ]
-        )
-    )
+    serve(ok(DOC["get-tournament-point-table"]["data"]))
 
     response = await client.get(f"{PREFIX}/point-table")
 
-    assert response.status_code == 200, response.text
-    [row] = response.json()
-    assert row["team_name"] == "PUNERI BAPPA"
-    assert row["net_rr"] == "+1.234"
-    assert row["no_result"] == 0
-    assert row["last_5"] == "WWLWW"
-    assert "Team Name" not in row
+    england = response.json()[0]
+    assert england["team_name"] == "England (WC19)"
+    assert (england["drawn"], england["tied"], england["no_result"]) == (0, 0, 0)
+    assert england["net_rr"] == "1.152"
+    assert england["last_5"] == "W-L-W-W-W-L-L-W-W"
 
 
 async def test_batting_leaderboard_uses_clean_names(client, serve):
-    serve(
-        ok([{"player_id": 1, "name": "X", "4s": 67, "6s": 14, "strike_rate": "98.33"}])
-    )
+    serve(ok(DOC["get-tournament-batting-leaderboard"]["data"]))
 
     response = await client.get(f"{PREFIX}/batting-leaderboard")
 
-    assert response.status_code == 200, response.text
-    [row] = response.json()
-    assert (row["fours"], row["sixes"], row["strike_rate"]) == (67, 14, "98.33")
-    assert "4s" not in row
-
-
-async def test_inning_batting_leaderboard(client, serve):
-    serve(ok([{"strike_rate": 112.925, "100s": 1}]))
-
-    response = await client.get(f"{PREFIX}/inning-batting-leaderboard")
-
-    assert response.status_code == 200, response.text
-    assert response.json() == [
-        {
-            "strike_rate": 112.925,
-            "fours": None,
-            "sixes": None,
-            "fifties": None,
-            "hundreds": 1,
-        }
-    ]
+    rohit = response.json()[0]
+    assert (rohit["fours"], rohit["sixes"], rohit["hundreds"]) == (67, 14, 5)
+    assert rohit["strike_rate"] == "98.33"
 
 
 async def test_bowling_leaderboard_uses_clean_names(client, serve):
-    serve(ok([{"SR": 14.2, "avg": 18.63, "overs": "92.2", "5_wickets": 1}]))
+    serve(ok(DOC["get-tournament-bowling-leaderboard"]["data"]))
 
     response = await client.get(f"{PREFIX}/bowling-leaderboard")
 
-    assert response.status_code == 200, response.text
-    [row] = response.json()
-    assert (row["strike_rate"], row["average"], row["overs"]) == (14.2, 18.63, "92.2")
-    assert row["five_wickets"] == 1
+    starc = response.json()[0]
+    assert (starc["strike_rate"], starc["average"], starc["overs"]) == (
+        "20.52",
+        18.63,
+        "92.2",
+    )
+    assert starc["five_wickets"] == 2
 
 
-async def test_inning_bowling_leaderboard(client, serve):
-    serve(ok([{"3_wickets": 1}]))
+async def test_inning_bowling_leaderboard_uses_clean_names(client, serve):
+    serve(ok(DOC["get-tournament-inning-bowling-leaderboard"]["data"]))
 
     response = await client.get(f"{PREFIX}/inning-bowling-leaderboard")
 
-    assert response.status_code == 200, response.text
-    assert response.json()[0]["three_wickets"] == 1
+    shaheen = response.json()[0]
+    assert shaheen["best_bowling_figure"] == "6-35"
+    assert shaheen["five_wickets"] == 1
 
 
-async def test_stats_filter(client, serve):
-    serve(
-        ok(
-            {
-                "season": [{"key": "Client 2025", "value": "1493258"}],
-                "batting": [{"key": "Orange Cap", "url": "thirdparty/client/x"}],
-                "bowling": [],
-                "teams": [{"team_id": 4660189, "team_name": "PUNERI BAPPA"}],
-            }
-        )
-    )
+async def test_match_list_keeps_the_nested_innings(client, serve):
+    serve(ok(DOC["get-tournament-match-list"]["data"]))
 
-    response = await client.get(f"{PREFIX}/stats-filter")
+    response = await client.get(f"{PREFIX}/matches")
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["season"] == [{"key": "Client 2025", "value": "1493258"}]
-    assert body["teams"][0]["team_name"] == "PUNERI BAPPA"
+    dls = response.json()[1]
+    assert dls["winning_team_id"] == "362528"
+    assert dls["team_a_innings"][0]["revised_target"] == 187
+    assert dls["team_a_innings"][0]["summary"]["score"] == "201/10"
 
 
 async def test_boundary_count_is_unwrapped(client, serve):
-    serve(ok([{"total_fours": 310, "total_sixes": 122}]))
+    serve(ok(DOC["get-tournament-boundary-count"]["data"]))
 
     response = await client.get(f"{PREFIX}/boundary-count")
 
-    assert response.status_code == 200, response.text
-    assert response.json() == {"total_fours": 310, "total_sixes": 122}
+    assert response.json() == {"total_six": 357, "total_four": 1982}
 
 
 async def test_unmodelled_fields_pass_through_under_upstream_names(client, serve):
-    serve(ok([{"player_id": 1, "name": "X", "brand_new_field": "kept"}]))
+    row = dict(DOC["get-tournament-batting-leaderboard"]["data"][0], brand_new="kept")
+    serve(ok([row]))
 
     response = await client.get(f"{PREFIX}/batting-leaderboard")
 
-    assert response.json()[0]["brand_new_field"] == "kept"
+    assert response.json()[0]["brand_new"] == "kept"
 
 
 # -- query params ----------------------------------------------------------
