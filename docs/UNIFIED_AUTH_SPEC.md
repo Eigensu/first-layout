@@ -1926,19 +1926,55 @@ password still signs in.
 Under one database this is no longer "flip five services one at a time" — there is one
 backend, and the two live tournaments move to it together.
 
-1. **Stand up the unified backend** on `api.wallearena.com`, pointed at the unified
-   database, running the new code. Nothing is pointed at it yet. Its variables:
-   `TENANCY=shared`, `MONGODB_DB_NAME=walle_arena`, the shared `SECRET_KEY` /
-   `JWT_*`, `TWOFACTOR_*` (from `lpcl`), `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
+1. **Stand up the unified backend** on `walle-api.wallearena.com`, pointed at the
+   unified database, running the new code. Nothing is pointed at it yet. Its variables:
+   `TENANCY=shared`, `MONGODB_DB_NAME=walle_arena`, a fresh `SECRET_KEY` /
+   `JWT_SECRET_KEY`, `TWOFACTOR_*` (from `lpcl`), `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
    (with `send.wallearena.com` verified in Resend, §5.4), `GOOGLE_CLIENT_ID`,
    `APPLE_BUNDLE_ID`, and `CORS_ORIGINS` covering `https://*.wallearena.com`. The rate
    limiter needs nothing: it starts in observe mode. Check
    `GET /api/auth/forgot-password/channels` answers `{"sms": true, "email": true}`.
    Wildcard DNS (`*.wallearena.com`) points at the website.
+
+   *Done 2026-10-23, all but Resend.* The Railway service is `walle-api` in the
+   `Walle` project, deploying `main` from `/apps/backend` with health check
+   `/api/health`. The build and start commands are set on the service, because Railway
+   now refuses a config-file path. `api.wallearena.com` was the first choice, but Railway
+   reports it held by an account outside the Eigensu workspace, so the service is on
+   `walle-api.wallearena.com`. The `-api` ending keeps it out of the tournament slugs.
+   Its DNS (a CNAME and a `_railway-verify` TXT record) is at GoDaddy, which holds
+   `wallearena.com`'s DNS today. Both records were verified the same day. The first
+   certificate request hit a Let's Encrypt rate limit. Railway does not retry that by
+   itself, so an hour later it was requested again and issued. `SECRET_KEY` and `JWT_SECRET_KEY` are new values rather
+   than `fifth`'s, so no token minted before cutover is accepted. Such a token names its
+   account by username (§4.1), which after the merge can belong to someone else, and
+   under Q11 every player signs in again anyway. Nothing that is migrated depends on
+   either secret. `MONGODB_URL` (from `fifth-layout`), `GOOGLE_CLIENT_ID` and
+   `CLOUDINARY_*` (from `second-layout`) and `TWOFACTOR_*` (the project's shared
+   variables) are Railway references, not copies; see step 8. Its first deploy
+   (`d468c17`) built `walle_arena`'s indexes on the cluster and answered: health
+   connected, channels `{"sms": true, "email": false}` until Resend is set,
+   `/api/tournaments` an empty list until the registry is seeded, 400 for a request that
+   names no tournament, and CORS open to `*.wallearena.com` only.
 2. **Full backfill** with the two live tournaments still serving from their own
    services: Phases 1–5 for all five source databases. Nothing in the source databases
    is modified.
 3. **Verify** (Phase 5) and review the merge report.
+
+   *Steps 2 and 3 done 2026-10-23,* after `fifth-layout` was stopped at 05:28 UTC.
+   `second-layout` was already down, so nothing wrote to a source during the copy, and
+   steps 4 and 5 were not needed. Phase 1 on the stopped sources matched the morning's
+   preview byte for byte. `seed_registry.py` wrote the 15 registry rows. Phase 2 wrote
+   1,826 accounts and 2,122 memberships with no conflicts; the admin list makes exactly
+   two accounts platform admins. Phase 3 copied 46 contests, 2,402 teams, 2,750
+   enrolments, 2,872 players, 5,371 points rows, 64 sponsors, 37 carousel images, 184
+   import logs, 13 settings rows and 103 GridFS files, each tournament matching its dry
+   run. It found the rehearsal's 10 enrolment collisions, and mwpl's 22 import logs still
+   name the deleted admin (R40). Phase 4 copied 4 avatars. Phase 5 passes every check.
+   `refresh_membership_stats.py --all` then filled all 2,122 memberships. Against
+   `walle-api`, `rspl` and `dcpl` serve their contests, leaderboards, logos, sponsors and
+   carousel. A contest requested under the other tournament is a 404, and the archived
+   thirteen answer "Unknown tournament", as an archived slug should.
 4. **Read-only window on lpcl and fifth.** This is the only moment users are affected.
 5. **Delta re-sync** (`07_resync_delta.py` with the backfill's `--map`, `--copy-of`,
    `--platform-admins` and `--links`) to pick up everything written during the backfill. It re-runs
@@ -1949,23 +1985,67 @@ backend, and the two live tournaments move to it together.
 6. **Repoint the two frontends** — `NEXT_PUBLIC_API_URL` to the unified backend — and
    redeploy. On the current Vercel plan that is a CLI deploy (`vercel deploy --prod`);
    GitHub deploys fail for the private org repo.
+
+   *Replaced 2026-10-23 by one new project.* The old frontends sit in a Vercel team
+   (`eigensus-projects`) that the working Vercel login cannot reach, so the unified
+   website is a new project, `walle-web`, in that login's own scope. Root
+   `apps/frontend`, Node 22, with `NEXT_PUBLIC_API_URL=https://walle-api.wallearena.com`,
+   `NEXT_PUBLIC_ROOT_DOMAIN=wallearena.com`, the app's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+   (the same one `walle-api` checks) and `NEXT_PUBLIC_APP_NAME`. It is deployed from a
+   `git archive` export of `main`, never a working checkout, whose root `.env` holds the
+   backend's secrets, with Vercel CLI 47.2.2 or later (Vercel refuses older ones). First
+   deployed `d468c17` to `walle-web.vercel.app`. At this step the tournament
+   hostnames (`rspl`, `dcpl`, the apex and `*.wallearena.com`) move from the old team's
+   projects onto `walle-web`. The wildcard needs a certificate: either Vercel
+   nameservers, or `vercel certs issue "*.wallearena.com" wallearena.com
+   --challenge-only` with the challenge TXT records added at GoDaddy, which then has to
+   be renewed by hand. Google sign-in accepts only exact origins. *Since PR #62
+   (2026-10-24), a tournament's Google button runs sign-in in a popup on
+   `wallearena.com`, so that origin is the only one the Google client needs*
+   (`docs/GOOGLE_OAUTH_RELAY_SPEC.md`).
+
+   *`rspl` and `dcpl` moved 2026-10-24.* Adding each hostname to `walle-web` returned a
+   `_vercel` TXT record (`vc-domain-verify=<host>,<code>`), because the old team held
+   it. With the TXT at GoDaddy, Vercel's verify moved the hostname at once. The CNAMEs
+   were left alone. Both sites now load `walle-web`, which calls
+   `walle-api.wallearena.com`. A hostname no Vercel account holds needs only its CNAME.
+   While `wallearena.com` is registered to the old team, each new tournament hostname
+   may need a TXT as well. *`wallearena.com` and `www` followed the same day*, serving
+   the landing pages walle-landing's frontend used to (PR #60). `www` 308-redirects to
+   the apex.
 6b. **Ship the mobile app's update** — walle-app#6, which reads the tournament list
    from `/api/tournaments` and sends `X-Tournament-Slug` — as an over-the-air update on
    the `production` channel. Not before this step: today's backends have no tournament
-   list, so the app would show none. Two limits, both still to decide (§11, Q11–Q12):
-   a 1.0.3 install applies the update on the launch *after* it downloads, so its first
-   launch after cutover still talks to the old host; and 1.0.2 installs cannot take the
-   update at all.
+   list, so the app would show none. Two limits, both accepted (§11, Q11–Q12, decided
+   2026-10-22): a 1.0.3 install applies the update on the launch *after* it downloads,
+   so its first launch after cutover still talks to the old host (read-only until
+   step 8 archives it, unreachable after), and the launch after that runs the update;
+   and 1.0.2 installs cannot take the update, so those players install 1.0.3 from the
+   store, which must serve 1.0.3 or a 1.0.2 player has nothing to update to. *The
+   owner confirmed on 2026-10-22 that the stores serve 1.0.3.* *Shipped 2026-10-24*
+   as update group `ecbbc968-70b7-436a-af8a-c127d985efd9` (runtime 1.0.3, from
+   `6d6bafc`), published by the Expo account that owns the project, `aagamr`. EAS
+   holds no environment variables, so `eas update` takes the `EXPO_PUBLIC_*` values
+   from `eas.json` on the command line. Without them the Google client IDs build in
+   empty. The App Store build (1.0.3, build 14) has the same native code. EAS's only
+   Android store build is 1.0.0, from January, with no update channel. No update
+   reaches it, so Android needs a store build of its own.
 7. **Smoke test** on both: login by mobile, by email, Google, `/api/users/me`,
    `/api/users/me/tournaments`, create a team, enrol in a contest, admin on a
    tournament's subdomain, and the Tournaments tab as a platform admin. Reset a
    password by SMS and by email, and change an email from the profile. In the app:
    the tournament list, sign-in, and switching tournaments without signing out.
 8. **Watch** for an hour. Then archive `first-layout`, `second-layout`, `third-layout`,
-   `fourth-layout-mtc`, `fifth-layout`. Retire `walle-landing` (the app's old source
-   of per-tournament API URLs) once EAS shows most app users on the update.
+   `fourth-layout-mtc`, `fifth-layout`. First replace `walle-api`'s references to
+   `fifth-layout` and `second-layout` variables with their values: a reference to a
+   deleted service resolves to nothing on the next deploy (*done 2026-10-24*). Retire `walle-landing` (the
+   app's old source of per-tournament API URLs) once EAS shows most app users on the
+   update.
 9. **Schedule** `scripts/refresh_membership_stats.py --all-live` on the unified
-   service (a Railway cron), so live tournaments' profile numbers keep up.
+   service (a Railway cron), so live tournaments' profile numbers keep up. *Done
+   2026-10-24* as the service `walle-stats-cron` (hourly, `0 * * * *`), which reads
+   `walle-api`'s database and secrets by reference. Each run refreshes every member
+   of a live tournament (dcpl 397, rspl 75).
 10. **Enforce the rate limits** after one contest deadline of observe-mode logs on the
     unified service (`docs/RATE_LIMITING_SPEC.md` §8): first
     `RATE_LIMIT_ENFORCE_RULES=forgot_password_request,email_change_request`, then
@@ -2140,9 +2220,9 @@ These block specific phases; everything else can be built without them.
    retired tournaments and are archived rather than migrated.
 2b. ~~Confirm the data model~~ **Decided:** one database, `tournament_id` on every
    tenant-scoped document (§2.5, §3.5).
-3. **Who should be platform admins?** An explicit list of emails/mobiles. Everyone
-   else with legacy `is_admin` becomes an admin of their own tournament only.
-   *Blocks Phase 2.*
+3. ~~Who should be platform admins?~~ **Settled 2026-10-19**, reconfirmed 2026-10-21:
+   two accounts, kept outside the repo with the reviewed links (§13.12). Everyone else
+   with legacy `is_admin` becomes an admin of their own tournament only.
 4. ~~Do `walle-register` and `walle-landing-backend` hold user accounts?~~ **Answered**
    by Phase 0: no. The register databases hold `players`, `payments` and `app_config`
    only, and no database in the cluster is named for `walle-landing-backend`.
@@ -2164,16 +2244,16 @@ These block specific phases; everything else can be built without them.
 10. ~~Do the five services share one Resend key and sending domain?~~ **Built as the
    default:** one key and one sending address, with the tournament's name in each
    message (§5.5).
-11. **The app's first launch after cutover.** A 1.0.3 install downloads the update on
-   one launch and applies it on the next, so that first launch still talks to
-   `api-lpcl` / `fifth-api`. Keep those hosts answering for a day or two (the old
-   services, read-only, or the unified backend with a host→tournament fallback), or
-   accept one failed session per player. *Blocks Phase 6, step 8.*
-12. **App version 1.0.2.** It cannot take the update: 1.0.3 added Google and Apple
-   sign-in, which the update's code calls. Either publish a separate update built from
-   the 1.0.2 code, or require 1.0.3 from the store. How many players are on 1.0.2
-   (EAS → Updates, with the account that owns the app) decides which. *Blocks Phase 6,
-   step 6b.*
+11. ~~The app's first launch after cutover.~~ **Decided 2026-10-22: accept one failed
+   session per player.** A 1.0.3 install downloads the update on one launch and applies
+   it on the next, so that first launch still talks to `api-lpcl` / `fifth-api`. Both
+   old app versions take those hosts from walle-landing and send no tournament, so a
+   host→tournament fallback on the unified backend would have kept them working; it was
+   considered and not chosen. The old hosts are not kept up past Phase 6, step 8.
+12. ~~App version 1.0.2.~~ **Decided 2026-10-22: require 1.0.3 from the store.** 1.0.2
+   cannot take the update, because 1.0.3 added Google and Apple sign-in, which the
+   update's code calls. No separate 1.0.2 update is built. The stores serve 1.0.3
+   (confirmed 2026-10-22).
 
 ---
 
@@ -2207,10 +2287,23 @@ more items, all fixed (§13.11). Reviewing its output on 2026-10-18 found three 
 (R42–R44, §13.12), also fixed; a third pass with the review applied passes Phase 5 and
 leaves 2 of 1,962 password accounts unreachable, both staff logins. The platform-admin
 list and the reviewed links, the two things it left open, were settled on 2026-10-19
-(§13.10); the owner confirmed the list again on 2026-10-21. What is left before I:
-setting up Resend (Q8–Q9), the two app decisions (Q11–Q12), the unified Railway
-service and wildcard DNS (Phase 6, step 1), and re-running Phase 1 with the links on
-the cutover snapshot.
+(§13.10); the owner confirmed the list again on 2026-10-21. The two app decisions
+(Q11–Q12) were made on 2026-10-22, and the unified Railway service was stood up on
+2026-10-23 (Phase 6, step 1). What is left before I: setting up Resend (Q8–Q9), the DNS
+for `walle-api.wallearena.com` and the wildcard for the website (Phase 6, step 1), and
+re-running Phase 1 with the links on the cutover snapshot. A preview of that re-run on
+2026-10-23, read-only against the live sources through `walle-api`'s own connection,
+found the sources unchanged since the review: 2,222 rows, all 95 links matching, all 20
+flagged groups reviewed, and 1,826 accounts once the links apply. Resend is deferred
+(2026-10-23), so the cutover goes ahead with SMS reset only and step 1's channel check
+expects `{"sms": true, "email": false}`. The read-only window (steps 4–5) becomes
+stopping `fifth-layout` *before* the copy in step 2 (decided 2026-10-23). With
+`second-layout` already down, nothing writes from the snapshot on, so no delta re-sync
+is needed. Each
+tournament's website hostname is added to `walle-web` with its own CNAME at GoDaddy and
+its own Google origin, rather than a wildcard (decided 2026-10-23). Later that day
+`fifth-layout` was stopped and the backfill ran into `walle_arena`. It passes Phase 5
+(Phase 6, steps 2–3).
 
 **Schedule I between seasons.** The read-only window is short, but a live contest is
 the worst time to move teams and enrolments between databases. Off-season, most of the
@@ -2546,9 +2639,10 @@ credential. 197 groups merge automatically and 52 go to review.
 - [x] **Merge #45** before anything boots against `walle_arena`, so it gets the corrected
   `uniq_legacy_row` from the start. *Merged 2026-10-17 (`f76c24b`); both live services
   dropped the flawed index at startup and rebuilt it with the `$type` filter.*
-- [ ] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
+- [x] **The platform-admin list** (§11, Q3): the emails or mobiles of the people who should
   administer the whole platform. Without it no one is a platform admin after cutover.
   *Decided 2026-10-17: the first dry run goes without it; it is needed before cutover.*
+  *Settled 2026-10-19 and reconfirmed 2026-10-21: two accounts, recorded in §13.12.*
 - [x] **Seed `walle_arena`'s registry** with all fifteen tournaments (§7, *Source
   mapping*). *`seed_registry.py`, run before Phase 2. Seeded into the dry run's copy
   (2026-10-17; a second run changes nothing). The real `walle_arena` is seeded the same
