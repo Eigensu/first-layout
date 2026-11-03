@@ -77,7 +77,7 @@ async def connect_to_mongo():
 
         # Test connection
         await mongo_client.admin.command("ping")
-        print(f"[OK] Connected to MongoDB at {settings.mongodb_url}")
+        print(f"[OK] Connected to MongoDB at {settings.mongodb_url_redacted}")
 
         database = mongo_client.get_database(settings.mongodb_db_name)
         for index in await drop_flawed_indexes(database):

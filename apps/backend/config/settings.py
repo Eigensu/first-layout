@@ -7,6 +7,8 @@ from typing import Literal, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from config.redaction import redact_mongodb_url
+
 # Get the root directory of the monorepo (two levels up from backend/config)
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 ENV_FILE = ROOT_DIR / ".env"
@@ -140,6 +142,11 @@ class Settings(BaseSettings):
 
         combined = "^(?:" + "|".join(patterns) + ")$"
         return combined
+
+    @property
+    def mongodb_url_redacted(self) -> str:
+        """MONGODB_URL with its user, password and options removed, for logs."""
+        return redact_mongodb_url(self.mongodb_url)
 
     @property
     def shared_tenancy(self) -> bool:
