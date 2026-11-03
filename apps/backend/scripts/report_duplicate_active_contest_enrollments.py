@@ -16,6 +16,8 @@ ROOT_ENV_PATH = os.path.abspath(
 )
 load_dotenv(dotenv_path=ROOT_ENV_PATH)
 
+from config.redaction import redact_mongodb_url
+
 
 async def load_names(collection, ids):
     if not ids:
@@ -77,7 +79,7 @@ async def main() -> None:
     mongo_uri = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
     db_name = os.environ.get("MONGODB_DB_NAME", "walle_arena")
 
-    print(f"Connecting to MongoDB at: {mongo_uri}")
+    print(f"Connecting to MongoDB at: {redact_mongodb_url(mongo_uri)}")
     client = AsyncIOMotorClient(mongo_uri)
     db = client.get_database(db_name)
 

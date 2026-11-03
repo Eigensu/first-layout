@@ -86,7 +86,7 @@ DNS is the easy half; the wildcard certificate is what actually gates this.
   Vercel require the domain's nameservers to point at Vercel (DNS-01
   challenge) and a Pro plan. Domain stays registered at GoDaddy; only the
   nameservers change. Then add `wallearena.com` and `*.wallearena.com` to the
-  frontend project. Re-create the `api.wallearena.com` (and any legacy
+  frontend project. Re-create the `walle-api.wallearena.com` (and any legacy
   `api-*`) DNS records inside Vercel DNS so the backend keeps resolving.
 - **Option B — Cloudflare in front (least effort, free):** move nameservers
   to Cloudflare (registration stays at GoDaddy), enable the proxied wildcard
@@ -99,7 +99,7 @@ a certificate warning — that is expected and is not something the app can fix.
 
 ### 3. Railway (backend) — the last variable edit you'll make
 
-One backend service (call it `api.wallearena.com`) serves every tournament.
+One backend service, `walle-api` on `walle-api.wallearena.com`, serves every tournament.
 Set once:
 
 ```
@@ -113,7 +113,7 @@ no further changes. **This replaces the per-tournament CORS/variable edits.**
 ### 4. Vercel (frontend) environment
 
 ```
-NEXT_PUBLIC_API_URL=https://api.wallearena.com   # the one shared backend
+NEXT_PUBLIC_API_URL=https://walle-api.wallearena.com   # the one shared backend
 NEXT_PUBLIC_ROOT_DOMAIN=wallearena.com           # optional; this is the default
 ```
 
