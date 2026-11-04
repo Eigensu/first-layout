@@ -21,6 +21,7 @@ not model still come through under their upstream names.
 """
 
 import math
+from collections import Counter
 from typing import AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -250,34 +251,56 @@ async def import_tournament_players(
     """Add the players of CricHeroes tournament `tournament_id` to ours (§9.1).
 
     `tournament_id` is CricHeroes'; ours is the one the request is made from.
-    Costs one call plus one per played match, on a dry run too -- the preview
-    and the import each read the squads afresh.
+    A preview costs one call plus one per played match. An import within
+    PREVIEW_TTL_SECONDS of a preview uses that preview's roster -- what the
+    admin saw, at no further cost; otherwise it reads the squads itself.
     """
-    try:
-        roster = await cricheroes_roster.fetch_roster(client, tournament_id)
-    except CricHeroesError as exc:
-        raise _to_http_error(exc) from exc
+    roster = None if dry_run else cricheroes_roster.recall(tournament_id)
+    reused_preview = roster is not None
+    if roster is None:
+        try:
+            roster = await cricheroes_roster.fetch_roster(client, tournament_id)
+        except CricHeroesError as exc:
+            raise _to_http_error(exc) from exc
+        cricheroes_roster.remember(tournament_id, roster)
+    calls = 0 if reused_preview else roster.calls
 
-    existing = await scoped(Player, target).to_list()
-    plan = cricheroes_roster.plan_import(roster.players, existing)
-    counts = cricheroes_roster.count(plan)
+    # Plan and write under one lock, from the players there now, so two
+    # imports into one tournament cannot both create the same players.
+    async with cricheroes_roster.import_lock(target):
+        existing = await scoped(Player, target).to_list()
+        plan = cricheroes_roster.plan_import(roster.players, existing)
+        counts = cricheroes_roster.count(plan)
 
-    if not dry_run:
-        await cricheroes_roster.apply_plan(plan, tournament_id=target)
-        await AdminActionLog(
-            tournament_id=target,
-            admin_id=str(current_user.id),
-            action="player.import_cricheroes",
-            target_type="cricheroes_tournament",
-            target_id=str(tournament_id),
-            details={
-                "created": counts.created,
-                "linked": counts.linked,
-                "already_linked": counts.already_linked,
-                "skipped": counts.skipped,
-                "cricheroes_calls": roster.calls,
-            },
-        ).insert()
+        if not dry_run:
+            done: Counter = Counter()
+            completed = False
+            try:
+                await cricheroes_roster.apply_plan(
+                    plan, tournament_id=target, done=done
+                )
+                completed = True
+            finally:
+                # Written even when a write fails part way, with what landed:
+                # those players exist, and this is the only record of how.
+                await AdminActionLog(
+                    tournament_id=target,
+                    admin_id=str(current_user.id),
+                    action="player.import_cricheroes",
+                    target_type="cricheroes_tournament",
+                    target_id=str(tournament_id),
+                    details={
+                        "completed": completed,
+                        "created": done["create"],
+                        "linked": done["link"],
+                        "planned_created": counts.created,
+                        "planned_linked": counts.linked,
+                        "already_linked": counts.already_linked,
+                        "skipped": counts.skipped,
+                        "cricheroes_calls": calls,
+                        "reused_preview": reused_preview,
+                    },
+                ).insert()
 
     return RosterImportResponse(
         dry_run=dry_run,
@@ -286,7 +309,8 @@ async def import_tournament_players(
         upcoming_matches=roster.upcoming_matches,
         matches_read=roster.matches_read,
         matches_without_squad=roster.matches_without_squad,
-        cricheroes_calls=roster.calls,
+        cricheroes_calls=calls,
+        reused_preview=reused_preview,
         teams=roster.teams,
         created=counts.created,
         linked=counts.linked,

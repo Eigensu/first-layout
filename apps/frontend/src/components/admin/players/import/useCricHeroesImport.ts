@@ -21,6 +21,8 @@ export interface RosterImportResponse {
   matches_read: number;
   matches_without_squad: number;
   cricheroes_calls: number;
+  // True when an import used the roster its preview read.
+  reused_preview: boolean;
   teams: string[];
   created: number;
   linked: number;
@@ -57,8 +59,10 @@ export function useCricHeroesImport() {
     setError(null);
   };
 
-  const run = async (dryRun: boolean) => {
-    if (tournamentId === null) {
+  // The import always targets the tournament the preview was for, never
+  // whatever is typed in the box by then.
+  const run = async (id: number | null, dryRun: boolean) => {
+    if (id === null) {
       setError("Enter the CricHeroes tournament ID, or paste its link");
       return;
     }
@@ -67,7 +71,7 @@ export function useCricHeroesImport() {
       setError(null);
       const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN) || "";
       const response = await fetch(
-        `${API_BASE_URL}/api/admin/cricheroes/tournaments/${tournamentId}/import-players?dry_run=${dryRun}`,
+        `${API_BASE_URL}/api/admin/cricheroes/tournaments/${id}/import-players?dry_run=${dryRun}`,
         {
           method: "POST",
           headers: {
@@ -102,7 +106,7 @@ export function useCricHeroesImport() {
     loading,
     result,
     error,
-    preview: () => run(true),
-    confirm: () => run(false),
+    preview: () => run(tournamentId, true),
+    confirm: () => run(result?.cricheroes_tournament_id ?? null, false),
   };
 }

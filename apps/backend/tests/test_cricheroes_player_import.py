@@ -5,6 +5,9 @@ of each played match. The upstream here is scripted by path: the match list,
 and a squad per match id.
 """
 
+import asyncio
+from collections import Counter
+
 import httpx
 import pytest
 import pytest_asyncio
@@ -19,7 +22,11 @@ from app.models.user import User
 from app.routes.admin.cricheroes import get_cricheroes_client
 from app.services import cricheroes_roster
 from app.services.cricheroes_client import CricHeroesClient
-from app.services.cricheroes_errors import CricHeroesRateLimitError
+from app.services.cricheroes_errors import (
+    CricHeroesAPIError,
+    CricHeroesRateLimitError,
+    CricHeroesTransportError,
+)
 from app.services.cricheroes_roster import RosterPlayer, fetch_roster, plan_import
 from app.utils.dependencies import get_current_active_user
 from app.utils.tenant import TENANT_HEADER
@@ -29,9 +36,16 @@ BASE = "https://cricheroes.test/api/v1"
 CH_TOURNAMENT = 1493258
 IMPORT = f"/api/admin/cricheroes/tournaments/{CH_TOURNAMENT}/import-players"
 
-NO_DATA = httpx.Response(
-    200, json={"status": False, "error": {"code": 96007, "message": "No data found"}}
-)
+
+def refusal(code, message) -> httpx.Response:
+    return httpx.Response(
+        200, json={"status": False, "error": {"code": code, "message": message}}
+    )
+
+
+# The documented refusals: the squad endpoint's, and the match list's.
+NO_SQUAD = refusal(96001, "Match is not longer to exist!")
+NO_MATCHES = refusal(96010, "Tournament match list is not found!")
 
 
 def ok(data) -> httpx.Response:
@@ -60,7 +74,7 @@ def squad(team_id, team_name, *players):
 
 class CricHeroes:
     """A scripted upstream: the match list, and each match's squads. Either
-    can be a ready-made response instead, such as NO_DATA or a 429."""
+    can be a ready-made response instead, such as NO_SQUAD or a 429."""
 
     def __init__(self, matches, squads):
         self.matches = matches
@@ -75,7 +89,7 @@ class CricHeroes:
                 return self.matches
             return ok(self.matches)
         assert "/get-match-playing-squad/" in path, path
-        value = self.squads.get(int(path.rsplit("/", 1)[1]), NO_DATA)
+        value = self.squads.get(int(path.rsplit("/", 1)[1]), NO_SQUAD)
         return value if isinstance(value, httpx.Response) else ok(value)
 
     @property
@@ -156,7 +170,7 @@ async def test_the_roster_is_everyone_in_a_played_matchs_squad(upstream_client):
     assert (roster.matches_read, roster.matches_without_squad) == (2, 0)
     assert roster.calls == 3 == len(upstream.paths)
     # Calls are spaced out, below CricHeroes' rate limit.
-    assert pauses == [cricheroes_roster.SQUAD_CALL_SPACING_SECONDS]
+    assert pauses == [0.05]
 
 
 async def test_a_match_listed_as_upcoming_by_status_alone_is_not_read(
@@ -173,7 +187,7 @@ async def test_a_match_listed_as_upcoming_by_status_alone_is_not_read(
 async def test_a_played_match_without_a_squad_is_passed_over(upstream_client):
     upstream = CricHeroes(
         [match(1, "2025-01-01"), match(2, "2025-01-02"), match(3, "2025-01-03")],
-        {1: SQUADS[1], 2: NO_DATA, 3: [squad(10, "India")]},
+        {1: SQUADS[1], 2: NO_SQUAD, 3: [squad(10, "India")]},
     )
 
     roster = await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
@@ -188,6 +202,60 @@ async def test_any_other_failure_stops_the_roster(upstream_client):
 
     with pytest.raises(CricHeroesRateLimitError):
         await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
+
+
+async def test_any_other_refusal_of_a_squad_stops_the_roster(upstream_client):
+    """Only the squad endpoint's own "no such match" means no squad. Another
+    refusal could be CricHeroes turning us away; treating it as an empty
+    match would import a partial roster without a word."""
+    upstream = CricHeroes(MATCHES, {**SQUADS, 1: refusal(96099, "Not allowed")})
+
+    with pytest.raises(CricHeroesAPIError):
+        await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
+
+
+async def test_an_upcoming_status_is_recognised_in_any_case(upstream_client):
+    upstream = CricHeroes([match(1, "2025-01-01", type=None, status="Upcoming")], {})
+
+    roster = await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
+
+    assert upstream.squads_read == [] and roster.upcoming_matches == 1
+
+
+async def test_squads_are_read_a_few_at_a_time(upstream_client):
+    in_flight, peak = 0, 0
+    matches = [match(i, f"2025-01-{i:02d}") for i in range(1, 13)]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, peak
+        if "/get-tournament-match-list/" in request.url.path:
+            return ok(matches)
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        match_id = int(request.url.path.rsplit("/", 1)[1])
+        return ok([squad(10, "India", (match_id, f"Player {match_id}"))])
+
+    roster = await fetch_roster(
+        upstream_client(handler), CH_TOURNAMENT, sleep=_no_sleep
+    )
+
+    assert len(roster.players) == 12 and roster.calls == 13
+    assert 1 < peak <= cricheroes_roster.SQUAD_CONCURRENCY
+
+
+async def test_a_roster_that_takes_too_long_is_abandoned(upstream_client):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if "/get-tournament-match-list/" in request.url.path:
+            return ok(MATCHES)
+        await asyncio.sleep(5)
+        return ok(SQUADS[1])
+
+    with pytest.raises(CricHeroesTransportError, match="longer than 0.05s"):
+        await fetch_roster(
+            upstream_client(handler), CH_TOURNAMENT, sleep=_no_sleep, deadline=0.05
+        )
 
 
 # -- deciding what to do -------------------------------------------------------
@@ -216,12 +284,23 @@ async def test_a_player_holding_the_id_is_already_linked(db):
     assert (item.action, item.player) == ("linked", ours)
 
 
-async def test_one_unlinked_namesake_here_is_linked(db):
-    ours = Player(name="rohit  SHARMA", team="Mumbai")
+async def test_one_unlinked_namesake_on_the_same_team_is_linked(db):
+    ours = Player(name="rohit  SHARMA", team=" india")
 
     [item] = plan_import([_ch(101, "Rohit Sharma")], [ours])
 
     assert (item.action, item.player) == ("link", ours)
+
+
+async def test_a_namesake_on_another_team_is_not_linked(db):
+    """Likely someone else with a common name: linking would credit our
+    player with another man's stats."""
+    ours = Player(name="Rahul Patel", team="DV Spartans")
+
+    [item] = plan_import([_ch(101, "Rahul Patel", team="Royals")], [ours])
+
+    assert (item.action, item.player) == ("skip", ours)
+    assert "DV Spartans" in item.reason and "Royals" in item.reason
 
 
 async def test_two_namesakes_here_are_ambiguous(db):
@@ -241,12 +320,14 @@ async def test_two_namesakes_on_cricheroes_are_ambiguous(db):
     assert _actions(plan) == {101: "skip", 102: "skip"}
 
 
-async def test_two_namesakes_on_cricheroes_with_none_here_are_both_created(db):
-    """They are different people with different ids, which is what links
-    their stats; the name only matters when matching against ours."""
-    plan = plan_import([_ch(101, "Rahul Patel"), _ch(102, "Rahul Patel")], [])
+async def test_two_namesakes_on_cricheroes_with_none_here_are_not_created(db):
+    """Names are unique within a tournament -- the manual form refuses a
+    second one and the sheet import treats a name as one player -- so two
+    players of one name cannot both be added."""
+    plan = plan_import([_ch(101, "Rahul Patel"), _ch(102, "rahul patel")], [])
 
-    assert _actions(plan) == {101: "create", 102: "create"}
+    assert _actions(plan) == {101: "skip", 102: "skip"}
+    assert "unique" in plan[0].reason
 
 
 async def test_a_namesake_already_linked_elsewhere_is_not_doubled(db):
@@ -262,7 +343,7 @@ async def test_an_already_linked_namesake_does_not_make_the_name_ambiguous(db):
     """Rahul 101 is linked; the other Rahul is new and has no one to clash
     with."""
     ours = Player(name="Rahul Patel", team="A", cricheroes_player_id=101)
-    unlinked = Player(name="Rahul Patel", team="B")
+    unlinked = Player(name="Rahul Patel", team="India")
 
     plan = plan_import(
         [_ch(101, "Rahul Patel"), _ch(102, "Rahul Patel")], [ours, unlinked]
@@ -283,8 +364,11 @@ async def test_a_name_we_cannot_store_is_skipped(db):
 
 
 @pytest.fixture(autouse=True)
-def _no_spacing(monkeypatch):
-    monkeypatch.setattr(cricheroes_roster, "SQUAD_CALL_SPACING_SECONDS", 0)
+def _forget_previews():
+    """Previews are kept in process memory; no test may see another's."""
+    cricheroes_roster._previews.clear()
+    yield
+    cricheroes_roster._previews.clear()
 
 
 @pytest_asyncio.fixture
@@ -363,7 +447,7 @@ async def test_importing_creates_the_players_unpriced_and_linked(client, serve):
 async def test_linking_gives_an_existing_player_the_id_and_nothing_else(client, serve):
     await Player(
         name="Rohit Sharma",
-        team="Mumbai",
+        team="INDIA",
         price=950.0,
         points=88.0,
         slot="slot-1",
@@ -377,12 +461,14 @@ async def test_linking_gives_an_existing_player_the_id_and_nothing_else(client, 
     body = response.json()
     [rohit_row] = [p for p in body["players"] if p["cricheroes_player_id"] == 101]
     assert rohit_row["action"] == "link"
-    # The preview shows whose team differs.
-    assert (rohit_row["team"], rohit_row["player_team"]) == ("India", "Mumbai")
+    assert (rohit_row["player_name"], rohit_row["player_team"]) == (
+        "Rohit Sharma",
+        "INDIA",
+    )
     rohit = (await _players())["Rohit Sharma"]
     assert rohit.cricheroes_player_id == 101
     assert (rohit.team, rohit.price, rohit.points, rohit.slot, rohit.status) == (
-        "Mumbai",
+        "INDIA",
         950.0,
         88.0,
         "slot-1",
@@ -413,12 +499,89 @@ async def test_an_upstream_failure_part_way_writes_nothing(client, serve):
 
 
 async def test_a_tournament_cricheroes_has_no_data_for_is_a_404(client, serve):
-    serve(matches=NO_DATA)
+    serve(matches=NO_MATCHES)
 
     response = await client.post(IMPORT)
 
     assert response.status_code == 404
-    assert "No data found" in response.json()["detail"]
+    assert "not found" in response.json()["detail"]
+
+
+async def test_the_import_writes_what_its_preview_showed_at_no_cost(client, serve):
+    upstream = serve()
+    await client.post(IMPORT)
+    calls_for_preview = len(upstream.paths)
+    # A match is played between the preview and the import.
+    upstream.matches = MATCHES + [match(4, "2025-01-20T10:00:00.000Z")]
+    upstream.squads = {**SQUADS, 4: [squad(40, "Kings", (401, "New Face"))]}
+
+    response = await client.post(IMPORT, params={"dry_run": "false"})
+
+    body = response.json()
+    assert len(upstream.paths) == calls_for_preview == 3
+    assert body["reused_preview"] is True and body["cricheroes_calls"] == 0
+    assert body["created"] == 5
+    assert "New Face" not in await _players()
+    [log] = await AdminActionLog.find_all().to_list()
+    assert log.details["reused_preview"] is True
+
+
+async def test_an_import_without_a_recent_preview_reads_the_squads(
+    client, serve, monkeypatch
+):
+    upstream = serve()
+    await client.post(IMPORT)
+    monkeypatch.setattr(cricheroes_roster, "PREVIEW_TTL_SECONDS", -1)
+
+    response = await client.post(IMPORT, params={"dry_run": "false"})
+
+    assert response.json()["reused_preview"] is False
+    assert len(upstream.paths) == 6
+
+
+async def test_two_imports_at_once_do_not_create_everyone_twice(
+    client, serve, monkeypatch
+):
+    serve()
+    insert = Player.insert
+
+    async def slow_insert(self, *args, **kwargs):
+        # A real database yields here; the in-memory one does not, which
+        # would let one import finish before the other plans.
+        await asyncio.sleep(0.01)
+        return await insert(self, *args, **kwargs)
+
+    monkeypatch.setattr(Player, "insert", slow_insert)
+
+    first, second = await asyncio.gather(
+        client.post(IMPORT, params={"dry_run": "false"}),
+        client.post(IMPORT, params={"dry_run": "false"}),
+    )
+
+    created = [first.json()["created"], second.json()["created"]]
+    assert sorted(created) == [0, 5]
+    assert await Player.find_all().count() == 5
+
+
+async def test_a_write_failing_part_way_is_still_recorded(client, serve, monkeypatch):
+    serve()
+    insert = Player.insert
+    writes = Counter()
+
+    async def failing_insert(self, *args, **kwargs):
+        writes["insert"] += 1
+        if writes["insert"] > 2:
+            raise RuntimeError("database went away")
+        return await insert(self, *args, **kwargs)
+
+    monkeypatch.setattr(Player, "insert", failing_insert)
+
+    with pytest.raises(RuntimeError):
+        await client.post(IMPORT, params={"dry_run": "false"})
+
+    [log] = await AdminActionLog.find_all().to_list()
+    assert log.details["completed"] is False
+    assert (log.details["created"], log.details["planned_created"]) == (2, 5)
 
 
 async def test_a_tournament_with_nothing_played_finds_nobody(client, serve):

@@ -52,6 +52,9 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
             type="text"
             value={input}
             onChange={(e) => updateInput(e.target.value)}
+            // Locked while a search or import runs, so the result shown is
+            // always for the id in the box.
+            disabled={loading}
             onKeyDown={(e) => {
               if (e.key === "Enter" && tournamentId !== null && !loading) {
                 preview();
@@ -76,8 +79,9 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
           </Button>
         </div>
         <p className="text-xs text-text-muted mt-2">
-          Each search, and the import itself, uses 1 CricHeroes call plus 1 per
-          match played, from the yearly allowance.
+          Each search uses 1 CricHeroes call plus 1 per match played, from the
+          yearly allowance. Importing within 10 minutes of a search uses what it
+          found, at no extra cost.
         </p>
 
         {error && (
@@ -155,8 +159,10 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
           `, ${result.upcoming_matches} not played yet`}
         {result.matches_without_squad > 0 &&
           `, ${result.matches_without_squad} with no squad on CricHeroes`}
-        . Found {result.players.length} players in {result.teams.length} teams,
-        using {result.cricheroes_calls} CricHeroes calls.
+        . Found {result.players.length} players in {result.teams.length} teams
+        {result.reused_preview
+          ? ", from the preview: no new CricHeroes calls."
+          : `, using ${result.cricheroes_calls} CricHeroes calls.`}
       </p>
 
       {result.players.length === 0 ? (

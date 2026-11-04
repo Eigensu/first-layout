@@ -531,17 +531,28 @@ tournament link (`/tournament/<id>/...`), previews, then imports.
 
 **Where the players come from.** There is no roster endpoint and there will not
 be one (§13.11). The import lists the tournament's matches, skips those not yet
-played (`type` 2 or `status` "upcoming"), and reads the playing squad of each
-of the rest, newest first, 50 ms apart. A player is everyone named in any of
-those squads, substitutes included, filed under the team of their latest
-match. A played match CricHeroes have no squad for is counted and passed over;
-any other upstream failure fails the whole request and nothing is written.
+played (`type` 2, or `status` "upcoming" in any case), and reads the playing
+squad of each of the rest: five at a time, starts 50 ms apart (at most 20 calls
+a second, under the 50 allowed), within a 120-second deadline for the whole
+roster. A player is everyone named in any of those squads, substitutes
+included, filed under the team of their latest match.
+
+A played match the squad endpoint refuses with its documented code, 96001
+("Match is not longer to exist!"), or answers with empty squads is counted and
+passed over. Any other refusal, or any other failure, stops further calls and
+fails the request, and nothing is written: an unexplained refusal might be
+CricHeroes turning us away, and must not quietly import a partial roster.
 
 | Cost | |
 |---|---|
 | Calls | 1 + played matches — ~31 for a 30-match tournament |
-| Preview then import | twice that: each reads the squads afresh |
-| Reported | `cricheroes_calls` in every response; audit log on a real import |
+| Preview, then import within 10 minutes | the preview's calls only: the import reuses the roster the preview read, so it writes exactly what the admin saw. Kept in process memory — after 10 minutes, a restart, or on another replica, the import reads the squads itself |
+| Reported | `cricheroes_calls` and `reused_preview` in every response; audit log on a real import |
+
+The match list is read as one page. CricHeroes say pagination is documented,
+but our copy shows none (§13.8); if a large tournament's match list does page,
+the import misses the later pages' players until the client learns to follow
+them.
 
 **Before the first match there is nobody to find.** CricHeroes only know a
 tournament's players as they are named in playing squads. A pool needed before
@@ -553,15 +564,27 @@ nothing):
 | Action | When | Effect |
 |---|---|---|
 | `linked` | A player here already holds the id | nothing |
-| `link` | Exactly one player here without an id has the same name (case and spacing ignored), and only one CricHeroes player has it | that player's `cricheroes_player_id` is set — a targeted `$set` of it and `updated_at`, nothing else |
-| `create` | Nobody here has the name | a new player: name, team, id; price 0, no slot, no points, status Active |
-| `skip` | Several players here, or several on CricHeroes, share the name; or the player here with that name is linked to a different CricHeroes player; or the name or team does not fit our limits | nothing; the reason is shown, and the id can be set by sheet import (§13.2) |
+| `link` | Exactly one player here without an id has the same name **and the same team** (both ignoring case and spacing), and only one CricHeroes player has the name | that player's `cricheroes_player_id` is set — a targeted `$set` of it and `updated_at`, nothing else |
+| `create` | Nobody here has the name, and only one CricHeroes player has it | a new player: name, team, id; price 0, no slot, no points, status Active |
+| `skip` | The same name here on another team; several players here, or several on CricHeroes, share the name; the player here with that name is linked to a different CricHeroes player; or the name or team does not fit our limits | nothing; the reason is shown, and the id can be set by sheet import (§13.2) |
 
 An existing player's price, slot, points, status, team and stats are never
-changed. The preview shows each linked player's team here beside their
-CricHeroes team, so a same-named player on a different side is visible before
-importing. Two CricHeroes players with the same name and no one here to
-confuse them with are both created; their ids tell them apart.
+changed. Linking needs the team to match because a common name on another side
+is more likely a different person, and a wrong link credits one player with
+another's stats; a team spelled differently here than on CricHeroes therefore
+shows as a skip, fixed by a sheet import with the id. Two CricHeroes players
+sharing a name are skipped rather than both created: names are unique within
+a tournament — the manual form refuses a second, and the sheet import treats a
+name as one player — so they are added by sheet import under distinct names.
+
+**Concurrency and failure.** One import at a time per tournament: the plan is
+made, and written, under a lock from the players there at that moment, so two
+imports confirmed together cannot both create everyone. The lock is in process
+memory, which covers the single replica `walle-api` runs; more replicas would
+need the partial unique index on `(tournament_id, cricheroes_player_id)` from
+§13.2. Writes are not transactional. If one fails part way, the audit log entry
+is still written, marked `completed: false` with the counts that landed, and
+running the import again finishes the job.
 
 Photos are not copied: CricHeroes' image host is not among the image hosts
 `next.config.js` allows, which `next/image` would refuse on the team pages, and
