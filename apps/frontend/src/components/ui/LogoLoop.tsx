@@ -347,7 +347,7 @@ export const LogoLoop = React.memo<LogoLoopProps>(
     }, [effectiveHoverSpeed]);
 
     const renderLogoItem = useCallback(
-      (item: LogoItem, key: React.Key) => {
+      (item: LogoItem, key: React.Key, isCopy: boolean) => {
         if (renderItem) {
           return (
             <li
@@ -416,6 +416,9 @@ export const LogoLoop = React.memo<LogoLoopProps>(
               "focus-visible:outline focus-visible:outline-current focus-visible:outline-offset-2"
             )}
             href={(item as any).href}
+            // The repeats exist only to make the loop seamless: aria-hidden on
+            // their list doesn't stop Tab from landing on these links.
+            tabIndex={isCopy ? -1 : undefined}
             aria-label={itemAriaLabel || "logo link"}
             target="_blank"
             rel="noreferrer noopener"
@@ -456,7 +459,7 @@ export const LogoLoop = React.memo<LogoLoopProps>(
             ref={copyIndex === 0 ? seqRef : undefined}
           >
             {logos.map((item, itemIndex) =>
-              renderLogoItem(item, `${copyIndex}-${itemIndex}`)
+              renderLogoItem(item, `${copyIndex}-${itemIndex}`, copyIndex > 0)
             )}
           </ul>
         )),
