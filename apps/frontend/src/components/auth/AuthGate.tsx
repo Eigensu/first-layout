@@ -15,10 +15,5 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <>
-      {children}
-      <MobileNumberGate />
-    </>
-  );
+  return <MobileNumberGate>{children}</MobileNumberGate>;
 }

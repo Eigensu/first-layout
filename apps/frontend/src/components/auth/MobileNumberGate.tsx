@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Phone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,15 +26,29 @@ export function parseMobile(value: string): { digits: string } | { error: string
  * number. The web counterpart of the app's MobileNumberGate. It goes by the
  * account rather than by the sign-up moment, so a reload can't skip it.
  */
-export function MobileNumberGate() {
+export function MobileNumberGate({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
+  const pageRef = useRef<HTMLDivElement>(null);
 
   // The sign-in popup a tournament subdomain opens on the apex shares the
   // apex's session, and covering it would block signing in on the subdomain.
-  if (!user || user.mobile || pathname?.startsWith(GOOGLE_RELAY_PATH)) return null;
+  const needsMobile =
+    !!user && !user.mobile && !pathname?.startsWith(GOOGLE_RELAY_PATH);
 
-  return <MobileNumberDialog />;
+  // aria-modal only informs screen readers; this is what stops Tab and clicks
+  // reaching the page behind. The DOM property, not a JSX prop, because React
+  // 18 and 19 read a JSX `inert` differently.
+  useEffect(() => {
+    if (pageRef.current) pageRef.current.inert = needsMobile;
+  }, [needsMobile]);
+
+  return (
+    <>
+      <div ref={pageRef}>{children}</div>
+      {needsMobile && <MobileNumberDialog />}
+    </>
+  );
 }
 
 function MobileNumberDialog() {
