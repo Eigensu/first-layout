@@ -32,6 +32,9 @@
    REGISTER: '/auth/register',
  } as const;
 
+ // The iOS app's App Store listing (no storefront in the path, so Apple picks the visitor's)
+ export const APP_STORE_URL = 'https://apps.apple.com/app/walle-arena/id6757467806';
+
  // Pagination defaults used by lists/tables
  export const PAGINATION = {
    DEFAULT_PAGE_SIZE: 20,

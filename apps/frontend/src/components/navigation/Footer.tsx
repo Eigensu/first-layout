@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
+import { AppDownloadBanner } from "./AppDownloadBanner";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -9,6 +10,7 @@ export function Footer() {
   return (
     <footer className="bg-bg-elevated border-t border-border-subtle mt-auto">
       <div className="w-full px-4 sm:px-6 py-8 sm:py-12">
+        <AppDownloadBanner />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {/* Brand Section */}
           <div className="space-y-4">

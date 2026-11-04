@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { AppDownloadBanner } from "@/components/navigation/AppDownloadBanner";
 import { SUPPORT_EMAIL, SUPPORT_HOURS } from "./content";
 
 export function LandingFooter() {
@@ -8,6 +9,7 @@ export function LandingFooter() {
   return (
     <footer className="bg-bg-elevated border-t border-border-subtle mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <AppDownloadBanner />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           <div>
             <div className="flex items-center gap-3 mb-4">
