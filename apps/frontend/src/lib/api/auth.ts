@@ -71,4 +71,12 @@ export const authApi = {
     const response = await apiClient.get<User>('/api/users/me');
     return response.data;
   },
+
+  /**
+   * Add the mobile number a Google account was created without
+   */
+  updateMobile: async (mobile: string): Promise<User> => {
+    const response = await apiClient.patch<User>('/api/users/me', { mobile });
+    return response.data;
+  },
 };
