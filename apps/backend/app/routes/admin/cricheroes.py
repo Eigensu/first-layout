@@ -10,6 +10,10 @@ tournament's data -- and every call spends the one account-wide quota (§6).
 Once CricHeroes ids are linked to our Tournament documents, a tournament admin
 can be given access to their own tournament's id.
 
+One route writes: importing a CricHeroes tournament's players into the
+tournament whose admin page it is called from (§9.1). Platform admins
+administer every tournament, so the same gate covers the write.
+
 Responses use our attribute names (`team_name`, `fours`), not CricHeroes'
 upstream keys (`Team Name`, `4s`), which are awkward to consume from
 TypeScript; hence response_model_by_alias=False on every route. Fields we do
@@ -21,6 +25,10 @@ from typing import AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.models.admin.audit_log import AdminActionLog
+from app.models.admin.player import Player
+from app.models.user import User
+from app.schemas.admin.cricheroes_import import RosterImportPlayer, RosterImportResponse
 from app.schemas.cricheroes import (
     BattingLeaderboardEntry,
     BowlingLeaderboardEntry,
@@ -31,6 +39,7 @@ from app.schemas.cricheroes import (
     TournamentBoundaryCount,
     TournamentMatch,
 )
+from app.services import cricheroes_roster
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
     CricHeroesAPIError,
@@ -42,6 +51,7 @@ from app.services.cricheroes_errors import (
     CricHeroesTransportError,
 )
 from app.utils.dependencies import get_platform_admin
+from app.utils.tenant import TenantId, get_tenant, scoped
 
 router = APIRouter(
     prefix="/api/admin/cricheroes",
@@ -224,3 +234,75 @@ async def tournament_boundary_count(
         return await client.get_tournament_boundary_count(tournament_id)
     except CricHeroesError as exc:
         raise _to_http_error(exc) from exc
+
+
+@router.post(
+    "/tournaments/{tournament_id}/import-players",
+    response_model=RosterImportResponse,
+)
+async def import_tournament_players(
+    tournament_id: int,
+    dry_run: bool = Query(default=True),
+    client: CricHeroesClient = Depends(get_cricheroes_client),
+    current_user: User = Depends(get_platform_admin),
+    target: TenantId = Depends(get_tenant),
+):
+    """Add the players of CricHeroes tournament `tournament_id` to ours (§9.1).
+
+    `tournament_id` is CricHeroes'; ours is the one the request is made from.
+    Costs one call plus one per played match, on a dry run too -- the preview
+    and the import each read the squads afresh.
+    """
+    try:
+        roster = await cricheroes_roster.fetch_roster(client, tournament_id)
+    except CricHeroesError as exc:
+        raise _to_http_error(exc) from exc
+
+    existing = await scoped(Player, target).to_list()
+    plan = cricheroes_roster.plan_import(roster.players, existing)
+    counts = cricheroes_roster.count(plan)
+
+    if not dry_run:
+        await cricheroes_roster.apply_plan(plan, tournament_id=target)
+        await AdminActionLog(
+            tournament_id=target,
+            admin_id=str(current_user.id),
+            action="player.import_cricheroes",
+            target_type="cricheroes_tournament",
+            target_id=str(tournament_id),
+            details={
+                "created": counts.created,
+                "linked": counts.linked,
+                "already_linked": counts.already_linked,
+                "skipped": counts.skipped,
+                "cricheroes_calls": roster.calls,
+            },
+        ).insert()
+
+    return RosterImportResponse(
+        dry_run=dry_run,
+        cricheroes_tournament_id=tournament_id,
+        matches_listed=roster.matches_listed,
+        upcoming_matches=roster.upcoming_matches,
+        matches_read=roster.matches_read,
+        matches_without_squad=roster.matches_without_squad,
+        cricheroes_calls=roster.calls,
+        teams=roster.teams,
+        created=counts.created,
+        linked=counts.linked,
+        already_linked=counts.already_linked,
+        skipped=counts.skipped,
+        players=[
+            RosterImportPlayer(
+                cricheroes_player_id=item.roster.player_id,
+                name=item.roster.name,
+                team=item.roster.team,
+                action=item.action,
+                reason=item.reason,
+                player_id=str(item.player.id) if item.player else None,
+                player_name=item.player.name if item.player else None,
+                player_team=item.player.team if item.player else None,
+            )
+            for item in plan
+        ],
+    )

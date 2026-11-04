@@ -16,6 +16,8 @@ import { ImportSummary } from "./ImportSummary";
 import { ImportErrors } from "./ImportErrors";
 import { ImportConflicts } from "./ImportConflicts";
 import { ImportSampleTable } from "./ImportSampleTable";
+import { CricHeroesImport } from "./CricHeroesImport";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface PlayerImportProps {
   onSuccess?: () => void;
@@ -37,6 +39,9 @@ export function PlayerImport({ onSuccess, onClose }: PlayerImportProps) {
     updateConflictOption,
     updateSlotStrategy,
   } = usePlayerImport(onSuccess);
+  // Only platform admins may spend the CricHeroes call allowance; the backend
+  // refuses anyone else (get_platform_admin).
+  const { user } = useAuth();
 
   return (
     <div className="space-y-6 p-6 bg-gray-50 rounded-lg">
@@ -54,6 +59,8 @@ export function PlayerImport({ onSuccess, onClose }: PlayerImportProps) {
           </Button>
         )}
       </div>
+
+      {user?.is_platform_admin && <CricHeroesImport onDone={onSuccess} />}
 
       {/* Download Template */}
       <Card>
