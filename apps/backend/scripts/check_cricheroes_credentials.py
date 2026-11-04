@@ -9,7 +9,7 @@ Run from apps/backend, with CRICHEROES_API_KEY, CRICHEROES_SECRET_ACCESS_KEY
 and CRICHEROES_UDID set (or in the monorepo-root .env):
 
     python scripts/check_cricheroes_credentials.py
-    python scripts/check_cricheroes_credentials.py --tournament-id 1493258
+    python scripts/check_cricheroes_credentials.py --tournament-id 2251924
 
 Exits 0 when CricHeroes accepted the credentials, 1 otherwise.
 """
@@ -33,25 +33,36 @@ os.environ.setdefault("JWT_SECRET_KEY", "cricheroes-check-placeholder-jwt-secret
 
 from app.services.cricheroes_client import CricHeroesClient  # noqa: E402
 from app.services.cricheroes_errors import (  # noqa: E402
+    CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesError,
 )
 
-# The tournament the API doc's examples use. Its sample teams are the MWPL
-# sides, so it is very likely ours -- confirm before relying on it.
-DEFAULT_TOURNAMENT_ID = 1493258
+# Tyrant Premier League Season 13, one of the two tournaments CricHeroes serve
+# us (the other is its Test format, 2251924). The doc's introduction calls it
+# 60214, but its parameters and its own sample data say 2242502 (spec §13.12).
+DEFAULT_TOURNAMENT_ID = 2242502
 
 # The one refusal that proves the credentials got through: CricHeroes looked
 # the tournament up and has no boundary data for it. The API doc does not say
 # how bad credentials are reported -- possibly as another status:false code --
 # so no other refusal counts as success.
-NO_BOUNDARY_DATA = "96007"
+NO_BOUNDARY_DATA = "170008"
 
 
 async def check(tournament_id: int) -> int:
     async with CricHeroesClient(max_retries=0) as client:
         try:
             result = await client.get_tournament_boundary_count(tournament_id)
+        except CricHeroesAccessError as exc:
+            # Probably past the credentials check, but the doc does not say
+            # in which order CricHeroes check, so this proves nothing.
+            print(f"FAILED ({type(exc).__name__}): {exc}")
+            print(
+                f"Not proof either way: try --tournament-id {DEFAULT_TOURNAMENT_ID}"
+                " or 2251924."
+            )
+            return 1
         except CricHeroesAPIError as exc:
             if str(exc.code) == NO_BOUNDARY_DATA:
                 # The credentials got through; CricHeroes just has nothing for

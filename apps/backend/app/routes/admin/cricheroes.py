@@ -36,6 +36,7 @@ from app.schemas.cricheroes import (
     InningBattingLeaderboardEntry,
     InningBowlingLeaderboardEntry,
     LeaderboardStatsFilter,
+    PlayerMvp,
     PointTableRow,
     TournamentBoundaryCount,
     TournamentMatch,
@@ -43,6 +44,7 @@ from app.schemas.cricheroes import (
 from app.services import cricheroes_roster
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
+    CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesAuthError,
     CricHeroesConfigError,
@@ -83,8 +85,13 @@ def _to_http_error(exc: CricHeroesError) -> HTTPException:
         if exc.retry_after is not None:
             headers = {"Retry-After": str(math.ceil(exc.retry_after))}
         return HTTPException(status_code=429, detail=str(exc), headers=headers)
+    if isinstance(exc, CricHeroesAccessError):
+        # Our keys work, but this id is outside what CricHeroes serve us. The
+        # admin can act on that (another id), unlike a credentials failure.
+        return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, CricHeroesAPIError):
-        # CricHeroes reports "no data for this id" as a 200 carrying an error.
+        # CricHeroes report "no data for this id" as an error code, mostly
+        # with a 200.
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, CricHeroesTransportError):
         return HTTPException(status_code=504, detail=str(exc))
@@ -233,6 +240,22 @@ async def tournament_boundary_count(
 ):
     try:
         return await client.get_tournament_boundary_count(tournament_id)
+    except CricHeroesError as exc:
+        raise _to_http_error(exc) from exc
+
+
+@router.get(
+    "/tournaments/{tournament_id}/mvp",
+    response_model=List[PlayerMvp],
+    response_model_by_alias=False,
+)
+async def tournament_mvp(
+    tournament_id: int,
+    client: CricHeroesClient = Depends(get_cricheroes_client),
+):
+    """CricHeroes' MVP table for the tournament: their points, not ours."""
+    try:
+        return await client.get_tournament_player_mvp(tournament_id)
     except CricHeroesError as exc:
         raise _to_http_error(exc) from exc
 

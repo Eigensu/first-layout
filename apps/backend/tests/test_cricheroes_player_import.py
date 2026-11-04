@@ -33,19 +33,21 @@ from app.utils.tenant import TENANT_HEADER
 from config.settings import settings
 
 BASE = "https://cricheroes.test/api/v1"
-CH_TOURNAMENT = 1493258
+CH_TOURNAMENT = 2242502
 IMPORT = f"/api/admin/cricheroes/tournaments/{CH_TOURNAMENT}/import-players"
 
 
-def refusal(code, message) -> httpx.Response:
+def refusal(code, message, status=200) -> httpx.Response:
     return httpx.Response(
-        200, json={"status": False, "error": {"code": code, "message": message}}
+        status, json={"status": False, "error": {"code": code, "message": message}}
     )
 
 
-# The documented refusals: the squad endpoint's, and the match list's.
-NO_SQUAD = refusal(96001, "Match is not longer to exist!")
-NO_MATCHES = refusal(96010, "Tournament match list is not found!")
+# The documented refusals: the squad endpoint's two, and the match list's.
+NO_SQUAD = refusal(170003, "Match playing squad is not found!")
+NO_MATCH = refusal(170002, "Match is not found!", status=403)
+NO_MATCHES = refusal(170011, "Tournament match list is not found!")
+NOT_OURS = refusal(170001, "Access to this tournament is not allowed.", status=403)
 
 
 def ok(data) -> httpx.Response:
@@ -186,15 +188,20 @@ async def test_a_match_listed_as_upcoming_by_status_alone_is_not_read(
 
 async def test_a_played_match_without_a_squad_is_passed_over(upstream_client):
     upstream = CricHeroes(
-        [match(1, "2025-01-01"), match(2, "2025-01-02"), match(3, "2025-01-03")],
-        {1: SQUADS[1], 2: NO_SQUAD, 3: [squad(10, "India")]},
+        [
+            match(1, "2025-01-01"),
+            match(2, "2025-01-02"),
+            match(3, "2025-01-03"),
+            match(4, "2025-01-04"),
+        ],
+        {1: SQUADS[1], 2: NO_SQUAD, 3: [squad(10, "India")], 4: NO_MATCH},
     )
 
     roster = await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
 
     assert len(roster.players) == 4
-    assert (roster.matches_read, roster.matches_without_squad) == (1, 2)
-    assert roster.calls == 4
+    assert (roster.matches_read, roster.matches_without_squad) == (1, 3)
+    assert roster.calls == 5
 
 
 async def test_any_other_failure_stops_the_roster(upstream_client):
@@ -204,11 +211,16 @@ async def test_any_other_failure_stops_the_roster(upstream_client):
         await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
 
 
-async def test_any_other_refusal_of_a_squad_stops_the_roster(upstream_client):
-    """Only the squad endpoint's own "no such match" means no squad. Another
-    refusal could be CricHeroes turning us away; treating it as an empty
-    match would import a partial roster without a word."""
-    upstream = CricHeroes(MATCHES, {**SQUADS, 1: refusal(96099, "Not allowed")})
+@pytest.mark.parametrize(
+    "answer",
+    [NOT_OURS, refusal(170099, "Something else")],
+    ids=["not-in-our-agreement", "undocumented"],
+)
+async def test_any_other_refusal_of_a_squad_stops_the_roster(upstream_client, answer):
+    """Only the squad endpoint's own "no squad" and "no such match" mean no
+    squad. Another refusal could be CricHeroes turning us away; treating it as
+    an empty match would import a partial roster without a word."""
+    upstream = CricHeroes(MATCHES, {**SQUADS, 1: answer})
 
     with pytest.raises(CricHeroesAPIError):
         await fetch_roster(upstream_client(upstream), CH_TOURNAMENT)
@@ -440,7 +452,7 @@ async def test_importing_creates_the_players_unpriced_and_linked(client, serve):
     )
     assert rohit.image_url is None
     [log] = await AdminActionLog.find_all().to_list()
-    assert (log.action, log.target_id) == ("player.import_cricheroes", "1493258")
+    assert (log.action, log.target_id) == ("player.import_cricheroes", "2242502")
     assert log.details["created"] == 5 and log.details["cricheroes_calls"] == 3
 
 
@@ -505,6 +517,16 @@ async def test_a_tournament_cricheroes_has_no_data_for_is_a_404(client, serve):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
+
+
+async def test_a_tournament_outside_our_agreement_is_a_403_saying_so(client, serve):
+    serve(matches=NOT_OURS)
+
+    response = await client.post(IMPORT, params={"dry_run": "false"})
+
+    assert response.status_code == 403
+    assert "do not give us access" in response.json()["detail"]
+    assert await Player.find_all().count() == 0
 
 
 async def test_the_import_writes_what_its_preview_showed_at_no_cost(client, serve):

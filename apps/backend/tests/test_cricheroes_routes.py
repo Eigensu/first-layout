@@ -25,7 +25,7 @@ from config.settings import settings
 
 BASE = "https://cricheroes.test/api/v1"
 CREDS = {"api_key": "k", "secret_access_key": "s", "udid": "u"}
-PREFIX = "/api/admin/cricheroes/tournaments/1493258"
+PREFIX = "/api/admin/cricheroes/tournaments/2242502"
 
 DOC = json.loads(
     (Path(__file__).parent / "fixtures" / "cricheroes_doc_examples.json").read_text()
@@ -40,6 +40,7 @@ ROUTES = [
     "inning-bowling-leaderboard",
     "stats-filter",
     "boundary-count",
+    "mvp",
 ]
 
 
@@ -198,6 +199,7 @@ ROUTE_EXAMPLES = [
     ("inning-bowling-leaderboard", "get-tournament-inning-bowling-leaderboard"),
     ("stats-filter", "get-tournament-stat-leaderboard-filter"),
     ("boundary-count", "get-tournament-boundary-count"),
+    ("mvp", "get-tournament-player-mvp"),
 ]
 
 # Upstream keys that are not usable names, which our responses must not echo.
@@ -227,6 +229,7 @@ UPSTREAM_ONLY_KEYS = {
     "RoundID",
     "RoundName",
     "Quotient",
+    "TeamID",
 }
 
 
@@ -252,7 +255,7 @@ async def test_each_route_serves_its_documented_example(client, serve, route, en
     response = await client.get(f"{PREFIX}/{route}")
 
     assert response.status_code == 200, response.text
-    assert upstream.requests[0].url.path.endswith(f"/{endpoint}/1493258")
+    assert upstream.requests[0].url.path.endswith(f"/{endpoint}/2242502")
     body = response.json()
     assert body
     assert keys_anywhere(body) & UPSTREAM_ONLY_KEYS == set()
@@ -263,11 +266,18 @@ async def test_point_table_uses_clean_names(client, serve):
 
     response = await client.get(f"{PREFIX}/point-table")
 
-    england = response.json()[0]
-    assert england["team_name"] == "England (WC19)"
-    assert (england["drawn"], england["tied"], england["no_result"]) == (0, 0, 0)
-    assert england["net_rr"] == "1.152"
-    assert england["last_5"] == "W-L-W-W-W-L-L-W-W"
+    australia = response.json()[0]
+    assert (australia["team_name"], australia["team_id"]) == (
+        "Australia (WC19)",
+        362535,
+    )
+    assert (australia["drawn"], australia["tied"], australia["no_result"]) == (
+        0,
+        0,
+        0,
+    )
+    assert australia["net_rr"] == "1.065"
+    assert australia["last_5"] == "W-W-W-W-W-W-W-L"
 
 
 async def test_batting_leaderboard_uses_clean_names(client, serve):
@@ -309,10 +319,11 @@ async def test_match_list_keeps_the_nested_innings(client, serve):
 
     response = await client.get(f"{PREFIX}/matches")
 
-    dls = response.json()[1]
-    assert dls["winning_team_id"] == "362528"
-    assert dls["team_a_innings"][0]["revised_target"] == 187
-    assert dls["team_a_innings"][0]["summary"]["score"] == "201/10"
+    match = response.json()[1]
+    assert match["winning_team_id"] == "362506"
+    assert match["city_name"] == "Chester-le-Street"
+    assert match["team_b_innings"][0]["overs_played"] == "37.2"
+    assert match["team_b_innings"][0]["summary"]["score"] == "206/1"
 
 
 async def test_boundary_count_is_unwrapped(client, serve):
@@ -320,7 +331,25 @@ async def test_boundary_count_is_unwrapped(client, serve):
 
     response = await client.get(f"{PREFIX}/boundary-count")
 
-    assert response.json() == {"total_six": 357, "total_four": 1982}
+    assert response.json() == {
+        "query_id": "SS_Qcv650urrl4eHDC",
+        "total_six": 291,
+        "total_four": 1571,
+    }
+
+
+async def test_mvp_table(client, serve):
+    serve(ok(DOC["get-tournament-player-mvp"]["data"]))
+
+    response = await client.get(f"{PREFIX}/mvp")
+
+    shakib, warner = response.json()
+    assert (shakib["rank"], shakib["total"], shakib["fielding"]) == (
+        1,
+        "94.183",
+        "1.000",
+    )
+    assert warner["player_id"] == 2826889
 
 
 async def test_unmodelled_fields_pass_through_under_upstream_names(client, serve):
@@ -383,6 +412,28 @@ async def test_rejected_credentials_answer_502_not_401(client, serve, status):
     assert "CRICHEROES_SECRET_ACCESS_KEY" in response.json()["detail"]
 
 
+async def test_a_tournament_outside_our_agreement_answers_403(client, serve):
+    serve(
+        httpx.Response(
+            403,
+            json={
+                "status": False,
+                "error": {
+                    "code": 170001,
+                    "message": "Access to this tournament is not allowed.",
+                },
+            },
+        )
+    )
+
+    response = await client.get(f"{PREFIX}/matches")
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert "do not give us access" in detail
+    assert "CRICHEROES_SECRET_ACCESS_KEY" not in detail
+
+
 async def test_throttling_answers_429_with_retry_after(client, serve):
     serve(httpx.Response(429, headers={"Retry-After": "60"}))
 
@@ -409,14 +460,21 @@ async def test_a_429_is_not_retried_by_default(client, serve):
 async def test_no_such_data_answers_404(client, serve):
     serve(
         httpx.Response(
-            200, json={"status": False, "error": {"code": 96001, "message": "No data"}}
+            200,
+            json={
+                "status": False,
+                "error": {
+                    "code": 170011,
+                    "message": "Tournament match list is not found!",
+                },
+            },
         )
     )
 
     response = await client.get(f"{PREFIX}/matches")
 
     assert response.status_code == 404
-    assert "96001" in response.json()["detail"]
+    assert "170011" in response.json()["detail"]
 
 
 async def test_no_answer_answers_504(client, serve):

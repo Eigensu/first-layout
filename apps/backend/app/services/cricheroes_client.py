@@ -2,7 +2,8 @@
 
 docs/CRICHEROES_INTEGRATION_TECH_SPEC.md is the design; the section numbers in
 comments refer to it. One method per documented endpoint. Every call is a GET
-against `{base_url}/thirdparty/client/...` carrying the five documented headers.
+against `{base_url}/thirdparty/mediahubble/...` carrying the five documented
+headers.
 
 The annual call quota, not the rate limit, is what constrains this API (§6), so
 nothing here calls upstream more than asked: no prefetching, and no retries by
@@ -32,6 +33,7 @@ from app.schemas.cricheroes import (
     PlayerBowlingSeason,
     PlayerMatchBattingData,
     PlayerMatchBowlingData,
+    PlayerMvp,
     PointTableRow,
     SquadTeam,
     TournamentBoundaryCount,
@@ -39,6 +41,9 @@ from app.schemas.cricheroes import (
     WormGraph,
 )
 from app.services.cricheroes_errors import (
+    ACCESS_DENIED_CODE,
+    MATCH_NOT_FOUND_CODE,
+    CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesAuthError,
     CricHeroesConfigError,
@@ -51,9 +56,11 @@ from config.settings import get_settings
 
 logger = logging.getLogger("app.cricheroes")
 
-# The "Client" resource group is only served to third-party clients.
-DEVICE_TYPE = "thirdparty-client"
-PATH_PREFIX = "thirdparty/client"
+# Our credentials are for the "MediaHubble" resource group (§5.1). The doc of
+# 30 May 2025 had a generic "Client" group (thirdparty/client,
+# thirdparty-client); the doc of 4 Nov 2026 replaced it with this one.
+DEVICE_TYPE = "thirdparty-media-hubble"
+PATH_PREFIX = "thirdparty/mediahubble"
 
 # Backoff before retry n (0-based) is BACKOFF_BASE * BACKOFF_FACTOR**n, with
 # +/-20% jitter: ~0.5s, then ~1.5s (§6.5).
@@ -80,8 +87,31 @@ def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
+def _refusal(response: httpx.Response) -> Optional[CricHeroesAPIError]:
+    """The error a 403 carries when it is about the id, not our credentials.
+
+    CricHeroes answer 403 for a tournament, or a match of a tournament, that
+    our agreement does not cover (170001), and for a match that does not exist
+    (170002). Reporting either as rejected credentials would send whoever reads
+    it to check keys that are fine. Any other 403 is still treated as one.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return None
+    code, message = error.get("code"), error.get("message")
+    if str(code) == ACCESS_DENIED_CODE:
+        return CricHeroesAccessError(code, message)
+    if str(code) == MATCH_NOT_FOUND_CODE:
+        return CricHeroesAPIError(code, message)
+    return None
+
+
 class CricHeroesClient:
-    """Typed access to the CricHeroes "Client" resource group.
+    """Typed access to the CricHeroes "MediaHubble" resource group.
 
     Use it as an async context manager. It holds one connection pool for its
     lifetime and closes it on exit -- unless the pool was passed in, in which
@@ -223,6 +253,10 @@ class CricHeroesClient:
             attempt += 1
             await self._sleep(delay)
 
+        if response.status_code == 403:
+            refusal = _refusal(response)
+            if refusal is not None:
+                raise refusal
         if response.status_code in (401, 403):
             raise CricHeroesAuthError(response.status_code)
         if response.status_code >= 400:
@@ -301,12 +335,16 @@ class CricHeroesClient:
     ) -> List[MatchPartnership]:
         """Every partnership of one team's innings.
 
-        Same path as the current partnership plus a team id segment -- and a
-        list where that returns one object. Easy to mis-wire (§5.5).
+        A list, where the current partnership is one object. The doc of 30 May
+        2025 gave both the same path; this one has its own (§5.5).
         """
         return await self._get_model_list(
-            f"get-match-current-partnership/{match_id}/{team_id}", MatchPartnership
+            f"get-match-partnership/{match_id}/{team_id}", MatchPartnership
         )
+
+    async def get_match_player_mvp(self, match_id: int) -> List[PlayerMvp]:
+        """The match's MVP table: one row per player, ranked (§13.5)."""
+        return await self._get_model_list(f"get-match-player-mvp/{match_id}", PlayerMvp)
 
     async def get_match_manhattan_graph(self, match_id: int) -> ManhattanGraph:
         """Runs and wickets per over, for both innings."""
@@ -331,10 +369,8 @@ class CricHeroesClient:
     async def get_player_tournament_match_batting_data(
         self, tournament_id: int, player_id: int
     ) -> PlayerMatchBattingData:
-        """One player's batting in a tournament, one row per innings.
-
-        The rows carry no match id or date (§13.9).
-        """
+        """One player's batting in a tournament, one row per innings, each
+        with its match id and start time (§13.9)."""
         return await self._get_model(
             f"get-player-tournament-match-batting-data/{tournament_id}/{player_id}",
             PlayerMatchBattingData,
@@ -343,10 +379,8 @@ class CricHeroesClient:
     async def get_player_tournament_match_bowling_data(
         self, tournament_id: int, player_id: int
     ) -> PlayerMatchBowlingData:
-        """One player's bowling in a tournament, one row per spell.
-
-        The rows carry no match id or date (§13.9).
-        """
+        """One player's bowling in a tournament, one row per spell, each with
+        its match id and start time (§13.9)."""
         return await self._get_model(
             f"get-player-tournament-match-bowling-data/{tournament_id}/{player_id}",
             PlayerMatchBowlingData,
@@ -428,6 +462,13 @@ class CricHeroesClient:
         return await self._get_model(
             f"get-tournament-stat-leaderboard-filter/{tournament_id}",
             LeaderboardStatsFilter,
+        )
+
+    async def get_tournament_player_mvp(self, tournament_id: int) -> List[PlayerMvp]:
+        """The tournament's MVP table: one row per player, ranked, with their
+        batting, bowling and fielding points (§13.5)."""
+        return await self._get_model_list(
+            f"get-tournament-player-mvp/{tournament_id}", PlayerMvp
         )
 
     # -- player season stats ------------------------------------------------
