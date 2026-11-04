@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Spinner } from "@/components/ui/Loading";
+import { MobileNumberGate } from "./MobileNumberGate";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
@@ -14,5 +15,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <MobileNumberGate />
+    </>
+  );
 }
