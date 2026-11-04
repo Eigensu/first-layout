@@ -56,32 +56,44 @@ describe('parseMobile', () => {
 describe('MobileNumberGate', () => {
   it('asks a signed-in account that has no number', () => {
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('stays away when signed out or when the account has a number', () => {
     signedInAs(null);
-    const { rerender } = render(<MobileNumberGate />);
+    const { rerender } = render(<MobileNumberGate>page</MobileNumberGate>);
     expect(screen.queryByRole('dialog')).toBeNull();
 
     signedInAs({ ...googleUser, mobile: '9876543210' });
-    rerender(<MobileNumberGate />);
+    rerender(<MobileNumberGate>page</MobileNumberGate>);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('does not cover the Google sign-in popup', () => {
     mocks.pathname = '/auth/google-relay';
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('makes the page behind inert only while the prompt is open', () => {
+    signedInAs(googleUser);
+    const { rerender } = render(<MobileNumberGate>page</MobileNumberGate>);
+    const page = screen.getByText('page');
+    expect(page.inert).toBe(true);
+
+    signedInAs({ ...googleUser, mobile: '9876543210' });
+    rerender(<MobileNumberGate>page</MobileNumberGate>);
+    expect(screen.getByText('page')).toBe(page);
+    expect(page.inert).toBe(false);
   });
 
   it('saves the digits and hands the updated account to the session', async () => {
     const updated = { ...googleUser, mobile: '9876543210' };
     mocks.updateMobile.mockResolvedValue(updated);
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
 
     submit('98765 43210');
 
@@ -91,7 +103,7 @@ describe('MobileNumberGate', () => {
 
   it('does not call the server for a number it can already refuse', () => {
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
 
     submit('123');
 
@@ -104,7 +116,7 @@ describe('MobileNumberGate', () => {
       new Error('This mobile number is already linked to another account'),
     );
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
 
     submit('9876543210');
 
@@ -117,7 +129,7 @@ describe('MobileNumberGate', () => {
 
   it('offers signing out instead', () => {
     signedInAs(googleUser);
-    render(<MobileNumberGate />);
+    render(<MobileNumberGate>page</MobileNumberGate>);
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out instead' }));
 
