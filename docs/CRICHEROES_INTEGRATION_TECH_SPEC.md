@@ -1,15 +1,15 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
 **Status:** Phases 1–3 implemented (§12), all 17 endpoints fully modelled from
-the API doc (§8). Not yet run against real credentials. CricHeroes will build an
-MVP endpoint and a fielding endpoint and share their request and response
-(§13.5–13.6).
+the API doc (§8). Not yet run against real credentials. CricHeroes will add
+exactly two endpoints, Tournament MVP and Match MVP, and have closed the scope
+beyond that (§13.11).
 **Owner:** Backend
 **Scope:** `apps/backend`
 **Upstream:** `https://cricheroes.in/api/v1`, "Client" resource group (17 GET endpoints)
 **Sources:** the CricHeroes API doc (endpoints, payloads) and their written
 answers on plan, quota, rate limits and SLA (§6), and on the follow-up
-questions (§13.4–13.8).
+questions (§13.4–13.11).
 
 ---
 
@@ -53,15 +53,18 @@ it out.
 
 **Non-goals (this change)**
 
-- No persistence. Nothing is written to MongoDB; no new Beanie documents.
-- No automatic mapping of CricHeroes players onto our `Player` collection.
-  Admins link them explicitly through the player import (§13.2).
+- No persistence of CricHeroes data — no new Beanie documents, nothing cached.
+  The one write is the player import (§9.1), which creates or links our own
+  `Player` documents.
+- No fuzzy matching of CricHeroes players onto ours. The player import (§9.1)
+  links by exact name only where that is unambiguous; anything else is linked
+  explicitly through the sheet import (§13.2).
 - No caching layer, no scheduled sync, no webhook ingestion. **Caching is
   deferred, not optional** — see §6.3; the first caller that polls has to bring
   one with it.
 - No fantasy points computation. CricHeroes exposes no points or MVP endpoint
   (§13.5), and `Player.points` has no per-tournament dimension today.
-- No frontend work.
+- No frontend work beyond the import button (§9.1).
 - No public (unauthenticated) exposure of any CricHeroes data.
 
 ---
@@ -516,6 +519,80 @@ as platform-admin territory. Once §13.1 links CricHeroes ids to our
 `Tournament` documents, a tournament-scoped variant keyed on our own slug can be
 opened to tournament admins.
 
+### 9.1 Importing a tournament's players
+
+`POST /tournaments/{id}/import-players?dry_run=true|false`, the router's one
+write. `{id}` is the CricHeroes tournament; the players go into **our**
+tournament named by the request's `X-Tournament-Slug` (`get_tenant`), i.e. the
+admin page the button is pressed on. Platform admins only, like the rest of the
+router. The admin panel shows it as **Import from CricHeroes** in the Import
+Players dialog, to platform admins only; it takes the id or a CricHeroes
+tournament link (`/tournament/<id>/...`), previews, then imports.
+
+**Where the players come from.** There is no roster endpoint and there will not
+be one (§13.11). The import lists the tournament's matches, skips those not yet
+played (`type` 2, or `status` "upcoming" in any case), and reads the playing
+squad of each of the rest: five at a time, starts 50 ms apart (at most 20 calls
+a second, under the 50 allowed), within a 120-second deadline for the whole
+roster. A player is everyone named in any of those squads, substitutes
+included, filed under the team of their latest match.
+
+A played match the squad endpoint refuses with its documented code, 96001
+("Match is not longer to exist!"), or answers with empty squads is counted and
+passed over. Any other refusal, or any other failure, stops further calls and
+fails the request, and nothing is written: an unexplained refusal might be
+CricHeroes turning us away, and must not quietly import a partial roster.
+
+| Cost | |
+|---|---|
+| Calls | 1 + played matches — ~31 for a 30-match tournament |
+| Preview, then import within 10 minutes | the preview's calls only: the import reuses the roster the preview read, so it writes exactly what the admin saw. Kept in process memory — after 10 minutes, a restart, or on another replica, the import reads the squads itself |
+| Reported | `cricheroes_calls` and `reused_preview` in every response; audit log on a real import |
+
+The match list is read as one page. CricHeroes say pagination is documented,
+but our copy shows none (§13.8); if a large tournament's match list does page,
+the import misses the later pages' players until the client learns to follow
+them.
+
+**Before the first match there is nobody to find.** CricHeroes only know a
+tournament's players as they are named in playing squads. A pool needed before
+the tournament starts (an auction, say) still comes from the sheet import.
+
+**What it decides, per CricHeroes player** (`plan_import`, which writes
+nothing):
+
+| Action | When | Effect |
+|---|---|---|
+| `linked` | A player here already holds the id | nothing |
+| `link` | Exactly one player here without an id has the same name **and the same team** (both ignoring case and spacing), and only one CricHeroes player has the name | that player's `cricheroes_player_id` is set — a targeted `$set` of it and `updated_at`, nothing else |
+| `create` | Nobody here has the name, and only one CricHeroes player has it | a new player: name, team, id; price 0, no slot, no points, status Active |
+| `skip` | The same name here on another team; several players here, or several on CricHeroes, share the name; the player here with that name is linked to a different CricHeroes player; or the name or team does not fit our limits | nothing; the reason is shown, and the id can be set by sheet import (§13.2) |
+
+An existing player's price, slot, points, status, team and stats are never
+changed. Linking needs the team to match because a common name on another side
+is more likely a different person, and a wrong link credits one player with
+another's stats; a team spelled differently here than on CricHeroes therefore
+shows as a skip, fixed by a sheet import with the id. Two CricHeroes players
+sharing a name are skipped rather than both created: names are unique within
+a tournament — the manual form refuses a second, and the sheet import treats a
+name as one player — so they are added by sheet import under distinct names.
+
+**Concurrency and failure.** One import at a time per tournament: the plan is
+made, and written, under a lock from the players there at that moment, so two
+imports confirmed together cannot both create everyone. The lock is in process
+memory, which covers the single replica `walle-api` runs; more replicas would
+need the partial unique index on `(tournament_id, cricheroes_player_id)` from
+§13.2. Writes are not transactional. If one fails part way, the audit log entry
+is still written, marked `completed: false` with the counts that landed, and
+running the import again finishes the job.
+
+Photos are not copied: CricHeroes' image host is not among the image hosts
+`next.config.js` allows, which `next/image` would refuse on the team pages, and
+hotlinking their images is a question for CricHeroes first.
+
+Running it again is safe: everyone it added or linked is `linked` the second
+time. It is not a sync — players dropped from CricHeroes stay here.
+
 **Not surfaced:** the 5 match-detail and 4 player-stats endpoints. Available on
 the client for server-side use; they get routes when a screen needs them.
 
@@ -602,7 +679,8 @@ It runs with retries off: one invocation is exactly one charged call.
 | 2 | Schemas + exceptions + client + unit tests | ✅ done |
 | 3 | Admin routes + route tests + wiring | ✅ done |
 | 3b | Complete the models from the API doc (§8.0) | ✅ done — all 17 endpoints; 1,001 tests passing |
-| 3c | MVP and fielding endpoints, once CricHeroes publish them (§13.5–13.6) | client method, model, doc example, tests for each |
+| 3b′ | Import a tournament's players from match squads, with an admin button (§9.1) | ✅ done |
+| 3c | Tournament MVP and Match MVP endpoints, once CricHeroes publish them (§13.5, §13.11) | client method, model, doc example, tests for each |
 | 4 | Obtain real credentials, set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
 | 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
@@ -650,8 +728,9 @@ allowance — far too late to change a polling interval cheaply.
    responses show it read-only; the manual create and edit forms do not take
    it yet, so a wrong id is fixed by re-importing the affected rows with
    `conflict=update`. CricHeroes offers no
-   tournament roster endpoint, so the import remains the source of the player
-   pool — the ids have to come from the organiser's sheet.
+   tournament roster endpoint, so before a tournament starts the sheet import
+   remains the source of the player pool; once matches are played, the
+   CricHeroes import (§9.1) can add and link players from the match squads.
 3. **Doc inconsistencies to confirm with CricHeroes.**
    - `MODB` ("Most Dot Balls") appears in the stats-filter response as a
      bowling-leaderboard filter, but is absent from that endpoint's documented
@@ -696,18 +775,45 @@ allowance — far too late to change a polling interval cheaply.
    - **It is not built yet, so this is the moment to ask for its shape** — see
      §13.9.
 
-6. **Fielding data — CricHeroes will build it.** Same answer as §13.5: not in the
+   **Second round — the formula is theirs.** Asked whether the points formula
+   is fixed or configurable per tournament, CricHeroes pointed to their MVP 2.0
+   write-up (https://blog.cricheroes.com/mvp-2-0-pressure-index-impact-score/):
+   points built from a pressure index and an impact score. Nothing in the
+   answer offers per-tournament configuration, so treat it as fixed. The page
+   could not be read from the build environment (its host is outside the
+   session's network allowlist); read it before deciding whether MVP points can
+   stand in for fantasy points, and in particular whether fielding is part of
+   them (§13.6). Two endpoints are coming, Tournament MVP and Match MVP
+   (§13.11), in "the standard response structure" — so expect the same
+   `{status, data}` envelope, no extra fields on request.
+
+6. **Fielding data — no separate endpoint after all.** The second round of
+   answers limits new work to the two MVP endpoints (§13.11), so there is no
+   fielding endpoint. Whether catches, stumpings and run-outs reach us at all
+   now depends on the MVP responses breaking fielding out; if they only fold it
+   into a total, fielding needs a second source. The first answer, kept for the
+   record — same as §13.5: not in the
    current API (confirmed against the full doc — catches, stumpings and
    run-outs appear on no endpoint), to be created with a request and response
    shared. Until it exists, any scoring formula with a fielding term still needs
    a second source (the Google Sheet, or manual admin entry).
 
-7. **Bulk per-match endpoint — Answered: no, per player only.** A full-squad
+7. **Bulk per-match endpoint — Answered: no, per player only** (twice: "We won't
+   be able to support this change"). A full-squad
    refresh stays one call per player per discipline: ~180 calls for ~90 players.
    Affordable nightly (§6.2), not hourly, and it must be paced below 50 RPS
    (§6.5).
 
-8. **Pagination — partly answered.** CricHeroes: "Some of the APIs where the
+8. **Pagination — answered, but not by our copy of the doc.** Second round:
+   "Pagination details are already mentioned in the respective API
+   documentation and sample responses." Our copy — the aglio build of 30 May
+   2025, whose examples are the test fixture — documents no page parameter on
+   any of the 17 endpoints, and every example body is the bare
+   `{status, data}` envelope with no next-page field. Either a newer doc
+   exists or pagination lives somewhere we have not been shown; ask for the
+   current doc and which fields to read. The client returns only `data`, so a
+   page marker elsewhere in the envelope would be dropped today. First round,
+   CricHeroes: "Some of the APIs where the
    data size is huge will have paginations in the API." That does not say which
    endpoints, what the parameters are called, or how a response signals that
    more pages exist, and the current doc shows pagination on none. The client
@@ -716,7 +822,16 @@ allowance — far too late to change a polling interval cheaply.
    for the specifics; until then, cross-check match-list counts against the
    point table's `Matches`.
 
-9. **Per-match player rows cannot be tied to a match.** The two per-player
+9. **Per-match player rows cannot be tied to a match — Answered: and they
+   will not be.** Second round: "We won't be able to add additional fields or
+   change the response structure for these APIs." So the two per-player
+   match-data endpoints stay without `match_id`, date, fours, sixes and dot
+   balls. They did ask which API we meant; the answer is
+   `get-player-tournament-match-batting-data` and
+   `get-player-tournament-match-bowling-data`, but with the scope closed
+   (§13.11) expect no change. Per-match points now hinge on the Match MVP
+   endpoint returning one row per player for the match. The original
+   question: The two per-player
    match-data endpoints return one row per innings or spell, with runs, balls
    and strike rate (batting) or overs, maidens, runs and wickets (bowling) —
    and the opposition's *name*. No match id, no date. In the doc's own example
@@ -734,6 +849,22 @@ allowance — far too late to change a polling interval cheaply.
     Combined with §13.7 and §13.9, building per-match points for a full squad
     from this API costs one call per player per discipline, and still cannot
     say which match each row belongs to.
+
+
+11. **The API scope is closed.** CricHeroes, second round: "Apart from the
+    APIs already covered in the sample documentation, we are providing only
+    these two new APIs" — Tournament MVP and Match MVP — "At this stage, we
+    are not planning additional response changes or new fields beyond the
+    agreed API scope." What that settles:
+    - **No tournament roster endpoint.** A tournament's players can only be
+      collected from what has already been played: each match's playing squad
+      (§9.1), or the leaderboards (batters and bowlers only). Before the first
+      match there is nothing to collect.
+    - **No fielding endpoint** (§13.6), **no bulk player data** (§13.7), **no
+      match ids on per-player rows** (§13.9).
+    - Everything new must come through the two MVP endpoints. When their
+      samples arrive, check: one row per player? `player_id` on every row?
+      fielding broken out? paginated, and how?
 
 ---
 
