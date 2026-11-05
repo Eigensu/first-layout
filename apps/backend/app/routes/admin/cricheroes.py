@@ -54,6 +54,7 @@ from app.services.cricheroes_errors import (
     CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesAuthError,
+    CricHeroesBlockedError,
     CricHeroesConfigError,
     CricHeroesError,
     CricHeroesHTTPError,
@@ -86,6 +87,10 @@ def _to_http_error(exc: CricHeroesError) -> HTTPException:
     if isinstance(exc, CricHeroesAuthError):
         # Our upstream credentials failed, not the admin's session. A 401 here
         # would tell them to log in again, which cannot help.
+        return HTTPException(status_code=502, detail=str(exc))
+    if isinstance(exc, CricHeroesBlockedError):
+        # CricHeroes' firewall, not their API, refused us. An upstream failure
+        # like any other to the admin; the detail says it is not the keys.
         return HTTPException(status_code=502, detail=str(exc))
     if isinstance(exc, CricHeroesRateLimitError):
         # The one upstream failure passed through as itself: backing off and
