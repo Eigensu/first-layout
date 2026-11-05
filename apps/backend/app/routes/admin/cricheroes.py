@@ -12,7 +12,9 @@ can be given access to their own tournament's id.
 
 One route writes: importing a CricHeroes tournament's players into the
 tournament whose admin page it is called from (§9.1). Platform admins
-administer every tournament, so the same gate covers the write.
+administer every tournament, so the same gate covers the write. Two more look
+after the API itself: the call counter (§6.6) and the cache (§6.7), which
+"refresh now" writes to.
 
 Responses use our attribute names (`team_name`, `fours`), not CricHeroes'
 upstream keys (`Team Name`, `4s`), which are awkward to consume from
@@ -30,6 +32,11 @@ from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player
 from app.models.user import User
 from app.schemas.admin.cricheroes_import import RosterImportPlayer, RosterImportResponse
+from app.schemas.admin.cricheroes_ops import (
+    CacheStatusResponse,
+    RefreshResponse,
+    UsageReport,
+)
 from app.schemas.cricheroes import (
     BattingLeaderboardEntry,
     BowlingLeaderboardEntry,
@@ -41,7 +48,7 @@ from app.schemas.cricheroes import (
     TournamentBoundaryCount,
     TournamentMatch,
 )
-from app.services import cricheroes_roster
+from app.services import cricheroes_cache, cricheroes_roster, cricheroes_usage
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
     CricHeroesAccessError,
@@ -55,6 +62,7 @@ from app.services.cricheroes_errors import (
 )
 from app.utils.dependencies import get_platform_admin
 from app.utils.tenant import TenantId, get_tenant, scoped
+from config.settings import get_settings
 
 router = APIRouter(
     prefix="/api/admin/cricheroes",
@@ -64,9 +72,10 @@ router = APIRouter(
 
 
 async def get_cricheroes_client() -> AsyncGenerator[CricHeroesClient, None]:
-    """One client per request, closed when the request ends. Tests override
-    this to put a mock transport behind a real client."""
-    async with CricHeroesClient() as client:
+    """One client per request, closed when the request ends, every call
+    counted (§6.6). Tests override this to put a mock transport behind a real
+    client."""
+    async with cricheroes_usage.counted_client() as client:
         yield client
 
 
@@ -355,3 +364,55 @@ async def import_tournament_players(
             for item in plan
         ],
     )
+
+
+# -- the API itself: calls made, and the cache ------------------------------
+
+
+@router.get("/usage", response_model=UsageReport)
+async def usage(days: int = Query(default=30, ge=1, le=366)):
+    """Calls made this quota term and over the last `days` days (§6.6)."""
+    return await cricheroes_usage.usage(days)
+
+
+@router.get("/cache", response_model=CacheStatusResponse)
+async def cache_status():
+    """What is cached, how old it is, and whether its last refresh failed."""
+    settings = get_settings()
+    return CacheStatusResponse(
+        tournaments=settings.cricheroes_sync_tournaments,
+        max_age_hours=settings.cricheroes_snapshot_max_age_hours,
+        snapshots=await cricheroes_cache.status(),
+    )
+
+
+@router.post("/cache/refresh", response_model=RefreshResponse)
+async def refresh_cache(
+    tournament_id: Optional[int] = Query(default=None),
+    force: bool = Query(default=False),
+    client: CricHeroesClient = Depends(get_cricheroes_client),
+):
+    """Refresh the cache now, as the scheduled run would (§6.7).
+
+    Only tournaments in CRICHEROES_SYNC_TOURNAMENT_IDS, so this cannot be used
+    to cache, and pay for, arbitrary ids. `force` reads every resource whether
+    results changed or not. A tournament refreshed in the last few minutes is
+    passed over either way.
+    """
+    configured = get_settings().cricheroes_sync_tournaments
+    if tournament_id is not None and tournament_id not in configured:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Tournament {tournament_id} is not in CRICHEROES_SYNC_TOURNAMENT_IDS",
+        )
+    if not configured:
+        raise HTTPException(
+            status_code=422,
+            detail="No tournaments to refresh: set CRICHEROES_SYNC_TOURNAMENT_IDS",
+        )
+    ids = [tournament_id] if tournament_id is not None else configured
+    try:
+        reports = await cricheroes_cache.sync(client, ids, force=force)
+    except CricHeroesError as exc:
+        raise _to_http_error(exc) from exc
+    return RefreshResponse(reports=reports)

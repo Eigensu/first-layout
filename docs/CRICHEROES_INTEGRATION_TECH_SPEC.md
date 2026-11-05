@@ -55,15 +55,15 @@ it out.
 
 **Non-goals (this change)**
 
-- No persistence of CricHeroes data — no new Beanie documents, nothing cached.
-  The one write is the player import (§9.1), which creates or links our own
-  `Player` documents.
+- No persistence of CricHeroes data beyond what keeps the quota in check: the
+  call counter (§6.6) and the cache (§6.7). The player import (§9.1) creates
+  or links our own `Player` documents.
 - No fuzzy matching of CricHeroes players onto ours. The player import (§9.1)
   links by exact name only where that is unambiguous; anything else is linked
   explicitly through the sheet import (§13.2).
-- No caching layer, no scheduled sync, no webhook ingestion. **Caching is
-  deferred, not optional** — see §6.3; the first caller that polls has to bring
-  one with it.
+- No webhook ingestion, and no live polling during play. The cache (§6.7) is
+  refreshed on a schedule and driven by completed results, so standings,
+  MVP and leaderboards are a match behind while one is in play.
 - No fantasy points computation. CricHeroes' MVP points are served as they are
   (§13.5); whether they can stand in for our fantasy points is a product
   decision, and `Player.points` has no per-tournament dimension today.
@@ -115,9 +115,16 @@ New settings on the existing `Settings` class, following the established
 | `cricheroes_udid` | `CRICHEROES_UDID` | `None` | yes, at call time |
 | `cricheroes_timeout_seconds` | `CRICHEROES_TIMEOUT_SECONDS` | `15.0` | no |
 | `cricheroes_max_retries` | `CRICHEROES_MAX_RETRIES` | `0` | no |
+| `cricheroes_annual_quota` | `CRICHEROES_ANNUAL_QUOTA` | `100000` | no — the call counter's yardstick (§6.6) |
+| `cricheroes_quota_term_start` | `CRICHEROES_QUOTA_TERM_START` | unset (or blank): the last 365 days | no — the first day of any term, `YYYY-MM-DD` |
+| `cricheroes_usage_warn_percent` | `CRICHEROES_USAGE_WARN_PERCENT` | `50` | no |
+| `cricheroes_sync_tournament_ids` | `CRICHEROES_SYNC_TOURNAMENT_IDS` | empty: nothing cached | for the cache (§6.7), e.g. `2242502,2251924` |
+| `cricheroes_snapshot_max_age_hours` | `CRICHEROES_SNAPSHOT_MAX_AGE_HOURS` | `24` | no |
 
 The timeout must be positive and the retry count non-negative; a bad value fails
-at startup rather than at the first call.
+at startup rather than at the first call. So must every
+`CRICHEROES_SYNC_TOURNAMENT_IDS` entry be a positive number: a typo would
+otherwise only show as a cache that quietly stays empty.
 
 `cricheroes_timeout_seconds` defaults **below** the 30s upstream allows — see
 §6.4 for why. `cricheroes_max_retries` applies to 429 only (§6.5), and is `0` —
@@ -307,6 +314,106 @@ Batch refresh is affordable. Live polling is not, at per-client granularity.
 4. **Instrument call volume from day one.** The 80% warning arrives from
    CricHeroes, which is late and out-of-band. A counter on our side — calls per
    day, per endpoint — is cheap now and expensive to retrofit after a bill.
+   Done: §6.6. And the cache that point 1 requires: §6.7.
+
+### 6.6 The call counter
+
+Every request to CricHeroes is counted, per UTC day and endpoint, in
+`cricheroes_call_counts` (`CricHeroesCallCount`): one `$inc` upsert per
+request, keyed by a unique `(day, endpoint)` index.
+
+| Counter | What it counts |
+|---|---|
+| `calls` | Every request that reached CricHeroes, or may have — what they charge for, 429s included (§13.4). Errs high |
+| `throttled` | The 429s among them |
+| `server_errors` | The 5xx among them; calls lost to their outages are not charged (§6.1), so these are the likeliest refund |
+| `no_answer` | Among `calls`, those we stopped waiting for: timed out (ours or httpx's) or cancelled, as the player import cancels its other reads when one fails. CricHeroes may have answered and charged them all the same |
+| `not_sent` | Requests whose connection failed, so they never left; not in `calls` |
+
+The count errs high on purpose: a quota counter that reads low is the one that
+lets the quota run out. A cancelled request is counted from a shielded write,
+so a second cancellation cannot lose it.
+
+**Where it hooks in.** The client tells a `recorder` of every attempt — each
+retried 429 included, since each is charged — and `counted_client()`
+(`app/services/cricheroes_usage.py`) builds a client with the recorder set.
+The admin routes' client dependency, the player import and the scheduled sync
+all build their clients through it. A failure to count is logged and never
+fails the call it was counting. The client itself stays free of the database,
+so scripts and tests can still use it bare; the credential check (§11) does,
+and its one call is not counted.
+
+**Reading it.** `GET /api/admin/cricheroes/usage?days=30` returns this quota
+term's calls against `CRICHEROES_ANNUAL_QUOTA`, the share used, every one of
+the last `days` days (empty ones included) and calls per endpoint over them.
+The term renews yearly on the anniversary of `CRICHEROES_QUOTA_TERM_START`,
+and the current one starts on the latest anniversary on or before today —
+whatever year was configured, so a date still to come or a mistyped year
+cannot hide this term's calls. Unset or blank, the last 365 days stand in for
+it. Past
+`CRICHEROES_USAGE_WARN_PERCENT` (50% by default, well before CricHeroes' 80%)
+the response sets `over_warning`, and every scheduled sync logs a warning.
+
+The quota is per CricHeroes account. The counter is per database, so it only
+sees the whole account while one deployment holds the keys — walle-api today.
+
+### 6.7 The cache
+
+What visitors see comes from `cricheroes_snapshots` (`CricHeroesSnapshot`):
+one document per resource and CricHeroes tournament, holding the last good
+answer (stored under CricHeroes' field names, so it reads back through the
+same models as a live call), when it was fetched, and the last refresh error
+if there was one. `cricheroes_cache.read(resource, tournament_id)` is the read
+side; nothing a visitor triggers calls CricHeroes.
+
+**Cached, per tournament in `CRICHEROES_SYNC_TOURNAMENT_IDS`:** the match list,
+the points table (exact duplicate rows dropped, §8.2), the MVP table, and the
+batting and bowling leaderboards in their default order.
+
+**Refreshed by results, not by the clock.** Each run (`sync_tournament`):
+1. reads the match list — one call — and always stores it, so live scores are
+   as fresh as the schedule;
+2. digests the completed matches' results (id, result, winner, both scores;
+   matches in play and upcoming ones are left out);
+3. reads each other resource only if it is missing, was fetched under a
+   different digest, is older than `CRICHEROES_SNAPSHOT_MAX_AGE_HOURS` (24), or
+   the run is forced.
+
+Comparing each resource's own digest, rather than "did results change this
+run", means a resource whose read failed is retried on every run until it
+catches up. A failed read keeps the last good data and records the error, so
+an outage shows stale data rather than none. A missing credential stops the
+run before any call.
+
+**One run at a time, across processes.** The scheduled job and walle-api are
+separate services, so an in-memory lock cannot keep an admin's "refresh now"
+from overlapping the hourly run. Each run first claims the tournament with one
+atomic write on its match-list document, which matches only when the
+tournament was not refreshed in the last 5 minutes and no live claim is held;
+when the document exists but does not match, the upsert's insert collides on
+the unique key, and that collision is the refusal. The run is then reported as
+skipped — "refreshed N minute(s) ago" or "another refresh of it is running" —
+and makes no calls. A run releases its own claim when it ends, however it
+ends; a claim left by a run that died expires after 10 minutes, longer than
+any run (five requests of at most 15 s). Every other write is an upsert that
+retries once if it loses the race to insert the document.
+
+**Cost**, both tournaments, hourly: 2 × 24 match-list calls, plus 4 per
+completed match per tournament, plus at most 8 a day for the age check — about
+60 a day, a fifth of the ~274 the quota allows (§6.2). During play the
+standings, MVP and leaderboards are a match behind; reading them every hour
+during matches would cost four times as much.
+
+**Running it.** `scripts/sync_cricheroes.py` is the scheduled job, meant for
+its own Railway cron service (start command
+`. /opt/venv/bin/activate && python scripts/sync_cricheroes.py`, schedule
+`0 * * * *`, with `MONGODB_URL`, `MONGODB_DB_NAME`, `TENANCY`, the three
+credentials and `CRICHEROES_SYNC_TOURNAMENT_IDS` set). It exits 0 when every
+tournament refreshed or was current, 1 on any failure or missing credential,
+and 0 with a message when nothing is configured. Admins can see the cache at
+`GET /api/admin/cricheroes/cache` and refresh it with
+`POST /api/admin/cricheroes/cache/refresh` (`tournament_id`, `force`), which
+accepts only configured tournaments.
 
 ### 6.4 Timeout: deliberate deviation
 
@@ -557,6 +664,9 @@ mistake.
 | `GET /tournaments/{id}/stats-filter` | — |
 | `GET /tournaments/{id}/boundary-count` | — |
 | `GET /tournaments/{id}/mvp` | — |
+| `GET /usage` | `days` — the call counter (§6.6) |
+| `GET /cache` | — the cache's contents and freshness (§6.7) |
+| `POST /cache/refresh` | `tournament_id`, `force` — refresh now (§6.7) |
 
 `{id}` is the **CricHeroes** tournament id, not our `Tournament` document id.
 The two are unrelated today; §13.1 covers linking them. Only the two
@@ -672,8 +782,9 @@ routes when a screen needs them.
 
 ## 10. Testing
 
-Four files — the client, the routes, the player import (§9.1) and the
-credential check (§11) — no network, `httpx.MockTransport` throughout. Response
+Seven files — the client, the routes, the player import (§9.1), the
+credential check (§11), the call counter (§6.6), the cache (§6.7) and its
+scheduled script — no network, `httpx.MockTransport` throughout. Response
 bodies come from the API doc's examples
 (`tests/fixtures/cricheroes_doc_examples.json`); hand-made bodies are used only
 for what the doc does not show — errors, and drift from the documented types.
@@ -725,7 +836,15 @@ tournament admin, and serialising by alias each turn the client and route tests
 red. For the move to the doc of 4 Nov 2026: ignoring a 403's code, reading
 170001 by status instead of code, dropping 170002 from the import's "no squad"
 codes, restoring the old partnership path, and keeping duplicate point-table
-rows each do too.
+rows each do too. For the counter and cache: not counting answered calls,
+leaving the routes' client uncounted, re-reading a resource only when results
+changed in the same run (so a failed read is never retried), letting matches
+in play into the results digest, dropping the 5-minute guard, and storing
+rows under our names instead of CricHeroes' each turn the tests red. So do,
+after the review of #71: refreshing without the claim, never releasing it,
+dropping the insert-race retry, sorting the digest as tuples, not counting a
+cancelled request, counting a failed connection as sent, keeping a term start
+still to come, and refusing a blank one.
 
 ---
 
@@ -752,7 +871,8 @@ python scripts/check_cricheroes_credentials.py --tournament-id <your-id>
 
 It sets placeholder `SECRET_KEY` / `JWT_SECRET_KEY` before importing settings, so
 a missing app secret cannot fail the script for a reason unrelated to CricHeroes.
-It runs with retries off: one invocation is exactly one charged call.
+It runs with retries off: one invocation is exactly one charged call. It does
+not connect to the database, so that call is not in the counter (§6.6).
 
 ---
 
@@ -768,8 +888,9 @@ It runs with retries off: one invocation is exactly one charged call.
 | 3c | Tournament MVP and Match MVP endpoints (§13.5) | ✅ done — client methods, `PlayerMvp` model, doc examples, tests; the tournament table has a route |
 | 3d | Move to the MediaHubble doc of 4 Nov 2026: paths, header, error codes, new fields (§13.12) | ✅ done |
 | 4 | Obtain real credentials (the secret above all, §13.12), set in Railway, run the check script | script exits 0 |
-| 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
-| 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
+| 5 | Call counter — calls/day/endpoint, logged and queryable (§6.6) | ✅ done |
+| 5b | Cache with a results-driven scheduled sync (§6.7) | ✅ done; the Railway cron service is still to be created |
+| 6 | Public pages read the cache: MVP, leaderboards, points table | separate change; reads `cricheroes_cache.read`, never CricHeroes |
 
 Phases 1–3 are safe to merge with no credentials at all: nothing calls the API
 until someone hits a route, and without credentials that route returns a 503
@@ -1027,7 +1148,7 @@ allowance — far too late to change a polling interval cheaply.
 | Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` absorbs a number arriving where a string is documented; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |
 | Live API disagrees with its own doc | Models are built from the doc's examples, never called live yet. Statistics are optional, so only a wrong type or a missing id fails a response — with a schema error that says exactly what to fix |
 | API doc lost again | Its example bodies are checked in as a test fixture (§8.0) |
-| **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only routes, no public exposure; caching is a precondition on the first polling caller (§6.3); batch over poll; call counter from day one; CricHeroes warns at 80% |
+| **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only live routes; anything public reads the cache (§6.7), refreshed by results at ~60 calls a day; the call counter reports the term against the quota and warns at 50% (§6.6); CricHeroes warn at 80% |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
 | Throttling under burst | A 429 is charged (§13.4), so it is not retried by default; batch jobs pace themselves below 50 RPS (§6.5). At our volumes a 429 more likely signals a runaway loop than real load |
 | Response truncated at the 3 MB cap | No endpoint paginates (§13.8), and only two tournaments are served; if a match list looks short, verify its count against the point table |

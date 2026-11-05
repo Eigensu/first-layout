@@ -1,0 +1,81 @@
+"""What the CricHeroes call counter and cache report
+(docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6, §6.7).
+
+The services build these and the admin routes return them as they are, so each
+shape is defined once.
+"""
+
+from datetime import date, datetime
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, Field, computed_field
+
+
+class DayUsage(BaseModel):
+    day: str
+    # Requests that reached CricHeroes, or may have: what they charge for,
+    # 429s included. Errs high (§6.6).
+    calls: int = 0
+    throttled: int = 0
+    server_errors: int = 0
+    # Of `calls`, those we stopped waiting for: timed out or cancelled.
+    no_answer: int = 0
+    # Requests that never left: the connection failed. Not in `calls`.
+    not_sent: int = 0
+
+
+class UsageReport(BaseModel):
+    term_start: date
+    # False: CRICHEROES_QUOTA_TERM_START is unset, so the last 365 days stand
+    # in for the term.
+    term_start_configured: bool
+    quota: int
+    calls_this_term: int
+    percent_used: float
+    warn_percent: float
+    over_warning: bool
+    # The last `days` days, newest first, every day present.
+    days: List[DayUsage] = Field(default_factory=list)
+    # Calls per endpoint over those days, most called first.
+    by_endpoint: Dict[str, int] = Field(default_factory=dict)
+
+
+class SnapshotStatus(BaseModel):
+    resource: str
+    cricheroes_tournament_id: int
+    fetched_at: Optional[datetime] = None
+    rows: int = 0
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+
+
+class CacheStatusResponse(BaseModel):
+    # CRICHEROES_SYNC_TOURNAMENT_IDS.
+    tournaments: List[int]
+    max_age_hours: float
+    snapshots: List[SnapshotStatus]
+
+
+class SyncReport(BaseModel):
+    """One tournament's refresh."""
+
+    tournament_id: int
+    # Resources read from CricHeroes; each was one request.
+    refreshed: List[str] = Field(default_factory=list)
+    # Resources whose cached copy was still current: no request.
+    unchanged: List[str] = Field(default_factory=list)
+    # Resource -> why it could not be read; its cached copy was kept.
+    failed: Dict[str, str] = Field(default_factory=dict)
+    # Set when the whole tournament was passed over, with the reason.
+    skipped: Optional[str] = None
+    results_changed: bool = False
+
+    @computed_field
+    @property
+    def calls(self) -> int:
+        """Requests made to CricHeroes for this tournament in this run."""
+        return len(self.refreshed) + len(self.failed)
+
+
+class RefreshResponse(BaseModel):
+    reports: List[SyncReport]

@@ -69,6 +69,10 @@ BACKOFF_FACTOR = 3.0
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 Sleep = Callable[[float], Awaitable[None]]
+# Told of every attempt (§6.6): the endpoint; the HTTP status CricHeroes
+# answered with, or None when no answer came; and whether the request left at
+# all -- False only when the connection failed.
+CallRecorder = Callable[[str, Optional[int], bool], Awaitable[None]]
 
 
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
@@ -124,6 +128,7 @@ class CricHeroesClient:
         max_retries: Optional[int] = None,
         client: Optional[httpx.AsyncClient] = None,
         sleep: Optional[Sleep] = None,
+        recorder: Optional[CallRecorder] = None,
     ):
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.cricheroes_api_key
@@ -144,6 +149,9 @@ class CricHeroesClient:
         self._owns_client = client is None
         # Injectable so retry tests count attempts without waiting.
         self._sleep = sleep or asyncio.sleep
+        # Counts calls against the quota. App code builds clients through
+        # app.services.cricheroes_usage.counted_client, which sets it.
+        self._recorder = recorder
 
     async def __aenter__(self) -> "CricHeroesClient":
         return self
@@ -195,6 +203,18 @@ class CricHeroesClient:
     def _backoff(attempt: int) -> float:
         return BACKOFF_BASE * (BACKOFF_FACTOR**attempt) * random.uniform(0.8, 1.2)
 
+    async def _record(
+        self, path: str, status: Optional[int], sent: bool = True
+    ) -> None:
+        """Count one attempt. Counting never fails the call it counts."""
+        if self._recorder is None:
+            return
+        endpoint = path.split("/", 1)[0]
+        try:
+            await self._recorder(endpoint, status, sent)
+        except Exception:
+            logger.exception("Could not count a CricHeroes call to %s", endpoint)
+
     async def _request(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """GET one endpoint and return the envelope's `data`.
 
@@ -219,13 +239,31 @@ class CricHeroesClient:
                     timeout=self.timeout,
                 )
             except asyncio.TimeoutError as exc:
+                # Sent, most likely, and maybe answered and charged after we
+                # stopped waiting: counted as a call (§6.6).
+                await self._record(path, None)
                 raise CricHeroesTransportError(
                     f"CricHeroes request to {url} took longer than {self.timeout:g}s"
                 ) from exc
-            except httpx.HTTPError as exc:
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                # The connection failed, so the request never left.
+                await self._record(path, None, sent=False)
                 raise CricHeroesTransportError(
                     f"CricHeroes request to {url} failed: {exc!r}"
                 ) from exc
+            except httpx.HTTPError as exc:
+                await self._record(path, None)
+                raise CricHeroesTransportError(
+                    f"CricHeroes request to {url} failed: {exc!r}"
+                ) from exc
+            except asyncio.CancelledError:
+                # Our caller gave up (the player import stops its other reads
+                # on a failure). CricHeroes may still answer and charge it.
+                # Shielded, so a second cancellation cannot lose the count.
+                await asyncio.shield(self._record(path, None))
+                raise
+            # Every answer is counted, retried 429s included: each is charged.
+            await self._record(path, response.status_code)
 
             if response.status_code != 429:
                 break
