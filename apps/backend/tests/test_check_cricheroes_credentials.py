@@ -90,3 +90,22 @@ async def test_a_rejection_is_failure(answer, capsys):
 
     assert await check_script.check(2242502) == 1
     assert "CricHeroesAuthError" in capsys.readouterr().out
+
+
+async def test_an_invalid_api_key_is_failure(answer, capsys):
+    answer(refusal(2002, "Invalid api-key"))
+
+    assert await check_script.check(2242502) == 1
+    out = capsys.readouterr().out
+    assert "OK" not in out
+    assert "CricHeroesAuthError" in out
+
+
+async def test_a_firewall_block_says_the_credentials_were_not_tested(answer, capsys):
+    answer(refusal(20250529, "Request blocked by security policy.", status=403))
+
+    assert await check_script.check(2242502) == 1
+    out = capsys.readouterr().out
+    assert "OK" not in out
+    assert "CricHeroesBlockedError" in out
+    assert "credentials were not tested" in out

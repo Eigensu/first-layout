@@ -7,6 +7,7 @@ tournament id. docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §7 maps each one to a
 route status.
 """
 
+import re
 from typing import List, Optional
 
 CREDENTIAL_ENV_VARS = (
@@ -22,8 +23,43 @@ MATCH_NOT_FOUND_CODE = "170002"  # no such match; sent with HTTP 403
 SQUAD_NOT_FOUND_CODE = "170003"  # the match has no playing squad
 
 # The codes CricHeroes send with HTTP 403 that are about the id, not about our
-# credentials. Any other 403 is read as rejected credentials.
+# credentials.
 ID_REFUSAL_CODES = frozenset({ACCESS_DENIED_CODE, MATCH_NOT_FOUND_CODE})
+
+# Undocumented, seen live on 6 Nov 2026 (spec §7). CricHeroes' Cloudflare
+# firewall answers a request it dislikes -- e.g. one with httpx's default
+# User-Agent -- with HTTP 403 and this code, *before* the credentials are
+# looked at. Read as a credentials failure it sent us checking keys that were
+# never the problem.
+FIREWALL_BLOCK_CODE = "20250529"
+_FIREWALL_BLOCK_MESSAGE = re.compile(r"blocked by security policy", re.IGNORECASE)
+
+# Undocumented, seen live on 6 Nov 2026: a wrong api-key comes back as HTTP 200
+# with `status: false` and this code -- not as a 401/403. The codes for a wrong
+# secret or udid are unknown, so a refusal whose message calls one of the
+# three headers invalid counts too.
+CREDENTIAL_ERROR_CODES = frozenset({"2002"})
+_CREDENTIAL_MESSAGE = re.compile(r"invalid\W+(api[-_ ]?key|secret|udid)", re.IGNORECASE)
+
+
+def _text(message) -> str:
+    """A message to search. Nothing promises CricHeroes send a string, and a
+    number or object must not crash the check meant to explain the failure."""
+    return "" if message is None else str(message)
+
+
+def is_firewall_block(code, message) -> bool:
+    """Whether a refusal is CricHeroes' firewall, not their API, saying no."""
+    return str(code) == FIREWALL_BLOCK_CODE or bool(
+        _FIREWALL_BLOCK_MESSAGE.search(_text(message))
+    )
+
+
+def is_credential_error(code, message) -> bool:
+    """Whether a `status: false` refusal is about our credentials."""
+    return str(code) in CREDENTIAL_ERROR_CODES or bool(
+        _CREDENTIAL_MESSAGE.search(_text(message))
+    )
 
 
 class CricHeroesError(Exception):
@@ -42,17 +78,52 @@ class CricHeroesConfigError(CricHeroesError):
         )
 
 
-class CricHeroesAuthError(CricHeroesError):
-    """CricHeroes rejected our credentials: HTTP 401, or a 403 without a
-    documented code (see ACCESS_DENIED_CODE and MATCH_NOT_FOUND_CODE)."""
+def _upstream_said(code, message: Optional[str]) -> str:
+    """What CricHeroes' own body said, for the end of an error message."""
+    if code is None and not message:
+        return ""
+    if code is None:
+        return f" CricHeroes said: {message}."
+    return f" CricHeroes said: code {code}: {message or 'no message'}."
 
-    def __init__(self, status_code: int):
+
+class CricHeroesAuthError(CricHeroesError):
+    """CricHeroes rejected our credentials: HTTP 401, a 403 that is neither a
+    firewall block nor about the id, or a `status: false` credentials code
+    (CREDENTIAL_ERROR_CODES) with any status."""
+
+    def __init__(
+        self,
+        status_code: int,
+        code: Optional[int] = None,
+        message: Optional[str] = None,
+    ):
         self.status_code = status_code
+        self.code = code
+        self.message = message
         super().__init__(
-            f"CricHeroes rejected the request credentials (HTTP {status_code}). "
-            f"Check {', '.join(CREDENTIAL_ENV_VARS)} hold the values CricHeroes "
+            f"CricHeroes rejected the request credentials (HTTP {status_code})."
+            + _upstream_said(code, message)
+            + f" Check {', '.join(CREDENTIAL_ENV_VARS)} hold the values CricHeroes "
             "issued us: the API doc's examples may not be ours, and its secret is a "
             "placeholder."
+        )
+
+
+class CricHeroesBlockedError(CricHeroesError):
+    """CricHeroes' firewall refused the request before their API saw it
+    (FIREWALL_BLOCK_CODE). Not a credentials problem: nothing on our side but
+    how the request looks can change it, and CricHeroes decide what passes."""
+
+    def __init__(self, status_code: int, code: Optional[int], message: Optional[str]):
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        super().__init__(
+            f"CricHeroes' firewall blocked the request (HTTP {status_code}) "
+            "before our credentials were checked, so they are not the problem."
+            + _upstream_said(code, message)
+            + " CricHeroes need to let our server's requests through."
         )
 
 
@@ -110,9 +181,16 @@ class CricHeroesAccessError(CricHeroesAPIError):
         )
 
 
-def api_error(code: Optional[int], message: Optional[str]) -> CricHeroesAPIError:
+def api_error(
+    code: Optional[int], message: Optional[str], status_code: int = 200
+) -> CricHeroesError:
     """The exception for a `status: false` body, whatever the HTTP status it
-    came with: 170001 is an access refusal, anything else is "no such data"."""
+    came with: a firewall block, rejected credentials, an access refusal
+    (170001), or else "no such data"."""
+    if is_firewall_block(code, message):
+        return CricHeroesBlockedError(status_code, code, message)
+    if is_credential_error(code, message):
+        return CricHeroesAuthError(status_code, code, message)
     if str(code) == ACCESS_DENIED_CODE:
         return CricHeroesAccessError(code, message)
     return CricHeroesAPIError(code, message)

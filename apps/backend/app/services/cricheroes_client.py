@@ -3,7 +3,7 @@
 docs/CRICHEROES_INTEGRATION_TECH_SPEC.md is the design; the section numbers in
 comments refer to it. One method per documented endpoint. Every call is a GET
 against `{base_url}/thirdparty/mediahubble/...` carrying the five documented
-headers.
+headers, plus a User-Agent naming us.
 
 The annual call quota, not the rate limit, is what constrains this API (§6), so
 nothing here calls upstream more than asked: no prefetching, and no retries by
@@ -17,7 +17,7 @@ import json
 import logging
 import math
 import random
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -43,14 +43,17 @@ from app.schemas.cricheroes import (
 )
 from app.services.cricheroes_errors import (
     ID_REFUSAL_CODES,
-    CricHeroesAPIError,
     CricHeroesAuthError,
+    CricHeroesBlockedError,
     CricHeroesConfigError,
+    CricHeroesError,
     CricHeroesHTTPError,
     CricHeroesRateLimitError,
     CricHeroesSchemaError,
     CricHeroesTransportError,
     api_error,
+    is_credential_error,
+    is_firewall_block,
 )
 from config.settings import get_settings
 
@@ -61,6 +64,12 @@ logger = logging.getLogger("app.cricheroes")
 # thirdparty-client); the doc of 4 Nov 2026 replaced it with this one.
 DEVICE_TYPE = "thirdparty-media-hubble"
 PATH_PREFIX = "thirdparty/mediahubble"
+
+# CricHeroes' Cloudflare firewall blocks httpx's default User-Agent
+# ("python-httpx/...") with a 403 and code 20250529 before any credential
+# check; a User-Agent naming our app was let through on 6 Nov 2026 (spec §5.1).
+# Change it only after checking the new one still gets past the firewall.
+USER_AGENT = "WalleArena/1.0 (+https://wallearena.com)"
 
 # Backoff before retry n (0-based) is BACKOFF_BASE * BACKOFF_FACTOR**n, with
 # +/-20% jitter: ~0.5s, then ~1.5s (§6.5).
@@ -91,22 +100,40 @@ def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
-def _refusal(response: httpx.Response) -> Optional[CricHeroesAPIError]:
-    """The error a 403 carries when it is about the id, not our credentials.
+def _error_body(response: httpx.Response) -> Tuple[Optional[Any], Optional[str]]:
+    """The (code, message) of a refusal's `error`, or (None, None).
 
-    CricHeroes answer 403 for a tournament, or a match of a tournament, that
-    our agreement does not cover (170001), and for a match that does not exist
-    (170002). Reporting either as rejected credentials would send whoever reads
-    it to check keys that are fine. Any other 403 is still treated as one.
+    Kept so a 401/403 can say what CricHeroes actually said. A 403 has more
+    than one cause -- the firewall, an id outside our agreement, a missing
+    match, bad credentials -- and only the body tells them apart.
     """
     try:
         payload = response.json()
     except ValueError:
-        return None
+        return None, None
     error = payload.get("error") if isinstance(payload, dict) else None
-    if not isinstance(error, dict) or str(error.get("code")) not in ID_REFUSAL_CODES:
-        return None
-    return api_error(error.get("code"), error.get("message"))
+    if isinstance(error, dict):
+        return error.get("code"), error.get("message")
+    if error:
+        return None, str(error)
+    return None, None
+
+
+def _rejection(response: httpx.Response) -> CricHeroesError:
+    """The error for a 401 or 403, read from its body.
+
+    - 170001 / 170002 on a 403: about the id, not our credentials.
+    - CricHeroes' firewall (code 20250529): the request never reached their
+      API, so the credentials were not checked at all.
+    - Anything else: rejected credentials, with what CricHeroes said.
+    """
+    code, message = _error_body(response)
+    status = response.status_code
+    if status == 403 and code is not None and str(code) in ID_REFUSAL_CODES:
+        return api_error(code, message, status)
+    if is_firewall_block(code, message):
+        return CricHeroesBlockedError(status, code, message)
+    return CricHeroesAuthError(status, code, message)
 
 
 class CricHeroesClient:
@@ -172,7 +199,8 @@ class CricHeroesClient:
     # -- request plumbing --------------------------------------------------
 
     def _headers(self) -> Dict[str, str]:
-        """The five documented headers, or ConfigError before any connection.
+        """The five documented headers and our User-Agent, or ConfigError
+        before any connection.
 
         A partial set is rejected upstream the same way a wrong one is, so
         "some credentials" counts as not configured rather than spending a call
@@ -192,6 +220,7 @@ class CricHeroesClient:
             "secret_access_key": self.secret_access_key,
             "udid": self.udid,
             "device-type": DEVICE_TYPE,
+            "User-Agent": USER_AGENT,
         }
 
     @staticmethod
@@ -286,13 +315,17 @@ class CricHeroesClient:
             attempt += 1
             await self._sleep(delay)
 
-        if response.status_code == 403:
-            refusal = _refusal(response)
-            if refusal is not None:
-                raise refusal
         if response.status_code in (401, 403):
-            raise CricHeroesAuthError(response.status_code)
+            raise _rejection(response)
         if response.status_code >= 400:
+            # A firewall block or a credentials refusal is what it says
+            # whatever status it comes with; anything else is upstream
+            # trouble.
+            code, message = _error_body(response)
+            if is_firewall_block(code, message):
+                raise CricHeroesBlockedError(response.status_code, code, message)
+            if is_credential_error(code, message):
+                raise CricHeroesAuthError(response.status_code, code, message)
             raise CricHeroesHTTPError(response.status_code, response.text[:500])
 
         try:
@@ -312,8 +345,10 @@ class CricHeroesClient:
                 # whatever came back as the message rather than fail on it.
                 error = {"message": str(error) if error else None}
             # The same mapping as a 403's, so a 170001 is an access refusal
-            # whichever status it arrives with.
-            raise api_error(error.get("code"), error.get("message"))
+            # and a 2002 a credentials failure whichever status they come with.
+            raise api_error(
+                error.get("code"), error.get("message"), response.status_code
+            )
         return payload.get("data")
 
     async def _get_model(

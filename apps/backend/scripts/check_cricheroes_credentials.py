@@ -35,6 +35,7 @@ from app.services.cricheroes_client import CricHeroesClient  # noqa: E402
 from app.services.cricheroes_errors import (  # noqa: E402
     CricHeroesAccessError,
     CricHeroesAPIError,
+    CricHeroesBlockedError,
     CricHeroesError,
 )
 
@@ -78,6 +79,12 @@ async def check(tournament_id: int) -> int:
                 "CricHeroes refused the request. This may be how it rejects "
                 "credentials; do not treat them as working."
             )
+            return 1
+        except CricHeroesBlockedError as exc:
+            # The firewall stopped the request before the API saw it: the
+            # credentials were not checked, so this says nothing about them.
+            print(f"FAILED ({type(exc).__name__}): {exc}")
+            print("The credentials were not tested; run this again once unblocked.")
             return 1
         except CricHeroesError as exc:
             print(f"FAILED ({type(exc).__name__}): {exc}")

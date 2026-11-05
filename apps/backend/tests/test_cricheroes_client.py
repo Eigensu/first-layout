@@ -18,11 +18,12 @@ from cricheroes_responses import refusal
 from pydantic import BaseModel
 
 from app.schemas.cricheroes import BattingLeaderboardEntry
-from app.services.cricheroes_client import DEVICE_TYPE, CricHeroesClient
+from app.services.cricheroes_client import DEVICE_TYPE, USER_AGENT, CricHeroesClient
 from app.services.cricheroes_errors import (
     CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesAuthError,
+    CricHeroesBlockedError,
     CricHeroesConfigError,
     CricHeroesHTTPError,
     CricHeroesRateLimitError,
@@ -112,6 +113,19 @@ async def test_sends_the_five_documented_headers(make_client):
     assert headers["secret_access_key"] == CREDS["secret_access_key"]
     assert headers["udid"] == CREDS["udid"]
     assert headers["device-type"] == DEVICE_TYPE == "thirdparty-media-hubble"
+
+
+async def test_names_us_in_the_user_agent_not_httpx(make_client):
+    """CricHeroes' firewall blocks httpx's default User-Agent (code 20250529)."""
+    upstream = Upstream(ok([]))
+    client, _ = make_client(upstream)
+
+    await client.get_tournament_match_list(2242502)
+
+    user_agent = upstream.requests[0].headers["user-agent"]
+    assert user_agent == USER_AGENT
+    assert user_agent.startswith("WalleArena/")
+    assert "httpx" not in user_agent.lower()
 
 
 async def test_requests_go_under_the_mediahubble_path(make_client):
@@ -248,6 +262,157 @@ async def test_any_other_refusal_is_still_a_credentials_error(make_client, respo
         await client.get_tournament_match_list(2242502)
 
 
+# Both bodies as CricHeroes sent them on 6 Nov 2026, to a request with dummy
+# credentials: the firewall's, for httpx's default User-Agent, and the API's,
+# once a request got past it.
+FIREWALL_BLOCK = httpx.Response(
+    403,
+    json={
+        "status": False,
+        "error": {
+            "code": 20250529,
+            "message": "Request blocked by security policy. (err: 20250529)",
+        },
+    },
+)
+INVALID_API_KEY = refusal(2002, "Invalid api-key")
+
+
+async def test_a_firewall_block_is_not_a_credentials_error(make_client):
+    """The 403 that sent us checking keys that were never the problem."""
+    client, _ = make_client(Upstream(FIREWALL_BLOCK))
+
+    with pytest.raises(CricHeroesBlockedError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert not isinstance(caught.value, CricHeroesAuthError)
+    assert not isinstance(caught.value, CricHeroesAPIError)
+    assert caught.value.status_code == 403
+    assert caught.value.code == 20250529
+    message = str(caught.value)
+    assert "firewall" in message
+    assert "not the problem" in message
+    assert "Request blocked by security policy" in message
+    assert "CRICHEROES_API_KEY" not in message
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        refusal("20250529", "nope", status=403),
+        refusal(None, "Request blocked by security policy.", status=403),
+        refusal(20250529, "Request blocked by security policy.", status=200),
+    ],
+    ids=["code-as-string", "message-only", "on-a-200"],
+)
+async def test_a_firewall_block_is_known_by_its_code_or_message(make_client, response):
+    client, _ = make_client(Upstream(response))
+
+    with pytest.raises(CricHeroesBlockedError):
+        await client.get_tournament_match_list(2242502)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        INVALID_API_KEY,
+        refusal("2002", "Invalid api-key", status=403),
+        refusal(2099, "Invalid udid"),
+        refusal(2098, "invalid secret_access_key"),
+    ],
+    ids=["2002-on-a-200", "2002-on-a-403", "udid-by-message", "secret-by-message"],
+)
+async def test_a_credentials_refusal_in_the_body_is_a_credentials_error(
+    make_client, response
+):
+    """A wrong api-key comes back as a 200 with status:false, not a 401/403.
+    Read as "no such data" it would have looked like a bad tournament id."""
+    client, _ = make_client(Upstream(response))
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.status_code == response.status_code
+    message = str(caught.value)
+    assert "CRICHEROES_API_KEY" in message
+    assert "CricHeroes said: code" in message
+
+
+@pytest.mark.parametrize("status", [200, 403])
+@pytest.mark.parametrize(
+    "message", [42, ["a", "list"], {"an": "object"}], ids=["number", "list", "dict"]
+)
+async def test_a_message_that_is_not_a_string_does_not_crash_the_checks(
+    make_client, status, message
+):
+    client, _ = make_client(Upstream(refusal(170099, message, status=status)))
+
+    with pytest.raises((CricHeroesAuthError, CricHeroesAPIError)) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert str(message) in str(caught.value)
+
+
+@pytest.mark.parametrize("status", [400, 503])
+async def test_a_firewall_block_with_another_status_is_still_one(make_client, status):
+    client, _ = make_client(
+        Upstream(
+            refusal(20250529, "Request blocked by security policy.", status=status)
+        )
+    )
+
+    with pytest.raises(CricHeroesBlockedError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.status_code == status
+
+
+@pytest.mark.parametrize("status", [400, 503])
+async def test_a_credentials_refusal_with_another_status_is_still_one(
+    make_client, status
+):
+    client, _ = make_client(Upstream(refusal(2002, "Invalid api-key", status=status)))
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.status_code == status
+
+
+async def test_an_error_status_with_an_unknown_code_is_still_an_http_error(
+    make_client,
+):
+    client, _ = make_client(Upstream(refusal(170099, "boom", status=503)))
+
+    with pytest.raises(CricHeroesHTTPError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert not isinstance(caught.value, CricHeroesAuthError)
+    assert caught.value.status_code == 503
+
+
+async def test_a_rejection_keeps_what_cricheroes_said(make_client):
+    client, _ = make_client(
+        Upstream(refusal(170099, "Invalid credentials", status=403))
+    )
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.code == 170099
+    assert "code 170099: Invalid credentials" in str(caught.value)
+
+
+async def test_a_rejection_without_a_body_says_nothing_it_was_not_told(make_client):
+    client, _ = make_client(Upstream(httpx.Response(403, text="nope")))
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.code is None
+    assert "CricHeroes said" not in str(caught.value)
+
+
 ERRORS = [
     (endpoint, status, body)
     for endpoint, examples in DOC["_errors"].items()
@@ -316,14 +481,26 @@ async def test_no_answer_is_transport_error(make_client, failure):
 
 async def test_a_non_dict_error_is_still_an_api_error(make_client):
     """The doc's own error examples are not all well-formed JSON objects."""
-    body = {"status": False, "error": "Invalid api key"}
+    body = {"status": False, "error": "Tournament not found"}
     client, _ = make_client(Upstream(httpx.Response(200, json=body)))
 
     with pytest.raises(CricHeroesAPIError) as caught:
         await client.get_tournament_match_list(2242502)
 
     assert caught.value.code is None
-    assert caught.value.message == "Invalid api key"
+    assert caught.value.message == "Tournament not found"
+
+
+async def test_a_non_dict_credentials_error_is_still_a_credentials_error(
+    make_client,
+):
+    body = {"status": False, "error": "Invalid api key"}
+    client, _ = make_client(Upstream(httpx.Response(200, json=body)))
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert "CricHeroes said: Invalid api key." in str(caught.value)
 
 
 async def test_a_slow_trickle_hits_the_overall_deadline(make_client):

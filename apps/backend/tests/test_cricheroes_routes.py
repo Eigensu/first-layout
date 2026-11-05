@@ -413,6 +413,32 @@ async def test_rejected_credentials_answer_502_not_401(client, serve, status):
     assert "CRICHEROES_SECRET_ACCESS_KEY" in response.json()["detail"]
 
 
+async def test_a_firewall_block_answers_502_and_does_not_blame_the_keys(client, serve):
+    serve(
+        refusal(
+            20250529,
+            "Request blocked by security policy. (err: 20250529)",
+            status=403,
+        )
+    )
+
+    response = await client.get(f"{PREFIX}/matches")
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "firewall" in detail
+    assert "CRICHEROES_SECRET_ACCESS_KEY" not in detail
+
+
+async def test_an_invalid_api_key_on_a_200_answers_502_not_404(client, serve):
+    serve(refusal(2002, "Invalid api-key"))
+
+    response = await client.get(f"{PREFIX}/matches")
+
+    assert response.status_code == 502
+    assert "CRICHEROES_API_KEY" in response.json()["detail"]
+
+
 async def test_a_tournament_outside_our_agreement_answers_422(client, serve):
     """Not 403: that is our own gate's answer, and the shared frontend client
     turns every 403 into "you do not have permission"."""

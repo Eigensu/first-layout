@@ -170,7 +170,14 @@ api-key: <CRICHEROES_API_KEY>
 secret_access_key: <CRICHEROES_SECRET_ACCESS_KEY>
 udid: <CRICHEROES_UDID>
 device-type: thirdparty-media-hubble
+User-Agent: WalleArena/1.0 (+https://wallearena.com)
 ```
+
+The `User-Agent` is not in the doc, but it is required. CricHeroes' Cloudflare
+firewall answers httpx's default (`python-httpx/…`) with a 403 and code
+20250529 before any credential check (§7). On 6 Nov 2026, a request with our
+real credentials and this User-Agent got `status: true`. `USER_AGENT` in the
+client holds it; check that a new value still gets through before changing it.
 
 If any credential is missing, the client raises **before** opening a connection
 and names the missing environment variables. A partial header set is rejected
@@ -461,13 +468,14 @@ request into several.
 ## 7. Error taxonomy
 
 A single generic exception would make the most common failure — placeholder
-credentials — indistinguishable from an unknown tournament id. Eight types, all
+credentials — indistinguishable from an unknown tournament id. Nine types, all
 subclassing `CricHeroesError`:
 
 | Exception | Trigger | Route status | Meaning |
 |---|---|---|---|
 | `CricHeroesConfigError` | credential missing, raised pre-flight | **503** | *We* are not configured |
-| `CricHeroesAuthError` | HTTP 401, or a 403 without a code below | **502** | *Our* credentials were rejected |
+| `CricHeroesAuthError` | HTTP 401; a 403 that is neither a firewall block nor 170001/170002; or `status: false` with code 2002 (or a message calling the api-key, secret or udid invalid), with any HTTP status but 429 | **502** | *Our* credentials were rejected |
+| `CricHeroesBlockedError` | code 20250529, or a "blocked by security policy" message, with any HTTP status but 429 (seen with 403) | **502** | CricHeroes' Cloudflare firewall refused the request before their API saw it; the credentials were **not** checked |
 | `CricHeroesAccessError` | code 170001, with any HTTP status (documented with 403) | **422** | The id is outside the tournaments CricHeroes serve us; our credentials work |
 | `CricHeroesRateLimitError` | HTTP 429 (after any opted-in retries) | **429** | We went over 50 RPS — and were charged for it |
 | `CricHeroesAPIError` | `status: false` with any other code: HTTP 200, or 403 + code 170002 | **404** | Upstream has no such tournament/match, or no such data for it |
@@ -498,7 +506,11 @@ Three mappings are deliberate and worth stating:
   The code decides, not the status: one mapping (`api_error`) turns a
   `status: false` body into an exception whether it came with a 403 or a 200,
   so a 170001 on a 200 is still an access refusal. On a 403, only 170001 and
-  170002 are read as being about the id; any other 403 is rejected credentials.
+  170002 are read as being about the id, and 20250529 as the firewall; any
+  other 403 is rejected credentials, and its detail repeats what CricHeroes
+  said. Any other error status is read the same way before falling back to
+  `CricHeroesHTTPError`; only a 429 is always the rate limit. Codes and
+  messages are compared as text, whatever JSON type they arrive as.
   `CricHeroesAccessError` subclasses `CricHeroesAPIError`, so code that treats
   refusals alike still does.
 - **`status: false` → 404.** CricHeroes report "no data for this id" with an
@@ -523,6 +535,18 @@ doc are gone):
 
 No "not found" is documented for the stats filter, the season stats or the MVP
 endpoints, and none for bad credentials or a 429.
+
+Two undocumented codes, seen live on 6 Nov 2026 from requests with dummy
+credentials:
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| 20250529 | 403 | "Request blocked by security policy." CricHeroes' Cloudflare firewall, answering httpx's default `User-Agent` (`python-httpx/…`) before any credential check. Every request our client sent got this, which the admin import reported as rejected credentials. |
+| 2002 | 200 | "Invalid api-key". How a wrong key really comes back — not as a 401/403. The codes for a wrong secret or udid are unknown. |
+
+The client now sends a `User-Agent` naming our app, which gets past the
+firewall (§5.1). If the block comes back, the error says so rather than
+blaming the credentials.
 - **429 → 429, and yes, that contradicts the rule above.** Everywhere else an
   upstream problem is translated so the caller is not blamed for something
   they cannot fix. 429 is the exception because here the caller *can* act: the
