@@ -52,6 +52,7 @@ from app.services.cricheroes_errors import (
     CricHeroesSchemaError,
     CricHeroesTransportError,
     api_error,
+    is_credential_error,
     is_firewall_block,
 )
 from config.settings import get_settings
@@ -317,6 +318,14 @@ class CricHeroesClient:
         if response.status_code in (401, 403):
             raise _rejection(response)
         if response.status_code >= 400:
+            # A firewall block or a credentials refusal is what it says
+            # whatever status it comes with; anything else is upstream
+            # trouble.
+            code, message = _error_body(response)
+            if is_firewall_block(code, message):
+                raise CricHeroesBlockedError(response.status_code, code, message)
+            if is_credential_error(code, message):
+                raise CricHeroesAuthError(response.status_code, code, message)
             raise CricHeroesHTTPError(response.status_code, response.text[:500])
 
         try:

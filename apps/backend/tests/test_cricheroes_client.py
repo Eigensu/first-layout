@@ -338,6 +338,59 @@ async def test_a_credentials_refusal_in_the_body_is_a_credentials_error(
     assert "CricHeroes said: code" in message
 
 
+@pytest.mark.parametrize("status", [200, 403])
+@pytest.mark.parametrize(
+    "message", [42, ["a", "list"], {"an": "object"}], ids=["number", "list", "dict"]
+)
+async def test_a_message_that_is_not_a_string_does_not_crash_the_checks(
+    make_client, status, message
+):
+    client, _ = make_client(Upstream(refusal(170099, message, status=status)))
+
+    with pytest.raises((CricHeroesAuthError, CricHeroesAPIError)) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert str(message) in str(caught.value)
+
+
+@pytest.mark.parametrize("status", [400, 503])
+async def test_a_firewall_block_with_another_status_is_still_one(make_client, status):
+    client, _ = make_client(
+        Upstream(
+            refusal(20250529, "Request blocked by security policy.", status=status)
+        )
+    )
+
+    with pytest.raises(CricHeroesBlockedError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.status_code == status
+
+
+@pytest.mark.parametrize("status", [400, 503])
+async def test_a_credentials_refusal_with_another_status_is_still_one(
+    make_client, status
+):
+    client, _ = make_client(Upstream(refusal(2002, "Invalid api-key", status=status)))
+
+    with pytest.raises(CricHeroesAuthError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert caught.value.status_code == status
+
+
+async def test_an_error_status_with_an_unknown_code_is_still_an_http_error(
+    make_client,
+):
+    client, _ = make_client(Upstream(refusal(170099, "boom", status=503)))
+
+    with pytest.raises(CricHeroesHTTPError) as caught:
+        await client.get_tournament_match_list(2242502)
+
+    assert not isinstance(caught.value, CricHeroesAuthError)
+    assert caught.value.status_code == 503
+
+
 async def test_a_rejection_keeps_what_cricheroes_said(make_client):
     client, _ = make_client(
         Upstream(refusal(170099, "Invalid credentials", status=403))

@@ -42,17 +42,23 @@ CREDENTIAL_ERROR_CODES = frozenset({"2002"})
 _CREDENTIAL_MESSAGE = re.compile(r"invalid\W+(api[-_ ]?key|secret|udid)", re.IGNORECASE)
 
 
-def is_firewall_block(code, message: Optional[str]) -> bool:
+def _text(message) -> str:
+    """A message to search. Nothing promises CricHeroes send a string, and a
+    number or object must not crash the check meant to explain the failure."""
+    return "" if message is None else str(message)
+
+
+def is_firewall_block(code, message) -> bool:
     """Whether a refusal is CricHeroes' firewall, not their API, saying no."""
     return str(code) == FIREWALL_BLOCK_CODE or bool(
-        message and _FIREWALL_BLOCK_MESSAGE.search(message)
+        _FIREWALL_BLOCK_MESSAGE.search(_text(message))
     )
 
 
-def is_credential_error(code, message: Optional[str]) -> bool:
+def is_credential_error(code, message) -> bool:
     """Whether a `status: false` refusal is about our credentials."""
     return str(code) in CREDENTIAL_ERROR_CODES or bool(
-        message and _CREDENTIAL_MESSAGE.search(message)
+        _CREDENTIAL_MESSAGE.search(_text(message))
     )
 
 

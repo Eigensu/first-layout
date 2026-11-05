@@ -474,8 +474,8 @@ subclassing `CricHeroesError`:
 | Exception | Trigger | Route status | Meaning |
 |---|---|---|---|
 | `CricHeroesConfigError` | credential missing, raised pre-flight | **503** | *We* are not configured |
-| `CricHeroesAuthError` | HTTP 401; a 403 that is neither a firewall block nor 170001/170002; or `status: false` with code 2002 (or a message calling the api-key, secret or udid invalid), with any HTTP status | **502** | *Our* credentials were rejected |
-| `CricHeroesBlockedError` | code 20250529, or a "blocked by security policy" message, with any HTTP status (seen with 403) | **502** | CricHeroes' Cloudflare firewall refused the request before their API saw it; the credentials were **not** checked |
+| `CricHeroesAuthError` | HTTP 401; a 403 that is neither a firewall block nor 170001/170002; or `status: false` with code 2002 (or a message calling the api-key, secret or udid invalid), with any HTTP status but 429 | **502** | *Our* credentials were rejected |
+| `CricHeroesBlockedError` | code 20250529, or a "blocked by security policy" message, with any HTTP status but 429 (seen with 403) | **502** | CricHeroes' Cloudflare firewall refused the request before their API saw it; the credentials were **not** checked |
 | `CricHeroesAccessError` | code 170001, with any HTTP status (documented with 403) | **422** | The id is outside the tournaments CricHeroes serve us; our credentials work |
 | `CricHeroesRateLimitError` | HTTP 429 (after any opted-in retries) | **429** | We went over 50 RPS — and were charged for it |
 | `CricHeroesAPIError` | `status: false` with any other code: HTTP 200, or 403 + code 170002 | **404** | Upstream has no such tournament/match, or no such data for it |
@@ -508,7 +508,9 @@ Three mappings are deliberate and worth stating:
   so a 170001 on a 200 is still an access refusal. On a 403, only 170001 and
   170002 are read as being about the id, and 20250529 as the firewall; any
   other 403 is rejected credentials, and its detail repeats what CricHeroes
-  said.
+  said. Any other error status is read the same way before falling back to
+  `CricHeroesHTTPError`; only a 429 is always the rate limit. Codes and
+  messages are compared as text, whatever JSON type they arrive as.
   `CricHeroesAccessError` subclasses `CricHeroesAPIError`, so code that treats
   refusals alike still does.
 - **`status: false` → 404.** CricHeroes report "no data for this id" with an
