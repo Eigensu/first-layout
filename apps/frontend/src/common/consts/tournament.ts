@@ -73,6 +73,26 @@ export function tournamentUrl(slug: string): string {
   return `https://${slug}.${ROOT_DOMAIN}`;
 }
 
+/** A tournament's admin dashboard, which lives on its own subdomain. */
+export function tournamentAdminUrl(slug: string): string {
+  return `${tournamentUrl(slug)}/admin`;
+}
+
+/**
+ * True on the platform's own host (wallearena.com, www.wallearena.com), which
+ * belongs to no tournament: requests from it carry no tenant header, so only
+ * the tournament registry can be managed there.
+ */
+export function isRootDomainHost(rawHost: string | null): boolean {
+  const host = normalizeHost(rawHost);
+  return host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`;
+}
+
+/** A request host without its port, lowercased; "" when there is none. */
+function normalizeHost(rawHost: string | null): string {
+  return (rawHost ?? "").split(":")[0].toLowerCase();
+}
+
 /**
  * Extract the tournament slug from a request host, or null when the host is
  * not a tournament subdomain. Safe against:
@@ -83,8 +103,8 @@ export function tournamentUrl(slug: string): string {
  *  - local development via <slug>.localhost:3000
  */
 export function getTournamentSlugFromHost(rawHost: string | null): string | null {
-  if (!rawHost) return null;
-  const host = rawHost.split(":")[0].toLowerCase();
+  const host = normalizeHost(rawHost);
+  if (!host) return null;
 
   let label: string | null = null;
   if (host.endsWith(`.${ROOT_DOMAIN}`)) {

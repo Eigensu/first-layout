@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTournamentSlugFromHost } from "@/common/consts/tournament";
+import {
+  getTournamentSlugFromHost,
+  isRootDomainHost,
+} from "@/common/consts/tournament";
 
 /**
  * Subdomain routing: <slug>.wallearena.com serves that tournament.
@@ -11,7 +14,19 @@ import { getTournamentSlugFromHost } from "@/common/consts/tournament";
  * Vercel previews, localhost) pass through untouched.
  */
 export function middleware(req: NextRequest) {
-  const slug = getTournamentSlugFromHost(req.headers.get("host"));
+  const host = req.headers.get("host");
+
+  // The apex names no tournament, so every admin page but the registry would
+  // send requests the backend refuses ("Missing tournament"). They are all
+  // under /admin/*; /admin itself shows the registry there (AdminLayout).
+  if (isRootDomainHost(host) && req.nextUrl.pathname.startsWith("/admin/")) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/admin";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  const slug = getTournamentSlugFromHost(host);
   if (!slug) return NextResponse.next();
 
   // Expose the tenant to server components / route handlers on every request.

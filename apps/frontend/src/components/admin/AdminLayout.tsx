@@ -11,6 +11,7 @@ import { SlotsSection } from "./slots/SlotsSection";
 import { CarouselSection } from "./carousel/CarouselSection";
 import { TournamentsSection } from "./tournaments/TournamentsSection";
 import { GeneralSettingsSection } from "./settings/GeneralSettingsSection";
+import { isRootDomainHost } from "@/common/consts/tournament";
 import {
   Users,
   Award,
@@ -37,7 +38,19 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({ children }: AdminLayoutProps = {}) {
-  const [activeSection, setActiveSection] = useState<Section>("players");
+  // wallearena.com itself belongs to no tournament: every section but the
+  // registry is scoped to one and the backend refuses it without the
+  // X-Tournament-Slug header, which only a tournament subdomain sends. There
+  // the registry is the whole dashboard, and each tournament opens its own
+  // admin on its subdomain. Only platform admins get this far on the apex
+  // (app/admin/page.tsx), and the other /admin/* pages redirect here
+  // (middleware.ts). This renders only on the client, behind
+  // ProtectedRoute's loading state, so window is there to read.
+  const onRoot =
+    typeof window !== "undefined" && isRootDomainHost(window.location.host);
+  const [activeSection, setActiveSection] = useState<Section>(
+    onRoot ? "tournaments" : "players"
+  );
   const router = useRouter();
   const { user } = useAuth();
 
@@ -53,8 +66,8 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
   ];
   // The registry belongs to the whole platform, not to this tournament, and the
   // backend refuses it to anyone else (get_platform_admin).
-  const sections = allSections.filter(
-    (section) => section.id !== "tournaments" || user?.is_platform_admin
+  const sections = allSections.filter((section) =>
+    section.id === "tournaments" ? user?.is_platform_admin : !onRoot
   );
 
   const renderSection = () => {
@@ -91,7 +104,9 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
                 Admin Dashboard
               </h1>
               <p className="mt-2 text-gray-600 hidden sm:block">
-                Manage players, sponsors, contests, and slots
+                {onRoot
+                  ? "Manage tournaments; open one to manage its players, contests, and more"
+                  : "Manage players, sponsors, contests, and slots"}
               </p>
             </div>
             <button
@@ -108,7 +123,7 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
           {/* Mobile: compact section selector */}
-          <div className="block sm:hidden">
+          <div className={sections.length > 1 ? "block sm:hidden" : "hidden"}>
             <label htmlFor="admin-section" className="sr-only">
               Select section
             </label>
