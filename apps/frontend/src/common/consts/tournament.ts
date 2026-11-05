@@ -84,9 +84,13 @@ export function tournamentAdminUrl(slug: string): string {
  * the tournament registry can be managed there.
  */
 export function isRootDomainHost(rawHost: string | null): boolean {
-  if (!rawHost) return false;
-  const host = rawHost.split(":")[0].toLowerCase();
+  const host = normalizeHost(rawHost);
   return host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`;
+}
+
+/** A request host without its port, lowercased; "" when there is none. */
+function normalizeHost(rawHost: string | null): string {
+  return (rawHost ?? "").split(":")[0].toLowerCase();
 }
 
 /**
@@ -99,8 +103,8 @@ export function isRootDomainHost(rawHost: string | null): boolean {
  *  - local development via <slug>.localhost:3000
  */
 export function getTournamentSlugFromHost(rawHost: string | null): string | null {
-  if (!rawHost) return null;
-  const host = rawHost.split(":")[0].toLowerCase();
+  const host = normalizeHost(rawHost);
+  if (!host) return null;
 
   let label: string | null = null;
   if (host.endsWith(`.${ROOT_DOMAIN}`)) {

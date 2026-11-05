@@ -37,18 +37,17 @@ interface AdminLayoutProps {
   children?: React.ReactNode;
 }
 
-// The page renders only on the client, behind ProtectedRoute's loading state.
-function onRootDomain(): boolean {
-  return typeof window !== "undefined" && isRootDomainHost(window.location.host);
-}
-
 export function AdminLayout({ children }: AdminLayoutProps = {}) {
   // wallearena.com itself belongs to no tournament: every section but the
   // registry is scoped to one and the backend refuses it without the
   // X-Tournament-Slug header, which only a tournament subdomain sends. There
   // the registry is the whole dashboard, and each tournament opens its own
-  // admin on its subdomain.
-  const [onRoot] = useState(onRootDomain);
+  // admin on its subdomain. Only platform admins get this far on the apex
+  // (app/admin/page.tsx), and the other /admin/* pages redirect here
+  // (middleware.ts). This renders only on the client, behind
+  // ProtectedRoute's loading state, so window is there to read.
+  const onRoot =
+    typeof window !== "undefined" && isRootDomainHost(window.location.host);
   const [activeSection, setActiveSection] = useState<Section>(
     onRoot ? "tournaments" : "players"
   );
@@ -72,14 +71,6 @@ export function AdminLayout({ children }: AdminLayoutProps = {}) {
   );
 
   const renderSection = () => {
-    if (onRoot && !user?.is_platform_admin) {
-      return (
-        <p className="text-gray-600">
-          Open your tournament&apos;s own site (e.g. yourtournament.wallearena.com/admin)
-          to manage it.
-        </p>
-      );
-    }
     switch (activeSection) {
       case "tournaments":
         return <TournamentsSection />;
