@@ -1,10 +1,11 @@
 import os
 import re
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 from config.redaction import redact_mongodb_url
@@ -108,6 +109,29 @@ class Settings(BaseSettings):
     # throttled request against the quota just like a successful one, so every
     # retry is a paid call nobody asked for.
     cricheroes_max_retries: int = Field(default=0, ge=0, alias="CRICHEROES_MAX_RETRIES")
+    # The call counter (spec §6.6) measures against the quota. It is per
+    # 12-month term: set the term's first day to count from it, or the last
+    # 365 days are counted. Past the warning share, the usage route flags it
+    # and every sync run logs a warning.
+    cricheroes_annual_quota: int = Field(
+        default=100_000, gt=0, alias="CRICHEROES_ANNUAL_QUOTA"
+    )
+    cricheroes_quota_term_start: Optional[date] = Field(
+        default=None, alias="CRICHEROES_QUOTA_TERM_START"
+    )
+    cricheroes_usage_warn_percent: float = Field(
+        default=50.0, gt=0, le=100, alias="CRICHEROES_USAGE_WARN_PERCENT"
+    )
+    # The CricHeroes tournaments kept cached (spec §6.7), comma-separated, e.g.
+    # "2242502,2251924". Empty: the sync does nothing.
+    cricheroes_sync_tournament_ids: str = Field(
+        default="", alias="CRICHEROES_SYNC_TOURNAMENT_IDS"
+    )
+    # A cached resource is refreshed after a match result changes, and at least
+    # this often regardless.
+    cricheroes_snapshot_max_age_hours: float = Field(
+        default=24.0, gt=0, alias="CRICHEROES_SNAPSHOT_MAX_AGE_HOURS"
+    )
 
     # 2Factor / OTP configuration
     twofactor_api_key: Optional[str] = Field(default=None, alias="TWOFACTOR_API_KEY")
@@ -127,6 +151,29 @@ class Settings(BaseSettings):
     resend_api_key: Optional[str] = Field(default=None, alias="RESEND_API_KEY")
     resend_from_email: Optional[str] = Field(default=None, alias="RESEND_FROM_EMAIL")
     resend_reply_to: Optional[str] = Field(default=None, alias="RESEND_REPLY_TO")
+
+    @field_validator("cricheroes_sync_tournament_ids")
+    @classmethod
+    def _cricheroes_ids_are_positive_numbers(cls, value: str) -> str:
+        # Checked at startup: a typo here would otherwise only show as a sync
+        # that quietly caches nothing. -1 ("both tournaments") is refused: the
+        # cache keeps each tournament on its own.
+        for part in value.split(","):
+            part = part.strip()
+            if part and not (part.isdigit() and int(part) > 0):
+                raise ValueError(
+                    "CRICHEROES_SYNC_TOURNAMENT_IDS must be CricHeroes tournament "
+                    f"ids separated by commas; {part!r} is not one"
+                )
+        return value
+
+    @property
+    def cricheroes_sync_tournaments(self) -> list[int]:
+        """CRICHEROES_SYNC_TOURNAMENT_IDS as numbers, duplicates dropped."""
+        ids = [
+            int(p) for p in self.cricheroes_sync_tournament_ids.split(",") if p.strip()
+        ]
+        return list(dict.fromkeys(ids))
 
     @property
     def cors_origins_list(self) -> list[str]:

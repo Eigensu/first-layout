@@ -19,6 +19,7 @@ from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
 from app.models.carousel import CarouselImage
 from app.models.contest import Contest
+from app.models.cricheroes import CricHeroesCallCount, CricHeroesSnapshot
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
 from app.models.settings import PLATFORM_DEFAULTS_ID, GlobalSettings
@@ -48,7 +49,16 @@ TENANT_MODELS = [
 ]
 
 # Shared by every tournament; must NOT grow a tournament_id.
-GLOBAL_MODELS = [User, RefreshToken, UserProfile, Tournament]
+GLOBAL_MODELS = [
+    User,
+    RefreshToken,
+    UserProfile,
+    Tournament,
+    # The CricHeroes quota is one per account, and their tournament ids are not
+    # ours (CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6, §6.7).
+    CricHeroesCallCount,
+    CricHeroesSnapshot,
+]
 
 TOURNAMENT_A = PydanticObjectId()
 TOURNAMENT_B = PydanticObjectId()
