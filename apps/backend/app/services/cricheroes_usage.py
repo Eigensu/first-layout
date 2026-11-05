@@ -5,18 +5,23 @@ per 12-month term and only warn at 80% (§6.1), which is too late to change a
 schedule cheaply. So every call is counted here, per day and endpoint, and
 `usage` reports the term so far against the quota.
 
+The count errs high. A request we stopped waiting for -- timed out, or
+cancelled -- may well have been answered and charged, so it counts as a call;
+only a request that never left (the connection failed) does not. A counter
+that reads low is the one that lets the quota run out.
+
 Build every client through `counted_client`: a client built directly calls
 CricHeroes all the same, but nothing counts it.
 """
 
 import logging
-from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from pymongo.errors import DuplicateKeyError
 
 from app.models.cricheroes import CricHeroesCallCount
+from app.schemas.admin.cricheroes_ops import DayUsage, UsageReport
 from app.services.cricheroes_client import CricHeroesClient
 from config.settings import get_settings
 
@@ -29,15 +34,25 @@ def counted_client(**options: Any) -> CricHeroesClient:
 
 
 async def record_call(
-    endpoint: str, status: Optional[int], *, now: Optional[datetime] = None
+    endpoint: str,
+    status: Optional[int],
+    sent: bool = True,
+    *,
+    now: Optional[datetime] = None,
 ) -> None:
-    """Count one call to `endpoint`; `status` is None when no answer came."""
+    """Count one request to `endpoint`.
+
+    `status` is the HTTP status CricHeroes answered with, or None when no
+    answer came; `sent` is False only when the request never left.
+    """
     day = (now or datetime.now(timezone.utc)).date().isoformat()
-    if status is None:
-        increments = {"no_answer": 1}
+    if not sent:
+        increments = {"not_sent": 1}
     else:
         increments = {"calls": 1}
-        if status == 429:
+        if status is None:
+            increments["no_answer"] = 1
+        elif status == 429:
             increments["throttled"] = 1
         elif status >= 500:
             increments["server_errors"] = 1
@@ -52,55 +67,32 @@ async def record_call(
         await collection.update_one(query, update, upsert=True)
 
 
-@dataclass
-class DayUsage:
-    day: str
-    calls: int = 0
-    throttled: int = 0
-    server_errors: int = 0
-    no_answer: int = 0
-
-
-@dataclass
-class Usage:
-    term_start: date
-    # False when CRICHEROES_QUOTA_TERM_START is unset and the term is taken to
-    # be the last 365 days.
-    term_start_configured: bool
-    quota: int
-    calls_this_term: int
-    percent_used: float
-    warn_percent: float
-    over_warning: bool
-    # The last `days` days, newest first, with every day present.
-    days: List[DayUsage] = field(default_factory=list)
-    # Calls per endpoint over those days, most called first.
-    by_endpoint: Dict[str, int] = field(default_factory=dict)
-
-
-def _year_later(day: date) -> date:
+def _anniversary(start: date, year: int) -> date:
     try:
-        return day.replace(year=day.year + 1)
+        return start.replace(year=year)
     except ValueError:  # 29 February
-        return day.replace(year=day.year + 1, day=28)
+        return start.replace(year=year, day=28)
 
 
-def term_start(today: date) -> tuple:
+def term_start(today: date) -> Tuple[date, bool]:
     """The current quota term's first day, and whether it was configured.
 
-    The term is 12 months from CRICHEROES_QUOTA_TERM_START, renewing each year
-    after; unset, the last 365 days stand in for it.
+    The term renews every year on the anniversary of
+    CRICHEROES_QUOTA_TERM_START, so the current one starts on the latest
+    anniversary on or before today -- whatever year was configured, so a date
+    still to come, or a mistyped year, cannot hide this term's calls. Unset,
+    the last 365 days stand in for it.
     """
     configured = get_settings().cricheroes_quota_term_start
     if configured is None:
         return today - timedelta(days=364), False
-    start = configured
-    while _year_later(start) <= today:
-        start = _year_later(start)
+    start = _anniversary(configured, today.year)
+    if start > today:
+        start = _anniversary(configured, today.year - 1)
     return start, True
 
 
-async def usage(days: int = 30, *, today: Optional[date] = None) -> Usage:
+async def usage(days: int = 30, *, today: Optional[date] = None) -> UsageReport:
     """Calls this quota term, and per day and per endpoint for recent days."""
     settings = get_settings()
     today = today or datetime.now(timezone.utc).date()
@@ -128,11 +120,12 @@ async def usage(days: int = 30, *, today: Optional[date] = None) -> Usage:
         bucket.throttled += row.throttled
         bucket.server_errors += row.server_errors
         bucket.no_answer += row.no_answer
+        bucket.not_sent += row.not_sent
         by_endpoint[row.endpoint] = by_endpoint.get(row.endpoint, 0) + row.calls
 
     quota = settings.cricheroes_annual_quota
     percent = round(100 * this_term / quota, 2)
-    return Usage(
+    return UsageReport(
         term_start=start,
         term_start_configured=configured,
         quota=quota,
@@ -145,7 +138,7 @@ async def usage(days: int = 30, *, today: Optional[date] = None) -> Usage:
     )
 
 
-def warn_if_over(report: Usage) -> bool:
+def warn_if_over(report: UsageReport) -> bool:
     """Log a warning when the term's calls have passed the warning share."""
     if report.over_warning:
         logger.warning(

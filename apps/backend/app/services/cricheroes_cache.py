@@ -21,22 +21,26 @@ match and 4 a day for the age check: about 60 a day for both tournaments
 CricHeroes serve us, a fifth of the daily budget. During a match the standings
 are a match behind; that is the price.
 
+One refresh of a tournament runs at a time, across processes: the scheduled
+job and walle-api are separate services, so the claim is held in the
+database, not in memory.
+
 A failed refresh keeps the last good data and records why, so a CricHeroes
 outage shows stale data rather than none.
 """
 
-import asyncio
 import hashlib
 import json
 import logging
-from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 from app.models.cricheroes import CricHeroesSnapshot
+from app.schemas.admin.cricheroes_ops import SnapshotStatus, SyncReport
 from app.schemas.cricheroes import (
     BattingLeaderboardEntry,
     BowlingLeaderboardEntry,
@@ -46,13 +50,18 @@ from app.schemas.cricheroes import (
 )
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import CricHeroesConfigError, CricHeroesError
+from app.utils.timezone import to_ist
 from config.settings import get_settings
 
 logger = logging.getLogger("app.cricheroes")
 
 # A tournament refreshed this recently is not refreshed again, so pressing
-# "refresh now" twice, or a run overlapping the scheduled one, costs nothing.
+# "refresh now" twice, or the scheduled run right after one, costs nothing.
 MIN_REFRESH_INTERVAL = timedelta(minutes=5)
+# How long a claim on a tournament's refresh holds. Longer than any run --
+# five requests of at most 15 s each -- so a live run is never overtaken, and
+# short enough that a run that died holding it is soon forgotten.
+CLAIM_TIMEOUT = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
@@ -86,6 +95,9 @@ DEPENDENTS = (
 )
 RESOURCES: Dict[str, Resource] = {r.name: r for r in (MATCHES, *DEPENDENTS)}
 
+# Everything but the cached data, for decisions and the status view.
+WITHOUT_DATA = {"data": 0}
+
 
 def _key(resource: str, tournament_id: int) -> str:
     return f"{resource}:{tournament_id}"
@@ -95,11 +107,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _aware(moment: Optional[datetime]) -> Optional[datetime]:
+def _when(moment: Optional[datetime]) -> Optional[datetime]:
     # MongoDB hands datetimes back without a timezone; they are UTC.
-    if moment is not None and moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment
+    return to_ist(moment) if moment is not None else None
 
 
 def results_digest(matches: List[TournamentMatch]) -> str:
@@ -109,12 +119,17 @@ def results_digest(matches: List[TournamentMatch]) -> str:
     and not while a match is in play.
     """
     completed = sorted(
-        (
-            m.match_id,
-            m.match_result,
-            m.winning_team_id,
-            m.team_a_summary,
-            m.team_b_summary,
+        # Sorted as text: CricHeroes repeat rows (§8.2), and two rows of one
+        # match differing in a field that is missing from one would make
+        # tuples of None and text compare, which Python refuses.
+        json.dumps(
+            [
+                m.match_id,
+                m.match_result,
+                m.winning_team_id,
+                m.team_a_summary,
+                m.team_b_summary,
+            ]
         )
         for m in matches
         if m.type == 3 or (m.status or "").casefold() == "past"
@@ -130,23 +145,39 @@ def _dump(value: Any) -> Any:
     return value.model_dump(mode="json", by_alias=True)
 
 
+async def _upsert(resource: str, tournament_id: int, fields: dict) -> None:
+    key = _key(resource, tournament_id)
+    update = {
+        "$set": {
+            "resource": resource,
+            "cricheroes_tournament_id": tournament_id,
+            **fields,
+        }
+    }
+    collection = CricHeroesSnapshot.get_motor_collection()
+    try:
+        await collection.update_one({"key": key}, update, upsert=True)
+    except DuplicateKeyError:
+        # Another writer inserted the document between our lookup and our
+        # insert. It exists now, so the retry is a plain update.
+        await collection.update_one({"key": key}, update, upsert=True)
+
+
 async def _save(
-    resource: str, tournament_id: int, data: Any, digest: Optional[str], when: datetime
+    resource: str, tournament_id: int, data: Any, digest: str, when: datetime
 ) -> None:
-    await CricHeroesSnapshot.get_motor_collection().update_one(
-        {"key": _key(resource, tournament_id)},
+    dumped = _dump(data)
+    await _upsert(
+        resource,
+        tournament_id,
         {
-            "$set": {
-                "resource": resource,
-                "cricheroes_tournament_id": tournament_id,
-                "data": _dump(data),
-                "fetched_at": when,
-                "results_digest": digest,
-                "last_error": None,
-                "last_error_at": None,
-            }
+            "data": dumped,
+            "rows": len(dumped) if isinstance(dumped, list) else 1,
+            "fetched_at": when,
+            "results_digest": digest,
+            "last_error": None,
+            "last_error_at": None,
         },
-        upsert=True,
     )
 
 
@@ -154,17 +185,10 @@ async def _save_error(
     resource: str, tournament_id: int, error: Exception, when: datetime
 ) -> None:
     # Keeps whatever data was there: stale beats nothing.
-    await CricHeroesSnapshot.get_motor_collection().update_one(
-        {"key": _key(resource, tournament_id)},
-        {
-            "$set": {
-                "resource": resource,
-                "cricheroes_tournament_id": tournament_id,
-                "last_error": str(error)[:500],
-                "last_error_at": when,
-            }
-        },
-        upsert=True,
+    await _upsert(
+        resource,
+        tournament_id,
+        {"last_error": str(error)[:500], "last_error_at": when},
     )
 
 
@@ -190,38 +214,91 @@ async def read(resource: str, tournament_id: int) -> Optional[Cached]:
     rows = snapshot.data if isinstance(snapshot.data, list) else [snapshot.data]
     return Cached(
         data=[spec.model.model_validate(row) for row in rows],
-        fetched_at=_aware(snapshot.fetched_at),
+        fetched_at=_when(snapshot.fetched_at),
         last_error=snapshot.last_error,
     )
 
 
-async def status() -> List[CricHeroesSnapshot]:
-    """Every cached resource, for the admin status view."""
-    return await CricHeroesSnapshot.find_all().sort("key").to_list()
+async def status() -> List[SnapshotStatus]:
+    """Every cached resource, without its data, for the admin status view."""
+    documents = (
+        await CricHeroesSnapshot.get_motor_collection()
+        .find({}, WITHOUT_DATA)
+        .sort("key", 1)
+        .to_list(None)
+    )
+    return [
+        SnapshotStatus(
+            resource=d["resource"],
+            cricheroes_tournament_id=d["cricheroes_tournament_id"],
+            fetched_at=_when(d.get("fetched_at")),
+            rows=d.get("rows", 0),
+            last_error=d.get("last_error"),
+            last_error_at=_when(d.get("last_error_at")),
+        )
+        for d in documents
+    ]
 
 
 # -- refreshing ------------------------------------------------------------
 
 
-@dataclass
-class SyncReport:
-    tournament_id: int
-    # Resources read from CricHeroes this run; each was one call.
-    refreshed: List[str] = field(default_factory=list)
-    # Resources whose cached copy was still current: no call.
-    unchanged: List[str] = field(default_factory=list)
-    # Resource -> why it could not be read; its cached copy was kept.
-    failed: Dict[str, str] = field(default_factory=dict)
-    # Set when the whole tournament was passed over, with the reason.
-    skipped: Optional[str] = None
-    results_changed: bool = False
+async def _claim(tournament_id: int, now: datetime) -> Optional[str]:
+    """Claim the right to refresh a tournament now.
 
-    @property
-    def calls(self) -> int:
-        return len(self.refreshed) + len(self.failed)
+    None when claimed; otherwise why not. One atomic write on the match
+    list's document: it matches only when the tournament was not refreshed in
+    the last MIN_REFRESH_INTERVAL and nobody holds a live claim. When the
+    document exists but does not match, the upsert's insert collides with it
+    on the unique key -- that collision is the refusal.
+    """
+    collection = CricHeroesSnapshot.get_motor_collection()
+    key = _key(MATCHES.name, tournament_id)
+    try:
+        await collection.update_one(
+            {
+                "key": key,
+                "$and": [
+                    {
+                        "$or": [
+                            {"fetched_at": None},
+                            {"fetched_at": {"$lt": now - MIN_REFRESH_INTERVAL}},
+                        ]
+                    },
+                    {
+                        "$or": [
+                            {"claimed_at": None},
+                            {"claimed_at": {"$lt": now - CLAIM_TIMEOUT}},
+                        ]
+                    },
+                ],
+            },
+            {
+                "$set": {
+                    "resource": MATCHES.name,
+                    "cricheroes_tournament_id": tournament_id,
+                    "claimed_at": now,
+                }
+            },
+            upsert=True,
+        )
+        return None
+    except DuplicateKeyError:
+        pass
+    current = await collection.find_one({"key": key}, WITHOUT_DATA) or {}
+    fetched = _when(current.get("fetched_at"))
+    if fetched is not None and now - fetched < MIN_REFRESH_INTERVAL:
+        return f"refreshed {int((now - fetched).total_seconds() // 60)} minute(s) ago"
+    return "another refresh of it is running"
 
 
-_locks: Dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+async def _release(tournament_id: int, claimed_at: datetime) -> None:
+    # Only our own claim: a run that overran CLAIM_TIMEOUT must not release
+    # the claim of the run that took over from it.
+    await CricHeroesSnapshot.get_motor_collection().update_one(
+        {"key": _key(MATCHES.name, tournament_id), "claimed_at": claimed_at},
+        {"$set": {"claimed_at": None}},
+    )
 
 
 async def sync_tournament(
@@ -237,27 +314,26 @@ async def sync_tournament(
     credential is raised (it would fail every call); any other failure is
     recorded in the report and on the resource, and the run goes on.
     """
-    async with _locks[tournament_id]:
-        return await _sync(client, tournament_id, force, now or _now())
+    now = now or _now()
+    reason = await _claim(tournament_id, now)
+    if reason is not None:
+        return SyncReport(tournament_id=tournament_id, skipped=reason)
+    try:
+        return await _sync(client, tournament_id, force, now)
+    finally:
+        await _release(tournament_id, now)
 
 
 async def _sync(
     client: CricHeroesClient, tournament_id: int, force: bool, now: datetime
 ) -> SyncReport:
-    report = SyncReport(tournament_id)
-    cached = {
-        snapshot.resource: snapshot
-        for snapshot in await CricHeroesSnapshot.find(
-            CricHeroesSnapshot.cricheroes_tournament_id == tournament_id
-        ).to_list()
-    }
-
-    last = cached.get(MATCHES.name)
-    last_read = _aware(last.fetched_at) if last else None
-    if last_read is not None and now - last_read < MIN_REFRESH_INTERVAL:
-        ago = int((now - last_read).total_seconds() // 60)
-        report.skipped = f"refreshed {ago} minute(s) ago"
-        return report
+    report = SyncReport(tournament_id=tournament_id)
+    documents = (
+        await CricHeroesSnapshot.get_motor_collection()
+        .find({"cricheroes_tournament_id": tournament_id}, WITHOUT_DATA)
+        .to_list(None)
+    )
+    cached = {d["resource"]: d for d in documents}
 
     try:
         matches = await MATCHES.fetch(client, tournament_id)
@@ -272,19 +348,20 @@ async def _sync(
     digest = results_digest(matches)
     await _save(MATCHES.name, tournament_id, matches, digest, now)
     report.refreshed.append(MATCHES.name)
-    report.results_changed = last is None or last.results_digest != digest
+    previous = cached.get(MATCHES.name, {}).get("results_digest")
+    report.results_changed = previous != digest
 
     max_age = timedelta(hours=get_settings().cricheroes_snapshot_max_age_hours)
     for resource in DEPENDENTS:
-        snapshot = cached.get(resource.name)
-        fetched = _aware(snapshot.fetched_at) if snapshot else None
+        snapshot = cached.get(resource.name, {})
+        fetched = _when(snapshot.get("fetched_at"))
         # Compared with its own digest, not with "did results change this
         # run": a resource whose read failed last time is still behind, and
         # is retried until it catches up.
         due = (
             force
             or fetched is None
-            or snapshot.results_digest != digest
+            or snapshot.get("results_digest") != digest
             or now - fetched >= max_age
         )
         if not due:

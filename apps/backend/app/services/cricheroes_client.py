@@ -69,9 +69,10 @@ BACKOFF_FACTOR = 3.0
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 Sleep = Callable[[float], Awaitable[None]]
-# Told of every attempt: the endpoint, and the HTTP status CricHeroes answered
-# with, or None when no answer came (§6.6).
-CallRecorder = Callable[[str, Optional[int]], Awaitable[None]]
+# Told of every attempt (§6.6): the endpoint; the HTTP status CricHeroes
+# answered with, or None when no answer came; and whether the request left at
+# all -- False only when the connection failed.
+CallRecorder = Callable[[str, Optional[int], bool], Awaitable[None]]
 
 
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
@@ -202,13 +203,15 @@ class CricHeroesClient:
     def _backoff(attempt: int) -> float:
         return BACKOFF_BASE * (BACKOFF_FACTOR**attempt) * random.uniform(0.8, 1.2)
 
-    async def _record(self, path: str, status: Optional[int]) -> None:
+    async def _record(
+        self, path: str, status: Optional[int], sent: bool = True
+    ) -> None:
         """Count one attempt. Counting never fails the call it counts."""
         if self._recorder is None:
             return
         endpoint = path.split("/", 1)[0]
         try:
-            await self._recorder(endpoint, status)
+            await self._recorder(endpoint, status, sent)
         except Exception:
             logger.exception("Could not count a CricHeroes call to %s", endpoint)
 
@@ -236,15 +239,29 @@ class CricHeroesClient:
                     timeout=self.timeout,
                 )
             except asyncio.TimeoutError as exc:
+                # Sent, most likely, and maybe answered and charged after we
+                # stopped waiting: counted as a call (§6.6).
                 await self._record(path, None)
                 raise CricHeroesTransportError(
                     f"CricHeroes request to {url} took longer than {self.timeout:g}s"
+                ) from exc
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                # The connection failed, so the request never left.
+                await self._record(path, None, sent=False)
+                raise CricHeroesTransportError(
+                    f"CricHeroes request to {url} failed: {exc!r}"
                 ) from exc
             except httpx.HTTPError as exc:
                 await self._record(path, None)
                 raise CricHeroesTransportError(
                     f"CricHeroes request to {url} failed: {exc!r}"
                 ) from exc
+            except asyncio.CancelledError:
+                # Our caller gave up (the player import stops its other reads
+                # on a failure). CricHeroes may still answer and charge it.
+                # Shielded, so a second cancellation cannot lose the count.
+                await asyncio.shield(self._record(path, None))
+                raise
             # Every answer is counted, retried 429s included: each is charged.
             await self._record(path, response.status_code)
 

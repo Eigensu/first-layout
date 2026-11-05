@@ -18,12 +18,14 @@ class CricHeroesCallCount(Document):
     """Calls made to one CricHeroes endpoint on one day (UTC).
 
     Written only by app/services/cricheroes_usage.py, as one upsert per call.
-    `calls` is every request CricHeroes answered, which is what they charge
-    for -- a 429 included (§13.4). `throttled` and `server_errors` are the 429s
-    and 5xx among them; CricHeroes do not charge calls lost to their own
-    outages (§6.1), so the 5xx are the likeliest to be refunded. `no_answer`
-    is requests that never got an HTTP answer (timeout, connection failure),
-    which are not in `calls`.
+    `calls` is every request that reached CricHeroes or may have: what they
+    charge for, a 429 included (§13.4), erring high. Among them, `throttled`
+    and `server_errors` are the 429s and 5xx -- CricHeroes do not charge
+    calls lost to their own outages (§6.1), so the 5xx are the likeliest
+    refund -- and `no_answer` the ones we stopped waiting for (timed out or
+    cancelled), which may have been answered and charged all the same.
+    `not_sent` is requests whose connection failed: never sent, not in
+    `calls`.
     """
 
     day: str  # "2026-11-05", UTC
@@ -32,6 +34,7 @@ class CricHeroesCallCount(Document):
     throttled: int = 0
     server_errors: int = 0
     no_answer: int = 0
+    not_sent: int = 0
 
     class Settings:
         name = "cricheroes_call_counts"
@@ -55,6 +58,7 @@ class CricHeroesSnapshot(Document):
     resource: str  # "matches", "point-table", "mvp", ...
     cricheroes_tournament_id: int
     data: Any = None
+    rows: int = 0  # entries in `data`, so a status view need not load it
     fetched_at: Optional[datetime] = None
     # For the match list, a digest of the completed matches' results. For every
     # other resource, the match list's digest when it was fetched: a resource
@@ -62,6 +66,9 @@ class CricHeroesSnapshot(Document):
     results_digest: Optional[str] = None
     last_error: Optional[str] = None
     last_error_at: Optional[datetime] = None
+    # On the match list's document only: when a refresh of the tournament
+    # claimed it. One run at a time, across processes (§6.7).
+    claimed_at: Optional[datetime] = None
 
     class Settings:
         name = "cricheroes_snapshots"

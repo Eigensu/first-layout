@@ -5,6 +5,7 @@ with the API doc's example, so the cache is tested through the client and the
 models it will meet in production.
 """
 
+import asyncio
 import copy
 import json
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from cricheroes_responses import refusal
+from pymongo.errors import DuplicateKeyError
 
 from app.models.cricheroes import CricHeroesCallCount, CricHeroesSnapshot
 from app.routes.admin.cricheroes import get_cricheroes_client
@@ -64,6 +66,8 @@ class CricHeroes:
         answer = self.answers[endpoint]
         if isinstance(answer, Exception):
             raise answer
+        if callable(answer):
+            return answer()  # a coroutine; MockTransport awaits it
         return answer
 
     def total(self) -> int:
@@ -71,11 +75,6 @@ class CricHeroes:
 
     def reset(self):
         self.calls = {}
-
-
-@pytest.fixture(autouse=True)
-def _fresh_locks():
-    cricheroes_cache._locks.clear()
 
 
 @pytest_asyncio.fixture
@@ -237,6 +236,97 @@ async def test_a_second_run_within_minutes_calls_nothing(upstream, configured, f
     assert upstream.total() == 0 and report.calls == 0
 
 
+async def test_two_runs_at_once_make_one_set_of_calls(upstream, configured):
+    """The scheduled job and walle-api are separate processes: only the
+    claim in the database keeps them from both paying for a refresh."""
+    entered, gate = asyncio.Event(), asyncio.Event()
+
+    async def slow_match_list():
+        entered.set()
+        await gate.wait()
+        return ok(DOC["get-tournament-match-list"]["data"])
+
+    upstream.answers["get-tournament-match-list"] = slow_match_list
+    first = asyncio.create_task(sync_tournament(upstream.client, TPL, now=T0))
+    await entered.wait()
+
+    second = await sync_tournament(
+        upstream.client, TPL, now=T0 + timedelta(seconds=30), force=True
+    )
+    gate.set()
+    report = await first
+
+    assert second.skipped == "another refresh of it is running"
+    assert second.calls == 0
+    assert report.refreshed == ["matches", *DEPENDENTS]
+    assert upstream.total() == 5
+    # Released when done: the next run an hour on is not held up.
+    upstream.answers["get-tournament-match-list"] = ok(
+        DOC["get-tournament-match-list"]["data"]
+    )
+    later = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=1))
+    assert later.skipped is None
+
+
+async def test_a_claim_left_by_a_run_that_died_expires(upstream, configured):
+    await CricHeroesSnapshot(
+        key=f"matches:{TPL}",
+        resource="matches",
+        cricheroes_tournament_id=TPL,
+        claimed_at=T0 - timedelta(minutes=11),
+    ).insert()
+
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert report.skipped is None and report.refreshed[0] == "matches"
+
+
+async def test_a_live_claim_is_respected(upstream, configured):
+    await CricHeroesSnapshot(
+        key=f"matches:{TPL}",
+        resource="matches",
+        cricheroes_tournament_id=TPL,
+        claimed_at=T0 - timedelta(minutes=9),
+    ).insert()
+
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert report.skipped == "another refresh of it is running"
+    assert upstream.total() == 0
+
+
+async def test_a_run_that_fails_still_releases_its_claim(db, configured):
+    client = CricHeroesClient(api_key="", secret_access_key="", udid="", base_url=BASE)
+
+    with pytest.raises(CricHeroesConfigError):
+        await sync_tournament(client, TPL, now=T0)
+
+    assert (await snapshot("matches")).claimed_at is None
+
+
+async def test_a_lost_insert_race_is_retried(db, monkeypatch):
+    """Two writers can both find no document and both insert it."""
+    collection = CricHeroesSnapshot.get_motor_collection()
+    real = collection.update_one
+    attempts = []
+
+    async def loses_the_race_once(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise DuplicateKeyError("E11000 duplicate key")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(collection, "update_one", loses_the_race_once)
+    monkeypatch.setattr(
+        CricHeroesSnapshot, "get_motor_collection", classmethod(lambda cls: collection)
+    )
+
+    await cricheroes_cache._save_error("mvp", TPL, RuntimeError("down"), T0)
+
+    assert len(attempts) == 2
+    assert (await snapshot("mvp")).last_error == "down"
+
+
 # -- failures -------------------------------------------------------------------
 
 
@@ -293,6 +383,20 @@ async def test_missing_credentials_stop_the_run(db, configured):
 
     with pytest.raises(CricHeroesConfigError):
         await sync(client)
+
+
+def test_the_digest_survives_repeated_rows():
+    """CricHeroes repeat rows (§8.2). Two rows of one match, one missing a
+    field, must not make the digest compare None with text."""
+    from app.schemas.cricheroes import TournamentMatch
+
+    row = DOC["get-tournament-match-list"]["data"][0]
+    twice = [
+        TournamentMatch.model_validate(row),
+        TournamentMatch.model_validate(dict(row, match_result=None)),
+    ]
+
+    assert results_digest(twice) == results_digest(list(reversed(twice)))
 
 
 def test_the_digest_covers_completed_results_only():

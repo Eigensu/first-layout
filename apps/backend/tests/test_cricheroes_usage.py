@@ -4,6 +4,7 @@ The client tells a recorder of every attempt; record_call keeps one row per
 day and endpoint; usage() reports the quota term against the quota.
 """
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 
@@ -11,6 +12,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from pydantic import ValidationError
+from pymongo.errors import DuplicateKeyError
 
 from app.models.cricheroes import CricHeroesCallCount
 from app.routes.admin.cricheroes import get_cricheroes_client
@@ -40,11 +42,13 @@ async def recorded_client():
         script = list(responses)
         told = []
 
-        async def record(endpoint, status):
-            told.append((endpoint, status))
+        async def record(endpoint, status, sent):
+            told.append((endpoint, status, sent))
 
-        def answer(request):
+        async def answer(request):
             response = script.pop(0) if len(script) > 1 else script[0]
+            if callable(response):
+                response = await response()
             if isinstance(response, Exception):
                 raise response
             return response
@@ -81,7 +85,13 @@ def settings(monkeypatch):
 
 async def rows():
     return {
-        (r.day, r.endpoint): (r.calls, r.throttled, r.server_errors, r.no_answer)
+        (r.day, r.endpoint): (
+            r.calls,
+            r.throttled,
+            r.server_errors,
+            r.no_answer,
+            r.not_sent,
+        )
         for r in await CricHeroesCallCount.find_all().to_list()
     }
 
@@ -97,8 +107,8 @@ async def test_each_call_is_reported_with_its_endpoint_and_status(recorded_clien
 
     # The endpoint, without ids or parameters.
     assert told == [
-        ("get-tournament-point-table", 200),
-        ("get-match-partnership", 200),
+        ("get-tournament-point-table", 200, True),
+        ("get-match-partnership", 200, True),
     ]
 
 
@@ -110,7 +120,7 @@ async def test_every_retried_429_is_reported_too(recorded_client):
 
     await client.get_tournament_match_list(2242502)
 
-    assert told == [("get-tournament-match-list", s) for s in (429, 429, 200)]
+    assert told == [("get-tournament-match-list", s, True) for s in (429, 429, 200)]
 
 
 async def test_a_429_that_ends_the_call_is_reported(recorded_client):
@@ -119,16 +129,70 @@ async def test_a_429_that_ends_the_call_is_reported(recorded_client):
     with pytest.raises(CricHeroesRateLimitError):
         await client.get_tournament_match_list(2242502)
 
-    assert told == [("get-tournament-match-list", 429)]
+    assert told == [("get-tournament-match-list", 429, True)]
 
 
-async def test_no_answer_is_reported_as_none(recorded_client):
-    client, told = recorded_client(httpx.ConnectError("refused"))
+@pytest.mark.parametrize(
+    "failure", [httpx.ConnectError("refused"), httpx.ConnectTimeout("slow")]
+)
+async def test_a_request_that_never_left_is_reported_as_not_sent(
+    recorded_client, failure
+):
+    client, told = recorded_client(failure)
 
     with pytest.raises(CricHeroesTransportError):
         await client.get_tournament_match_list(2242502)
 
-    assert told == [("get-tournament-match-list", None)]
+    assert told == [("get-tournament-match-list", None, False)]
+
+
+@pytest.mark.parametrize(
+    "failure", [httpx.ReadTimeout("slow"), httpx.RemoteProtocolError("cut")]
+)
+async def test_a_request_sent_but_unanswered_is_reported_as_sent(
+    recorded_client, failure
+):
+    """CricHeroes may have answered, and charged, after we stopped waiting."""
+    client, told = recorded_client(failure)
+
+    with pytest.raises(CricHeroesTransportError):
+        await client.get_tournament_match_list(2242502)
+
+    assert told == [("get-tournament-match-list", None, True)]
+
+
+async def test_our_own_deadline_counts_as_sent(recorded_client):
+    async def slow():
+        await asyncio.sleep(1)
+        return ok()
+
+    client, told = recorded_client(slow, timeout=0.05)
+
+    with pytest.raises(CricHeroesTransportError):
+        await client.get_tournament_match_list(2242502)
+
+    assert told == [("get-tournament-match-list", None, True)]
+
+
+async def test_a_cancelled_request_is_still_counted(recorded_client):
+    """The player import cancels its other squad reads when one fails; each
+    was already sent, and may be charged."""
+    started = asyncio.Event()
+
+    async def waits():
+        started.set()
+        await asyncio.sleep(10)
+        return ok()
+
+    client, told = recorded_client(waits)
+    call = asyncio.create_task(client.get_tournament_match_list(2242502))
+    await started.wait()
+    call.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert told == [("get-tournament-match-list", None, True)]
 
 
 async def test_errors_are_reported_before_they_are_raised(recorded_client):
@@ -137,11 +201,11 @@ async def test_errors_are_reported_before_they_are_raised(recorded_client):
     with pytest.raises(Exception):
         await client.get_tournament_match_list(2242502)
 
-    assert told == [("get-tournament-match-list", 500)]
+    assert told == [("get-tournament-match-list", 500, True)]
 
 
 async def test_a_counter_that_fails_never_fails_the_call(recorded_client, caplog):
-    async def broken(endpoint, status):
+    async def broken(endpoint, status, sent):
         raise RuntimeError("database down")
 
     client, _ = recorded_client(ok([]), recorder=broken)
@@ -179,9 +243,9 @@ async def test_calls_are_counted_per_day_and_endpoint(db):
     )
 
     assert await rows() == {
-        ("2026-11-05", "get-tournament-match-list"): (2, 0, 0, 0),
-        ("2026-11-05", "get-tournament-point-table"): (1, 0, 0, 0),
-        ("2026-11-06", "get-tournament-match-list"): (1, 0, 0, 0),
+        ("2026-11-05", "get-tournament-match-list"): (2, 0, 0, 0, 0),
+        ("2026-11-05", "get-tournament-point-table"): (1, 0, 0, 0, 0),
+        ("2026-11-06", "get-tournament-match-list"): (1, 0, 0, 0, 0),
     }
 
 
@@ -190,13 +254,42 @@ async def test_429s_and_5xx_are_charged_calls_and_counted_apart(db):
     await record_call("get-tournament-match-list", 503, now=NOON)
     await record_call("get-tournament-match-list", 403, now=NOON)
 
-    assert await rows() == {("2026-11-05", "get-tournament-match-list"): (3, 1, 1, 0)}
+    assert await rows() == {
+        ("2026-11-05", "get-tournament-match-list"): (3, 1, 1, 0, 0)
+    }
 
 
-async def test_no_answer_is_not_a_charged_call(db):
+async def test_unanswered_is_a_call_and_unsent_is_not(db):
     await record_call("get-tournament-match-list", None, now=NOON)
+    await record_call("get-tournament-match-list", None, False, now=NOON)
 
-    assert await rows() == {("2026-11-05", "get-tournament-match-list"): (0, 0, 0, 1)}
+    assert await rows() == {
+        ("2026-11-05", "get-tournament-match-list"): (1, 0, 0, 1, 1)
+    }
+
+
+async def test_two_first_calls_of_a_day_racing_both_count(db, monkeypatch):
+    """The second upsert of a new row can lose the race to insert it."""
+    await record_call("get-tournament-match-list", 200, now=NOON)
+    collection = CricHeroesCallCount.get_motor_collection()
+    real = collection.update_one
+    attempts = []
+
+    async def loses_the_race_once(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise DuplicateKeyError("E11000 duplicate key")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(collection, "update_one", loses_the_race_once)
+    monkeypatch.setattr(
+        CricHeroesCallCount, "get_motor_collection", classmethod(lambda cls: collection)
+    )
+
+    await record_call("get-tournament-match-list", 200, now=NOON)
+
+    assert len(attempts) == 2
+    assert (await rows())[("2026-11-05", "get-tournament-match-list")][0] == 2
 
 
 async def test_the_day_is_utc(db):
@@ -251,6 +344,20 @@ async def test_usage_reports_the_term_and_recent_days(db, settings):
     }
 
 
+@pytest.mark.parametrize(
+    "configured",
+    [date(2025, 3, 1), date(2024, 3, 1), date(2027, 3, 1)],
+    ids=["last-year", "years-ago", "a-year-still-to-come"],
+)
+def test_the_term_is_the_latest_anniversary(settings, monkeypatch, configured):
+    """Whatever the year, a date still to come or a mistyped one included,
+    the term runs from the last 1 March: it cannot hide this term's calls."""
+    monkeypatch.setattr(settings, "cricheroes_quota_term_start", configured)
+
+    assert term_start(date(2026, 11, 5)) == (date(2026, 3, 1), True)
+    assert term_start(date(2026, 2, 1)) == (date(2025, 3, 1), True)
+
+
 async def test_a_configured_term_renews_every_year(db, settings, monkeypatch):
     monkeypatch.setattr(settings, "cricheroes_quota_term_start", date(2025, 3, 1))
     await count("2026-02-28", "get-tournament-match-list", 10)
@@ -301,6 +408,7 @@ async def test_the_usage_route(client, settings):
         "throttled": 0,
         "server_errors": 0,
         "no_answer": 0,
+        "not_sent": 0,
     }
     assert body["by_endpoint"] == {"get-tournament-match-list": 12}
 
@@ -326,6 +434,18 @@ def test_sync_tournament_ids_are_read_as_numbers():
     )
 
     assert current.cricheroes_sync_tournaments == [2242502, 2251924]
+
+
+@pytest.mark.parametrize("value", ["", "  "])
+def test_a_blank_term_start_is_unset(value):
+    """Added in Railway but left empty, it must not stop the API starting."""
+    current = Settings(
+        SECRET_KEY="x" * 32,
+        JWT_SECRET_KEY="y" * 32,
+        CRICHEROES_QUOTA_TERM_START=value,
+    )
+
+    assert current.cricheroes_quota_term_start is None
 
 
 def test_counted_client_counts():

@@ -22,7 +22,6 @@ TypeScript; hence response_model_by_alias=False on every route. Fields we do
 not model still come through under their upstream names.
 """
 
-import dataclasses
 import math
 from collections import Counter
 from typing import AsyncGenerator, List, Optional
@@ -36,9 +35,7 @@ from app.schemas.admin.cricheroes_import import RosterImportPlayer, RosterImport
 from app.schemas.admin.cricheroes_ops import (
     CacheStatusResponse,
     RefreshResponse,
-    SnapshotStatus,
-    SyncReport,
-    UsageResponse,
+    UsageReport,
 )
 from app.schemas.cricheroes import (
     BattingLeaderboardEntry,
@@ -372,34 +369,20 @@ async def import_tournament_players(
 # -- the API itself: calls made, and the cache ------------------------------
 
 
-@router.get("/usage", response_model=UsageResponse)
+@router.get("/usage", response_model=UsageReport)
 async def usage(days: int = Query(default=30, ge=1, le=366)):
     """Calls made this quota term and over the last `days` days (§6.6)."""
-    report = await cricheroes_usage.usage(days)
-    return UsageResponse.model_validate(dataclasses.asdict(report))
+    return await cricheroes_usage.usage(days)
 
 
 @router.get("/cache", response_model=CacheStatusResponse)
 async def cache_status():
     """What is cached, how old it is, and whether its last refresh failed."""
     settings = get_settings()
-    snapshots = await cricheroes_cache.status()
     return CacheStatusResponse(
         tournaments=settings.cricheroes_sync_tournaments,
         max_age_hours=settings.cricheroes_snapshot_max_age_hours,
-        snapshots=[
-            SnapshotStatus(
-                resource=s.resource,
-                cricheroes_tournament_id=s.cricheroes_tournament_id,
-                fetched_at=s.fetched_at,
-                rows=(
-                    len(s.data) if isinstance(s.data, list) else int(s.data is not None)
-                ),
-                last_error=s.last_error,
-                last_error_at=s.last_error_at,
-            )
-            for s in snapshots
-        ],
+        snapshots=await cricheroes_cache.status(),
     )
 
 
@@ -432,6 +415,4 @@ async def refresh_cache(
         reports = await cricheroes_cache.sync(client, ids, force=force)
     except CricHeroesError as exc:
         raise _to_http_error(exc) from exc
-    return RefreshResponse(
-        reports=[SyncReport(**dataclasses.asdict(r), calls=r.calls) for r in reports]
-    )
+    return RefreshResponse(reports=reports)

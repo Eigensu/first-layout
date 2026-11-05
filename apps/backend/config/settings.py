@@ -110,8 +110,8 @@ class Settings(BaseSettings):
     # retry is a paid call nobody asked for.
     cricheroes_max_retries: int = Field(default=0, ge=0, alias="CRICHEROES_MAX_RETRIES")
     # The call counter (spec §6.6) measures against the quota. It is per
-    # 12-month term: set the term's first day to count from it, or the last
-    # 365 days are counted. Past the warning share, the usage route flags it
+    # 12-month term, renewed yearly: set the first day of any term to count
+    # from its latest anniversary, or the last 365 days are counted. Past the warning share, the usage route flags it
     # and every sync run logs a warning.
     cricheroes_annual_quota: int = Field(
         default=100_000, gt=0, alias="CRICHEROES_ANNUAL_QUOTA"
@@ -151,6 +151,15 @@ class Settings(BaseSettings):
     resend_api_key: Optional[str] = Field(default=None, alias="RESEND_API_KEY")
     resend_from_email: Optional[str] = Field(default=None, alias="RESEND_FROM_EMAIL")
     resend_reply_to: Optional[str] = Field(default=None, alias="RESEND_REPLY_TO")
+
+    @field_validator("cricheroes_quota_term_start", mode="before")
+    @classmethod
+    def _blank_term_start_is_unset(cls, value):
+        # A variable added in Railway but left empty must not stop the API
+        # from starting.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("cricheroes_sync_tournament_ids")
     @classmethod

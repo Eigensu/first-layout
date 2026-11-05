@@ -4,12 +4,11 @@ import json
 from pathlib import Path
 
 import httpx
-import pytest
 import pytest_asyncio
 
 import scripts.sync_cricheroes as script
 from app.models.cricheroes import CricHeroesCallCount
-from app.services import cricheroes_cache, cricheroes_usage
+from app.services import cricheroes_usage
 from app.services.cricheroes_client import CricHeroesClient
 from config.settings import get_settings
 
@@ -18,11 +17,6 @@ DOC = json.loads(
 )
 BASE = "https://cricheroes.test/api/v1"
 CREDS = {"api_key": "k", "secret_access_key": "s", "udid": "u"}
-
-
-@pytest.fixture(autouse=True)
-def _fresh_locks():
-    cricheroes_cache._locks.clear()
 
 
 @pytest_asyncio.fixture

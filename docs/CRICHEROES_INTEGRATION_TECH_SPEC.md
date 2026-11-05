@@ -116,7 +116,7 @@ New settings on the existing `Settings` class, following the established
 | `cricheroes_timeout_seconds` | `CRICHEROES_TIMEOUT_SECONDS` | `15.0` | no |
 | `cricheroes_max_retries` | `CRICHEROES_MAX_RETRIES` | `0` | no |
 | `cricheroes_annual_quota` | `CRICHEROES_ANNUAL_QUOTA` | `100000` | no — the call counter's yardstick (§6.6) |
-| `cricheroes_quota_term_start` | `CRICHEROES_QUOTA_TERM_START` | unset: the last 365 days | no — the term's first day, `YYYY-MM-DD` |
+| `cricheroes_quota_term_start` | `CRICHEROES_QUOTA_TERM_START` | unset (or blank): the last 365 days | no — the first day of any term, `YYYY-MM-DD` |
 | `cricheroes_usage_warn_percent` | `CRICHEROES_USAGE_WARN_PERCENT` | `50` | no |
 | `cricheroes_sync_tournament_ids` | `CRICHEROES_SYNC_TOURNAMENT_IDS` | empty: nothing cached | for the cache (§6.7), e.g. `2242502,2251924` |
 | `cricheroes_snapshot_max_age_hours` | `CRICHEROES_SNAPSHOT_MAX_AGE_HOURS` | `24` | no |
@@ -324,10 +324,15 @@ request, keyed by a unique `(day, endpoint)` index.
 
 | Counter | What it counts |
 |---|---|
-| `calls` | Every request CricHeroes answered — what they charge for, 429s included (§13.4) |
+| `calls` | Every request that reached CricHeroes, or may have — what they charge for, 429s included (§13.4). Errs high |
 | `throttled` | The 429s among them |
 | `server_errors` | The 5xx among them; calls lost to their outages are not charged (§6.1), so these are the likeliest refund |
-| `no_answer` | Requests that got no HTTP answer (timeout, connection failure); not in `calls` |
+| `no_answer` | Among `calls`, those we stopped waiting for: timed out (ours or httpx's) or cancelled, as the player import cancels its other reads when one fails. CricHeroes may have answered and charged them all the same |
+| `not_sent` | Requests whose connection failed, so they never left; not in `calls` |
+
+The count errs high on purpose: a quota counter that reads low is the one that
+lets the quota run out. A cancelled request is counted from a shielded write,
+so a second cancellation cannot lose it.
 
 **Where it hooks in.** The client tells a `recorder` of every attempt — each
 retried 429 included, since each is charged — and `counted_client()`
@@ -341,8 +346,11 @@ and its one call is not counted.
 **Reading it.** `GET /api/admin/cricheroes/usage?days=30` returns this quota
 term's calls against `CRICHEROES_ANNUAL_QUOTA`, the share used, every one of
 the last `days` days (empty ones included) and calls per endpoint over them.
-The term starts on `CRICHEROES_QUOTA_TERM_START` and renews yearly from it;
-unset, the last 365 days stand in for it. Past
+The term renews yearly on the anniversary of `CRICHEROES_QUOTA_TERM_START`,
+and the current one starts on the latest anniversary on or before today —
+whatever year was configured, so a date still to come or a mistyped year
+cannot hide this term's calls. Unset or blank, the last 365 days stand in for
+it. Past
 `CRICHEROES_USAGE_WARN_PERCENT` (50% by default, well before CricHeroes' 80%)
 the response sets `over_warning`, and every scheduled sync logs a warning.
 
@@ -374,10 +382,21 @@ batting and bowling leaderboards in their default order.
 Comparing each resource's own digest, rather than "did results change this
 run", means a resource whose read failed is retried on every run until it
 catches up. A failed read keeps the last good data and records the error, so
-an outage shows stale data rather than none. A tournament refreshed in the
-last 5 minutes is passed over, which makes a doubled scheduled run or a
-repeated "refresh now" free. A missing credential stops the run before any
-call.
+an outage shows stale data rather than none. A missing credential stops the
+run before any call.
+
+**One run at a time, across processes.** The scheduled job and walle-api are
+separate services, so an in-memory lock cannot keep an admin's "refresh now"
+from overlapping the hourly run. Each run first claims the tournament with one
+atomic write on its match-list document, which matches only when the
+tournament was not refreshed in the last 5 minutes and no live claim is held;
+when the document exists but does not match, the upsert's insert collides on
+the unique key, and that collision is the refusal. The run is then reported as
+skipped — "refreshed N minute(s) ago" or "another refresh of it is running" —
+and makes no calls. A run releases its own claim when it ends, however it
+ends; a claim left by a run that died expires after 10 minutes, longer than
+any run (five requests of at most 15 s). Every other write is an upsert that
+retries once if it loses the race to insert the document.
 
 **Cost**, both tournaments, hourly: 2 × 24 match-list calls, plus 4 per
 completed match per tournament, plus at most 8 a day for the age check — about
@@ -821,7 +840,11 @@ rows each do too. For the counter and cache: not counting answered calls,
 leaving the routes' client uncounted, re-reading a resource only when results
 changed in the same run (so a failed read is never retried), letting matches
 in play into the results digest, dropping the 5-minute guard, and storing
-rows under our names instead of CricHeroes' each turn the tests red.
+rows under our names instead of CricHeroes' each turn the tests red. So do,
+after the review of #71: refreshing without the claim, never releasing it,
+dropping the insert-race retry, sorting the digest as tuples, not counting a
+cancelled request, counting a failed connection as sent, keeping a term start
+still to come, and refusing a blank one.
 
 ---
 
