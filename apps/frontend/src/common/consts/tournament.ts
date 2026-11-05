@@ -73,6 +73,22 @@ export function tournamentUrl(slug: string): string {
   return `https://${slug}.${ROOT_DOMAIN}`;
 }
 
+/** A tournament's admin dashboard, which lives on its own subdomain. */
+export function tournamentAdminUrl(slug: string): string {
+  return `${tournamentUrl(slug)}/admin`;
+}
+
+/**
+ * True on the platform's own host (wallearena.com, www.wallearena.com), which
+ * belongs to no tournament: requests from it carry no tenant header, so only
+ * the tournament registry can be managed there.
+ */
+export function isRootDomainHost(rawHost: string | null): boolean {
+  if (!rawHost) return false;
+  const host = rawHost.split(":")[0].toLowerCase();
+  return host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`;
+}
+
 /**
  * Extract the tournament slug from a request host, or null when the host is
  * not a tournament subdomain. Safe against:

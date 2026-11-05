@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InternalAxiosRequestConfig } from 'axios';
-import { TENANT_HEADER, tenantHeaders } from '@/common/consts';
+import { TENANT_HEADER, isRootDomainHost, tenantHeaders, tournamentAdminUrl } from '@/common/consts';
 import apiClient from '../client';
 
 function onHost(host: string) {
@@ -57,5 +57,27 @@ describe('apiClient', () => {
   it('sends no tournament from the apex', async () => {
     onHost('wallearena.com');
     expect((await sentHeaders())[TENANT_HEADER]).toBeUndefined();
+  });
+});
+
+describe('isRootDomainHost', () => {
+  it.each(['wallearena.com', 'www.wallearena.com', 'WallEArena.com:443'])(
+    '%s is the platform host, which has no tournament',
+    (host) => {
+      expect(isRootDomainHost(host)).toBe(true);
+    }
+  );
+
+  it.each(['dcpl.wallearena.com', 'localhost:3000', 'x.vercel.app', '', null])(
+    '%s is not the platform host',
+    (host) => {
+      expect(isRootDomainHost(host)).toBe(false);
+    }
+  );
+});
+
+describe('tournamentAdminUrl', () => {
+  it("points at the admin on the tournament's subdomain", () => {
+    expect(tournamentAdminUrl('dcpl')).toBe('https://dcpl.wallearena.com/admin');
   });
 });

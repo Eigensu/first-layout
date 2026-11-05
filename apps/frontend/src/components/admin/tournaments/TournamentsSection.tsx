@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
+  LayoutDashboard,
 } from "lucide-react";
 import { TournamentAdminsDialog } from "./TournamentAdminsDialog";
 import {
@@ -32,6 +33,7 @@ import {
   TournamentStatus,
   getSlugError,
   slugifyTournamentName,
+  tournamentAdminUrl,
   tournamentUrl,
 } from "@/common/consts/tournament";
 
@@ -594,6 +596,18 @@ export function TournamentsSection() {
                     {t.end_at ? ` → ${toLocalInput(t.end_at).replace("T", " ")}` : ""}
                   </span>
                 </div>
+              )}
+
+              {/* Players, contests and the rest belong to one tournament and
+                  are managed on its subdomain, which names it to the backend.
+                  An archived tournament's subdomain no longer resolves. */}
+              {t.status !== "archived" && (
+                <a
+                  href={tournamentAdminUrl(t.slug)}
+                  className="mb-2 w-full px-3 py-2 rounded bg-accent-pink text-white text-sm font-medium flex items-center justify-center gap-1 hover:opacity-90 transition-opacity"
+                >
+                  <LayoutDashboard className="w-4 h-4" /> Manage tournament
+                </a>
               )}
 
               <div className="pt-4 border-t border-border flex gap-2">
