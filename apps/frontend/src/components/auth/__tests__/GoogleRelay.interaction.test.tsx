@@ -89,7 +89,7 @@ describe('refuses to relay', () => {
     api.getPublicTournaments.mockRejectedValue(new Error('offline'));
     render(<GoogleRelay origin={RSPL} state={STATE} />);
 
-    expect(await screen.findByText("Couldn't reach WALL-E Arena")).toBeTruthy();
+    expect(await screen.findByText("Couldn't reach Wall-E Arena")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'google' })).toBeNull();
   });
 

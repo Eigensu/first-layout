@@ -99,7 +99,7 @@ export default function AboutPage() {
           >
             <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
-              About WALL-E Arena
+              About Wall-E Arena
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 bg-gradient-primary bg-clip-text text-transparent">
               Building the Future of Fantasy Cricket
@@ -152,7 +152,7 @@ export default function AboutPage() {
               </h2>
               <div className="space-y-4 text-gray-600 leading-relaxed">
                 <p>
-                  WALL-E Arena was born from a simple idea: fantasy cricket
+                  Wall-E Arena was born from a simple idea: fantasy cricket
                   should be more than just picking players. It should be an
                   immersive experience that combines strategy, community, and
                   the thrill of the game.
@@ -165,7 +165,7 @@ export default function AboutPage() {
                   ground up.
                 </p>
                 <p>
-                  Today, WALL-E Arena serves over 100,000 active users across
+                  Today, Wall-E Arena serves over 100,000 active users across
                   the globe, hosting millions of fantasy teams and fostering a
                   passionate community of cricket lovers. But we&apos;re just
                   getting started.
@@ -258,7 +258,7 @@ export default function AboutPage() {
               Meet Our Team
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              The passionate people behind WALL-E Arena, working tirelessly to
+              The passionate people behind Wall-E Arena, working tirelessly to
               bring you the best fantasy cricket experience.
             </p>
           </motion.div>
@@ -317,7 +317,7 @@ export default function AboutPage() {
               </h2>
               <p className="text-lg text-white/90 mb-8">
                 Be part of something special. Start your fantasy cricket journey
-                with WALL-E Arena today.
+                with Wall-E Arena today.
               </p>
               <button
                 onClick={() => router.push("/auth/register")}

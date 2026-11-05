@@ -55,7 +55,7 @@ export default function ContestDetailsPage() {
   return (
     <div className="max-w-7xl mx-auto p-4">
       {loading && (
-        <PageLoader message="WALL-E Arena is getting your contest..." />
+        <PageLoader message="Wall-E Arena is getting your contest..." />
       )}
       {error && <div className="text-red-600">{error}</div>}
       {contest && (

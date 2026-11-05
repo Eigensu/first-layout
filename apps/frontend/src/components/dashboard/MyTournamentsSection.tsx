@@ -80,7 +80,7 @@ export function MyTournamentsSection({
         Your Tournaments
       </h2>
       <p className="text-xs sm:text-sm text-slate-600 mb-3 sm:mb-4">
-        One account for every WALL-E Arena tournament. Numbers can take a while
+        One account for every Wall-E Arena tournament. Numbers can take a while
         to catch up while a tournament is live.
       </p>
 

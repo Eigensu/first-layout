@@ -1,6 +1,6 @@
 # Packages
 
-This directory contains shared packages used across the WALL-E Layout (MWPL) monorepo.
+This directory contains shared packages used across the Wall-E Layout (MWPL) monorepo.
 
 ## Structure
 

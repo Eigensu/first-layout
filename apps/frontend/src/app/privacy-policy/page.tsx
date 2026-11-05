@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LandingSubpage } from "@/components/landing/LandingSubpage";
 
 // Carried over word for word from the retired walle-landing site.
-export const metadata: Metadata = { title: "Privacy Policy | WALL-E Arena" };
+export const metadata: Metadata = { title: "Privacy Policy | Wall-E Arena" };
 
 export default function PrivacyPolicyPage() {
   return (
@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
         <h1 className="text-4xl font-bold text-text-main mb-8">Privacy Policy</h1>
         
         <p className="text-text-muted leading-relaxed mb-8">
-          By accessing or using WALL-E Arena (&quot;the Service&quot;), we prioritize protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard data across both the website and mobile application platforms. It also outlines user responsibilities for the information they provide. By using our platform, you agree to the terms of this policy.
+          By accessing or using Wall-E Arena (&quot;the Service&quot;), we prioritize protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard data across both the website and mobile application platforms. It also outlines user responsibilities for the information they provide. By using our platform, you agree to the terms of this policy.
         </p>
 
         <div className="space-y-8 text-text-muted">
@@ -94,7 +94,7 @@ export default function PrivacyPolicyPage() {
             
             <h3 className="text-xl font-medium text-text-main mb-3">4.1. Exclusive Use of Data</h3>
             <p className="leading-relaxed mb-4">
-              We do not sell, rent, or share your personal data with third parties for marketing or other commercial purposes. Data is used solely to operate and improve WALL-E Arena.
+              We do not sell, rent, or share your personal data with third parties for marketing or other commercial purposes. Data is used solely to operate and improve Wall-E Arena.
             </p>
 
             <h3 className="text-xl font-medium text-text-main mb-3">4.2. Limited Sharing</h3>
@@ -115,7 +115,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-text-main mb-4">6. Permissions for Mobile App Users</h2>
             <p className="leading-relaxed mb-4">
-              When using the WALL-E Arena mobile app, we may request specific permissions to enhance functionality:
+              When using the Wall-E Arena mobile app, we may request specific permissions to enhance functionality:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4 mb-4">
               <li><strong className="text-text-main">Storage Access:</strong> To upload or save auction-related files.</li>
@@ -144,7 +144,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-text-main mb-4">8. Universal Privacy Policy</h2>
             <p className="leading-relaxed">
-              This Privacy Policy applies to all users of WALL-E Arena, whether accessing the service via the website or mobile app. We do not offer separate policies for specific age groups or demographics. By using our platform, you agree to the terms outlined here.
+              This Privacy Policy applies to all users of Wall-E Arena, whether accessing the service via the website or mobile app. We do not offer separate policies for specific age groups or demographics. By using our platform, you agree to the terms outlined here.
             </p>
           </section>
 

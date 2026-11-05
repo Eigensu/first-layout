@@ -337,7 +337,7 @@ function DashboardContent() {
               <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl overflow-hidden bg-white shadow-md ring-2 ring-white shrink-0">
                 <Image
                   src="/logo.jpeg"
-                  alt="WALL-E Arena Logo"
+                  alt="Wall-E Arena Logo"
                   width={64}
                   height={64}
                   className="h-full w-full object-cover"

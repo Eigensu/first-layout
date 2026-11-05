@@ -91,7 +91,7 @@ export function GoogleRelay({
   }
   if (registry === "failed") {
     return (
-      <RelayCard title="Couldn't reach WALL-E Arena">
+      <RelayCard title="Couldn't reach Wall-E Arena">
         <p role="alert" className="text-sm text-text-muted">
           Check your connection, then close this window and try again.
         </p>
