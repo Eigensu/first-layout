@@ -67,9 +67,9 @@ export async function generateMetadata({
   const tournament = await fetchTournament(slug).catch(() => null);
   if (!tournament) return { title: "Tournament not found" };
   return {
-    title: `${tournament.name} | Walle Arena`,
+    title: `${tournament.name} | Wall-E Arena`,
     description:
-      tournament.description || `Fantasy cricket for ${tournament.name} on Walle Arena.`,
+      tournament.description || `Fantasy cricket for ${tournament.name} on Wall-E Arena.`,
   };
 }
 

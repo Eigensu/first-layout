@@ -17,12 +17,12 @@ export function LandingFooter() {
             <div className="flex items-center gap-3 mb-4">
               <Image
                 src="/walle-logo.png"
-                alt="WallE Arena Logo"
+                alt="Wall-E Arena Logo"
                 width={40}
                 height={40}
                 className="object-contain"
               />
-              <span className="text-xl font-bold text-text-main">WallE Arena</span>
+              <span className="text-xl font-bold text-text-main">Wall-E Arena</span>
             </div>
             <p className="text-text-muted text-sm leading-relaxed">
               Your premier destination for fantasy gaming tournaments. Experience
@@ -84,7 +84,7 @@ export function LandingFooter() {
 
         <div className="border-t border-border-subtle pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-text-subtle text-sm">
-            © {year} WallE Arena. All rights reserved.
+            © {year} Wall-E Arena. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm">
             <Link href="/privacy-policy" className="text-text-subtle hover:text-text-main transition-colors">

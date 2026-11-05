@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LandingSubpage } from "@/components/landing/LandingSubpage";
 
 // Carried over word for word from the retired walle-landing site.
-export const metadata: Metadata = { title: "Terms & Conditions | Walle Arena" };
+export const metadata: Metadata = { title: "Terms & Conditions | Wall-E Arena" };
 
 export default function TermsAndConditionsPage() {
   return (
@@ -12,7 +12,7 @@ export default function TermsAndConditionsPage() {
         <h1 className="text-4xl font-bold text-text-main mb-8">Terms and Conditions</h1>
         
         <p className="text-text-muted leading-relaxed mb-8">
-          By accessing or using WallE Arena (&quot;the Service&quot;), you agree to comply with and be bound by these Terms and Conditions. Please read them carefully.
+          By accessing or using Wall-E Arena (&quot;the Service&quot;), you agree to comply with and be bound by these Terms and Conditions. Please read them carefully.
         </p>
 
         <div className="space-y-8 text-text-muted">
@@ -30,7 +30,7 @@ export default function TermsAndConditionsPage() {
 
             <h3 className="text-xl font-medium text-text-main mb-3">1.2 Modification of Terms</h3>
             <p className="leading-relaxed mb-4">
-              WallE Arena reserves the right to modify, update, or change these Terms at any time. Changes will be effective immediately upon posting the revised Terms on the website or mobile application. Continued use of the Service on any platform after changes constitutes your acceptance of the new Terms.
+              Wall-E Arena reserves the right to modify, update, or change these Terms at any time. Changes will be effective immediately upon posting the revised Terms on the website or mobile application. Continued use of the Service on any platform after changes constitutes your acceptance of the new Terms.
             </p>
 
             <h3 className="text-xl font-medium text-text-main mb-3">1.3 Account Registration</h3>
@@ -44,7 +44,7 @@ export default function TermsAndConditionsPage() {
             
             <h3 className="text-xl font-medium text-text-main mb-3">2.1 Purpose of the Service</h3>
             <p className="leading-relaxed mb-4">
-              WallE Arena provides a platform for sports tournament participants to create their squad of best players through selection. The Service allows users to:
+              Wall-E Arena provides a platform for sports tournament participants to create their squad of best players through selection. The Service allows users to:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4 mb-4">
               <li>Create squads of the best players, view and compare their entries with other players, manage data related to players and teams.</li>
@@ -66,7 +66,7 @@ export default function TermsAndConditionsPage() {
             <ul className="list-disc list-inside space-y-2 ml-4">
               <li>Use the Service for unlawful, fraudulent, or malicious activities.</li>
               <li>Engage in actions that disrupt the functionality of the website or mobile application.</li>
-              <li>Engaging in any activity that could harm the reputation or operations of WallE Arena.</li>
+              <li>Engaging in any activity that could harm the reputation or operations of Wall-E Arena.</li>
             </ul>
           </section>
 
@@ -94,7 +94,7 @@ export default function TermsAndConditionsPage() {
             
             <h3 className="text-xl font-medium text-text-main mb-3">4.1 Payment Processing</h3>
             <p className="leading-relaxed mb-4">
-              All payments made through WallE Arena will be processed by third-party payment processors accessible via both the website and mobile application. You agree to provide accurate billing information, and you authorize us to charge the appropriate fees related to your use of the Service.
+              All payments made through Wall-E Arena will be processed by third-party payment processors accessible via both the website and mobile application. You agree to provide accurate billing information, and you authorize us to charge the appropriate fees related to your use of the Service.
             </p>
 
             <h3 className="text-xl font-medium text-text-main mb-3">4.2 Fees and Charges</h3>
@@ -151,12 +151,12 @@ export default function TermsAndConditionsPage() {
 
             <h3 className="text-xl font-medium text-text-main mb-3">7.2 Limitation of Liability</h3>
             <p className="leading-relaxed mb-4">
-              WallE Arena will not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service, including, but not limited to, loss of data, revenue, or business opportunities.
+              Wall-E Arena will not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service, including, but not limited to, loss of data, revenue, or business opportunities.
             </p>
 
             <h3 className="text-xl font-medium text-text-main mb-3">7.3 Indemnification</h3>
             <p className="leading-relaxed">
-              You agree to indemnify and hold harmless WallE Arena, its affiliates, and employees from any claims, damages, or losses arising from your use of the Service or any violation of these Terms.
+              You agree to indemnify and hold harmless Wall-E Arena, its affiliates, and employees from any claims, damages, or losses arising from your use of the Service or any violation of these Terms.
             </p>
           </section>
 
@@ -193,7 +193,7 @@ export default function TermsAndConditionsPage() {
 
             <h3 className="text-xl font-medium text-text-main mb-3">10.2 Entire Agreement</h3>
             <p className="leading-relaxed mb-4">
-              These Terms constitute the entire agreement between you and WallE Arena concerning your use of the Service for both platforms.
+              These Terms constitute the entire agreement between you and Wall-E Arena concerning your use of the Service for both platforms.
             </p>
 
             <h3 className="text-xl font-medium text-text-main mb-3">10.3 Severability</h3>
@@ -203,7 +203,7 @@ export default function TermsAndConditionsPage() {
 
             <h3 className="text-xl font-medium text-text-main mb-3">10.4 Assignment</h3>
             <p className="leading-relaxed">
-              WallE Arena may assign or transfer its rights and obligations under these Terms at any time without notice to you.
+              Wall-E Arena may assign or transfer its rights and obligations under these Terms at any time without notice to you.
             </p>
           </section>
 

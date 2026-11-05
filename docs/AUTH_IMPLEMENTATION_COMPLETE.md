@@ -2,7 +2,7 @@
 
 ## ✅ Successfully Implemented
 
-The MongoDB-based authentication system for Walle Fantasy has been successfully implemented and tested!
+The MongoDB-based authentication system for Wall-E Fantasy has been successfully implemented and tested!
 
 ## 📊 Implementation Summary
 
@@ -370,4 +370,4 @@ The authentication system is now fully implemented and ready for use. The backen
 3. Testing and quality assurance
 4. Production deployment preparation
 
-**All the best with your Walle Fantasy project! 🚀**
+**All the best with your Wall-E Fantasy project! 🚀**

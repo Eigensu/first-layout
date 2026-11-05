@@ -8,12 +8,12 @@ import { API_V1_BASE } from "@/config/constants";
 
 // Always shown regardless of API response
 const PINNED_LOGOS: LogoItem[] = [
-  { src: "/logos/company1.png", alt: "Walle Arena Partner" },
+  { src: "/logos/company1.png", alt: "Wall-E Arena Partner" },
 ];
 
 // Default fallback logos — used when the API returns no sponsors
 const DEFAULT_FALLBACK_LOGOS: LogoItem[] = [
-  { src: "/logos/company1.png", alt: "Walle Arena Partner" },
+  { src: "/logos/company1.png", alt: "Wall-E Arena Partner" },
   { src: "/logos/c4.png", alt: "Sponsor" },
 ];
 

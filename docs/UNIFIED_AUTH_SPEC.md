@@ -2,7 +2,7 @@
 
 **Status:** Ready for review (decisions locked, not yet implemented)
 **Owner:** Aagam
-**Scope:** One user account per person across every Walle tournament, past and
+**Scope:** One user account per person across every Wall-E tournament, past and
 future, with each profile listing the tournaments that person took part in.
 
 ---

@@ -1,6 +1,6 @@
-# Walle Layout (mwpl) - Monorepo
+# Wall-E Layout (mwpl) - Monorepo
 
-This repository contains the Walle Layout (MWPL) monorepo — a multi-application workspace that ships a Next.js frontend, a FastAPI backend, and a set of shared packages and utilities.
+This repository contains the Wall-E Layout (MWPL) monorepo — a multi-application workspace that ships a Next.js frontend, a FastAPI backend, and a set of shared packages and utilities.
 
 ## Project Structure
 

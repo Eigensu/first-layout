@@ -1,6 +1,6 @@
 # Authentication System - Technical Specification (MongoDB)
 
-**Project:** Walle Fantasy  
+**Project:** Wall-E Fantasy  
 **Version:** 1.0 - MongoDB Edition  
 **Date:** October 2, 2025  
 **Status:** Implementation Ready  
@@ -28,7 +28,7 @@
 
 ### 1.1 Purpose
 
-Implement a secure, JWT-based authentication system for the Walle Fantasy application using MongoDB as the database, enabling user registration, login, session management, and protected route access.
+Implement a secure, JWT-based authentication system for the Wall-E Fantasy application using MongoDB as the database, enabling user registration, login, session management, and protected route access.
 
 ### 1.2 Goals
 
@@ -212,7 +212,7 @@ API_PORT=8000
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=Walle Fantasy
+NEXT_PUBLIC_APP_NAME=Wall-E Fantasy
 ```
 
 ---
@@ -1055,7 +1055,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 app = FastAPI(
-    title="Walle Fantasy API",
+    title="Wall-E Fantasy API",
     description="Fantasy Cricket Platform API with MongoDB",
     version="1.0.0",
     lifespan=lifespan
@@ -1078,7 +1078,7 @@ app.include_router(users.router)
 async def root():
     """Root endpoint"""
     return {
-        "message": "Walle Fantasy API is running!",
+        "message": "Wall-E Fantasy API is running!",
         "database": "MongoDB",
         "version": "1.0.0"
     }

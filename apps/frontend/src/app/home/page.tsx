@@ -193,7 +193,7 @@ export default function HomePage() {
                       transition={{ duration: 0.5, delay: 0.1 }}
                       className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-3"
                     >
-                      Walle Arena
+                      Wall-E Arena
                     </motion.h1>
                     
                     <motion.p 

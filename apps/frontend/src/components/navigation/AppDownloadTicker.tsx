@@ -6,7 +6,7 @@ import LogoLoop, { type LogoItem } from "@/components/ui/LogoLoop";
 
 const MESSAGES = [
   "For an elevated experience, download our app",
-  "Walle Arena is on the App Store",
+  "Wall-E Arena is on the App Store",
 ];
 
 // At module scope because LogoLoop re-measures whenever this array changes.
@@ -45,7 +45,7 @@ export function AppDownloadTicker() {
           pauseOnHover
           fadeOut
           fadeOutColor="var(--bg-card)"
-          ariaLabel="Download the Walle Arena app"
+          ariaLabel="Download the Wall-E Arena app"
           className="whitespace-nowrap py-2.5"
         />
       </div>
