@@ -39,13 +39,13 @@ export function LandingNavbar() {
           <Link href="/" className="flex items-center gap-3">
             <Image
               src="/walle-logo.png"
-              alt="WallE Arena Logo"
+              alt="WALL-E Arena Logo"
               width={40}
               height={40}
               className="object-contain rounded-full"
             />
             <span className="text-lg sm:text-xl font-bold text-text-main tracking-wide">
-              WallE Arena
+              WALL-E Arena
             </span>
           </Link>
 

@@ -162,7 +162,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             >
               <Image
                 src="/walle-logo.png"
-                alt="Wall-E Arena Logo"
+                alt="WALL-E Arena Logo"
                 width={80}
                 height={80}
                 className="rounded-full object-cover -my-4"
@@ -289,7 +289,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
             >
               <Image
                 src="/walle-logo.png"
-                alt="Wall-E Arena Logo"
+                alt="WALL-E Arena Logo"
                 width={80}
                 height={80}
                 className="rounded-full object-cover -my-6"
@@ -336,7 +336,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
           >
             <Image
               src="/walle-logo.png"
-              alt="Wall-E Arena Logo"
+              alt="WALL-E Arena Logo"
               width={72}
               height={72}
               className="rounded-full object-cover -my-6"

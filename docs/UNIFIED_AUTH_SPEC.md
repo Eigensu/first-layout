@@ -2,7 +2,7 @@
 
 **Status:** Ready for review (decisions locked, not yet implemented)
 **Owner:** Aagam
-**Scope:** One user account per person across every Walle tournament, past and
+**Scope:** One user account per person across every WALL-E tournament, past and
 future, with each profile listing the tournaments that person took part in.
 
 ---
@@ -1105,7 +1105,7 @@ async def send_otp_email(
     if not settings.resend_api_key or not settings.resend_from_email:
         return False, "Resend is not configured"
 
-    brand = tournament_name or "Walle Fantasy"
+    brand = tournament_name or "WALL-E Fantasy"
     payload = {
         "from": settings.resend_from_email,
         "to": [to],
@@ -1137,7 +1137,7 @@ New settings:
 
 ```
 RESEND_API_KEY
-RESEND_FROM_EMAIL="Walle Fantasy <no-reply@send.wallearena.com>"
+RESEND_FROM_EMAIL="WALL-E Fantasy <no-reply@send.wallearena.com>"
 RESEND_REPLY_TO                       # optional
 ```
 
@@ -1203,7 +1203,7 @@ Behaviour to preserve or fix while touching this code:
   would let parallel guesses through on one count. Moving a session to `verified`, and
   spending a reset token, are conditional updates too, so each happens once.
 - **Brand:** a reset started on a tournament's site names that tournament (its
-  registry `name`) in the subject and body; otherwise "Wall-E Arena".
+  registry `name`) in the subject and body; otherwise "WALL-E Arena".
 - Sessions carry `purpose`, so an email-change code cannot open a reset, and a reset
   cannot spend an email-change session.
 - **A reset checks the code's destination still belongs to the account**

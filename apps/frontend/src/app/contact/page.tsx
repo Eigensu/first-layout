@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Github, Globe, Linkedin, Mail, MapPin, Twitter } from "lucide-react";
 import { LandingSubpage } from "@/components/landing/LandingSubpage";
 
-export const metadata: Metadata = { title: "Contact | Walle Arena" };
+export const metadata: Metadata = { title: "Contact | WALL-E Arena" };
 
 const CARDS = [
   {

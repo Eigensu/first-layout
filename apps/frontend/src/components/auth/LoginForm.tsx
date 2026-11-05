@@ -64,14 +64,14 @@ export function LoginForm() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
             <Image
               src="/logo.jpeg"
-              alt="Wall-E Arena Logo"
+              alt="WALL-E Arena Logo"
               width={64}
               height={64}
               className="object-cover"
             />
           </div>
           <h1 className="text-4xl font-extrabold text-accent-pink-soft">
-            Wall-E Arena
+            WALL-E Arena
           </h1>
         </div>
         <p className="text-text-muted">Welcome back! Ready to play?</p>
@@ -98,7 +98,7 @@ export function LoginForm() {
               autoComplete="username"
             />
             <p className="mt-1.5 px-1 text-xs text-text-muted">
-              One account for every Wall-E Arena tournament. Used a username
+              One account for every WALL-E Arena tournament. Used a username
               before? It still works for now.
             </p>
           </div>

@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Walle Fantasy API",
+    title="WALL-E Fantasy API",
     description="Fantasy Cricket Platform API with MongoDB Authentication",
     version="1.0.0",
     debug=settings.debug,
@@ -104,7 +104,7 @@ app.include_router(carousel_router)
 @app.get("/")
 async def root():
     return {
-        "message": "Walle Fantasy API is running!",
+        "message": "WALL-E Fantasy API is running!",
         "database": "MongoDB",
         "version": "1.0.0",
     }

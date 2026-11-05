@@ -42,7 +42,7 @@ GENERIC_EMAIL_MESSAGE = "If the email exists, a code has been sent."
 def resend_on(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "re_test_key_123")
     monkeypatch.setattr(
-        settings, "resend_from_email", "Wall-E Arena <no-reply@send.example.com>"
+        settings, "resend_from_email", "WALL-E Arena <no-reply@send.example.com>"
     )
     monkeypatch.setattr(settings, "resend_reply_to", None)
 
@@ -610,7 +610,7 @@ async def test_a_send_is_one_message_to_resend(resend_on, resend_api, monkeypatc
     assert request.headers["idempotency-key"] == "key-1"
     body = httpx.Response(200, content=request.content).json()
     assert body["to"] == ["rahul@example.com"]
-    assert body["from"] == "Wall-E Arena <no-reply@send.example.com>"
+    assert body["from"] == "WALL-E Arena <no-reply@send.example.com>"
     assert body["reply_to"] == "help@example.com"
     assert body["subject"] == "482913 is your Alpha password reset code"
     assert "482913" in body["text"] and "482913" in body["html"]

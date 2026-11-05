@@ -28,7 +28,7 @@ RESEND_URL = "https://api.resend.com/emails"
 
 # Used when a request names no tournament: the apex site, and the legacy
 # single-tournament services, which have no registry row to take a name from.
-DEFAULT_BRAND = "Wall-E Arena"
+DEFAULT_BRAND = "WALL-E Arena"
 
 
 def is_configured() -> bool:

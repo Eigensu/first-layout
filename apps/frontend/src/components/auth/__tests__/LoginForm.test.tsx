@@ -51,7 +51,7 @@ describe('LoginForm', () => {
     const html = renderToStaticMarkup(<LoginForm />);
 
     expect(html).toContain('placeholder="Mobile number or email"');
-    expect(html).toContain('One account for every Wall-E Arena tournament.');
+    expect(html).toContain('One account for every WALL-E Arena tournament.');
     expect(html).toContain('Used a username');
     expect(html).not.toContain('Enter username or mobile number');
   });

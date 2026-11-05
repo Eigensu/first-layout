@@ -12,13 +12,13 @@ export function LandingSubpage({ children }: { children: React.ReactNode }) {
           <Link href="/" className="flex items-center gap-3">
             <Image
               src="/walle-logo.png"
-              alt="WallE Arena Logo"
+              alt="WALL-E Arena Logo"
               width={48}
               height={48}
               className="object-contain"
             />
             <div>
-              <p className="text-2xl font-bold text-text-main">WallE Arena</p>
+              <p className="text-2xl font-bold text-text-main">WALL-E Arena</p>
               <p className="text-text-muted text-sm">Tournaments</p>
             </div>
           </Link>

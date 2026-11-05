@@ -135,7 +135,7 @@ export default function HomePage() {
         <div className="min-h-screen flex items-center justify-center bg-bg-body">
           <div className="text-center">
             <Spinner size="lg" />
-            <p className="mt-4 text-text-muted">Loading Wall-E Arena...</p>
+            <p className="mt-4 text-text-muted">Loading WALL-E Arena...</p>
           </div>
         </div>
       ) : (
@@ -178,7 +178,7 @@ export default function HomePage() {
                         <div className="absolute inset-0 bg-gradient-brand opacity-0 group-hover:opacity-10 transition-opacity duration-500" />
                         <Image
                           src="/logo.jpeg"
-                          alt="Wall-E Arena"
+                          alt="WALL-E Arena"
                           fill
                           className="object-contain p-1 rounded-[1.2rem]"
                           priority
@@ -193,7 +193,7 @@ export default function HomePage() {
                       transition={{ duration: 0.5, delay: 0.1 }}
                       className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-3"
                     >
-                      Walle Arena
+                      WALL-E Arena
                     </motion.h1>
                     
                     <motion.p 

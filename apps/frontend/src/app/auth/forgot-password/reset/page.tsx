@@ -61,14 +61,14 @@ export default function ForgotPasswordResetPage() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg overflow-hidden">
             <Image
               src="/logo.jpeg"
-              alt="Wall-E Arena Logo"
+              alt="WALL-E Arena Logo"
               width={64}
               height={64}
               className="object-cover"
             />
           </div>
           <h1 className="text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-            Wall-E Arena
+            WALL-E Arena
           </h1>
         </div>
         <p className="text-text-muted">Set a new password</p>

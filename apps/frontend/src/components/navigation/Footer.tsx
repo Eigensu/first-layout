@@ -18,7 +18,7 @@ export function Footer() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <span className="text-xl font-bold text-text-main">
-                Wall-E Arena
+                WALL-E Arena
               </span>
             </div>
             <p className="text-sm text-text-muted">
@@ -102,7 +102,7 @@ export function Footer() {
         <div className="mt-8 pt-8 border-t border-border-subtle">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-text-subtle text-center sm:text-left">
-              © {currentYear} Wall-E Arena. All rights reserved.
+              © {currentYear} WALL-E Arena. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <a
