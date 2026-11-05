@@ -5,6 +5,7 @@ export { UserMenu } from './UserMenu'
 export { MobileUserMenu } from './MobileUserMenu'
 export { Footer } from './Footer'
 export { AppDownloadBanner } from './AppDownloadBanner'
+export { AppDownloadTicker } from './AppDownloadTicker'
 
 // Types
 export type { Tab, NavigationTabsProps, TopNavigationProps, BreadcrumbItem } from './NavigationTabs'
