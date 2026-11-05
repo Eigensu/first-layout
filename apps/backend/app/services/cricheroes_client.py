@@ -3,7 +3,7 @@
 docs/CRICHEROES_INTEGRATION_TECH_SPEC.md is the design; the section numbers in
 comments refer to it. One method per documented endpoint. Every call is a GET
 against `{base_url}/thirdparty/mediahubble/...` carrying the five documented
-headers.
+headers, plus a User-Agent naming us.
 
 The annual call quota, not the rate limit, is what constrains this API (§6), so
 nothing here calls upstream more than asked: no prefetching, and no retries by
@@ -63,6 +63,12 @@ logger = logging.getLogger("app.cricheroes")
 # thirdparty-client); the doc of 4 Nov 2026 replaced it with this one.
 DEVICE_TYPE = "thirdparty-media-hubble"
 PATH_PREFIX = "thirdparty/mediahubble"
+
+# CricHeroes' Cloudflare firewall blocks httpx's default User-Agent
+# ("python-httpx/...") with a 403 and code 20250529 before any credential
+# check; a User-Agent naming our app was let through on 6 Nov 2026 (spec §5.1).
+# Change it only after checking the new one still gets past the firewall.
+USER_AGENT = "WalleArena/1.0 (+https://wallearena.com)"
 
 # Backoff before retry n (0-based) is BACKOFF_BASE * BACKOFF_FACTOR**n, with
 # +/-20% jitter: ~0.5s, then ~1.5s (§6.5).
@@ -192,7 +198,8 @@ class CricHeroesClient:
     # -- request plumbing --------------------------------------------------
 
     def _headers(self) -> Dict[str, str]:
-        """The five documented headers, or ConfigError before any connection.
+        """The five documented headers and our User-Agent, or ConfigError
+        before any connection.
 
         A partial set is rejected upstream the same way a wrong one is, so
         "some credentials" counts as not configured rather than spending a call
@@ -212,6 +219,7 @@ class CricHeroesClient:
             "secret_access_key": self.secret_access_key,
             "udid": self.udid,
             "device-type": DEVICE_TYPE,
+            "User-Agent": USER_AGENT,
         }
 
     @staticmethod

@@ -18,7 +18,7 @@ from cricheroes_responses import refusal
 from pydantic import BaseModel
 
 from app.schemas.cricheroes import BattingLeaderboardEntry
-from app.services.cricheroes_client import DEVICE_TYPE, CricHeroesClient
+from app.services.cricheroes_client import DEVICE_TYPE, USER_AGENT, CricHeroesClient
 from app.services.cricheroes_errors import (
     CricHeroesAccessError,
     CricHeroesAPIError,
@@ -113,6 +113,19 @@ async def test_sends_the_five_documented_headers(make_client):
     assert headers["secret_access_key"] == CREDS["secret_access_key"]
     assert headers["udid"] == CREDS["udid"]
     assert headers["device-type"] == DEVICE_TYPE == "thirdparty-media-hubble"
+
+
+async def test_names_us_in_the_user_agent_not_httpx(make_client):
+    """CricHeroes' firewall blocks httpx's default User-Agent (code 20250529)."""
+    upstream = Upstream(ok([]))
+    client, _ = make_client(upstream)
+
+    await client.get_tournament_match_list(2242502)
+
+    user_agent = upstream.requests[0].headers["user-agent"]
+    assert user_agent == USER_AGENT
+    assert user_agent.startswith("WalleArena/")
+    assert "httpx" not in user_agent.lower()
 
 
 async def test_requests_go_under_the_mediahubble_path(make_client):

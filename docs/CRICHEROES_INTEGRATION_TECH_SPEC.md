@@ -170,7 +170,14 @@ api-key: <CRICHEROES_API_KEY>
 secret_access_key: <CRICHEROES_SECRET_ACCESS_KEY>
 udid: <CRICHEROES_UDID>
 device-type: thirdparty-media-hubble
+User-Agent: WalleArena/1.0 (+https://wallearena.com)
 ```
+
+The `User-Agent` is not in the doc, but it is required. CricHeroes' Cloudflare
+firewall answers httpx's default (`python-httpx/…`) with a 403 and code
+20250529 before any credential check (§7). On 6 Nov 2026, a request with our
+real credentials and this User-Agent got `status: true`. `USER_AGENT` in the
+client holds it; check that a new value still gets through before changing it.
 
 If any credential is missing, the client raises **before** opening a connection
 and names the missing environment variables. A partial header set is rejected
@@ -535,8 +542,9 @@ credentials:
 | 20250529 | 403 | "Request blocked by security policy." CricHeroes' Cloudflare firewall, answering httpx's default `User-Agent` (`python-httpx/…`) before any credential check. Every request our client sent got this, which the admin import reported as rejected credentials. |
 | 2002 | 200 | "Invalid api-key". How a wrong key really comes back — not as a 401/403. The codes for a wrong secret or udid are unknown. |
 
-The firewall block is for CricHeroes to lift (allowlist our server, or say
-which `User-Agent` they expect); our client only reports it as what it is.
+The client now sends a `User-Agent` naming our app, which gets past the
+firewall (§5.1). If the block comes back, the error says so rather than
+blaming the credentials.
 - **429 → 429, and yes, that contradicts the rule above.** Everywhere else an
   upstream problem is translated so the caller is not blamed for something
   they cannot fix. 429 is the exception because here the caller *can* act: the
