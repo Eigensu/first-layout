@@ -166,11 +166,7 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
       </p>
 
       {result.players.length === 0 ? (
-        <p className="text-sm text-text-muted">
-          No players found. CricHeroes only list a player once they are named in
-          a match&apos;s playing squad, so before the first match there is
-          nobody to import.
-        </p>
+        <p className="text-sm text-text-muted">{noPlayersReason(result)}</p>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -222,6 +218,25 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
         </>
       )}
     </div>
+  );
+}
+
+// Why a search found nobody. Matches that were played but have no squad on
+// CricHeroes are not the same as a tournament that has not started.
+function noPlayersReason(result: RosterImportResponse): string {
+  const missing = result.matches_without_squad;
+  if (missing > 0) {
+    const which =
+      missing === 1 ? "the 1 match" : `any of the ${missing} matches`;
+    return (
+      `No players found: CricHeroes have no playing squad for ${which} ` +
+      "played so far. Check the matches on CricHeroes before importing again."
+    );
+  }
+  return (
+    "No players found. CricHeroes only list a player once they are named in " +
+    "a match's playing squad, so before the first match there is nobody to " +
+    "import."
   );
 }
 

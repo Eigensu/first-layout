@@ -34,7 +34,12 @@ from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple
 from app.models.admin.player import Player
 from app.schemas.cricheroes import SquadTeam, TournamentMatch
 from app.services.cricheroes_client import CricHeroesClient
-from app.services.cricheroes_errors import CricHeroesAPIError, CricHeroesTransportError
+from app.services.cricheroes_errors import (
+    MATCH_NOT_FOUND_CODE,
+    SQUAD_NOT_FOUND_CODE,
+    CricHeroesAPIError,
+    CricHeroesTransportError,
+)
 from app.utils.import_players.import_validators import (
     ValidationError,
     validate_name,
@@ -48,10 +53,11 @@ from app.utils.tenant import TenantId
 UPCOMING_TYPE = 2
 UPCOMING_STATUS = "upcoming"
 
-# The squad endpoint's documented refusal ("Match is not longer to exist!").
-# Only this one means "no squad for this match"; any other refusal could be
-# CricHeroes turning us away, and must fail the import rather than shrink it.
-NO_SQUAD_CODE = "96001"
+# The squad endpoint's two documented refusals that mean "no squad for this
+# match": "Match playing squad is not found!" (170003) and "Match is not
+# found!" (170002, sent with a 403). Any other refusal -- 170001 above all,
+# a tournament outside our agreement -- must fail the import, not shrink it.
+NO_SQUAD_CODES = frozenset({SQUAD_NOT_FOUND_CODE, MATCH_NOT_FOUND_CODE})
 
 # Squads are read a few at a time, with a pause between starts: at most 20
 # calls a second, well under CricHeroes' 50 -- a 429 is charged like a
@@ -186,7 +192,7 @@ async def _read_squads(
         try:
             return await client.get_match_playing_squad(match_id)
         except CricHeroesAPIError as exc:
-            if str(exc.code) == NO_SQUAD_CODE:
+            if str(exc.code) in NO_SQUAD_CODES:
                 return None
             raise
         finally:

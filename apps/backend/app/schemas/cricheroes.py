@@ -1,6 +1,7 @@
 """Response models for the CricHeroes third-party tournament API (v1).
 
-Built from the example bodies in the CricHeroes API doc, which are kept in
+Built from the example bodies in the CricHeroes API doc (the MediaHubble
+build of 4 Nov 2026), which are kept in
 tests/fixtures/cricheroes_doc_examples.json; every documented field is modelled,
 and the tests check that each example parses with nothing left over
 (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §8).
@@ -37,6 +38,9 @@ class CricHeroesModel(BaseModel):
 
 
 class SquadPlayer(CricHeroesModel):
+    # Undocumented. "SS_..." -- the same on every row of one response, so it
+    # identifies the query, not the row.
+    query_id: Optional[str] = None
     team_id: int
     player_id: int
     player_name: str
@@ -65,6 +69,7 @@ class MatchPartnership(CricHeroesModel):
     """One partnership. The current-partnership endpoint returns one of these;
     the per-team variant returns a list of them."""
 
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
     for_wicket: Optional[str] = None  # "1st", "2nd", ...
     runs: Optional[int] = None
     # Cricket notation: 12.3 is 12 overs and 3 balls, not 12.3 overs.
@@ -86,6 +91,7 @@ class MatchPartnership(CricHeroesModel):
 
 
 class GraphMatchInfo(CricHeroesModel):
+    query_id: Optional[str] = None  # manhattan only, not worm
     match_id: int
     overs: Optional[int] = None  # overs per side
     inning: Optional[int] = None
@@ -99,6 +105,7 @@ class GraphMatchInfo(CricHeroesModel):
 class ManhattanOver(CricHeroesModel):
     """Runs and wickets in one over."""
 
+    query_id: Optional[str] = None  # manhattan only, not worm
     match_id: int
     team_id: int
     inning: int
@@ -131,6 +138,7 @@ class WormGraph(CricHeroesModel):
 class TournamentBoundaryCount(CricHeroesModel):
     """Documented as a one-element list; the client unwraps it."""
 
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
     total_six: Optional[int] = None
     total_four: Optional[int] = None
 
@@ -139,6 +147,7 @@ class TournamentBoundaryCount(CricHeroesModel):
 
 
 class MatchPlayerInfo(CricHeroesModel):
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
     player_id: int
     name: str
     player_role: Optional[str] = None
@@ -150,9 +159,14 @@ class MatchPlayerInfo(CricHeroesModel):
 
 
 class MatchBattingRow(CricHeroesModel):
-    """One innings. There is no match id or date: rows can only be told apart
-    by opposition and order, and a team met twice appears twice (§13.9)."""
+    """One innings. No fours or sixes (§13.9)."""
 
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
+    # New in the doc of 4 Nov 2026; optional until the live API is seen to
+    # send them. Without them, rows could only be told apart by opposition
+    # and order (§13.9).
+    match_id: Optional[int] = None
+    match_date_time: Optional[str] = None
     runs: Optional[int] = None
     ball: Optional[int] = None
     sr: Optional[float] = None
@@ -161,8 +175,11 @@ class MatchBattingRow(CricHeroesModel):
 
 
 class MatchBowlingRow(CricHeroesModel):
-    """One spell. Same caveat as MatchBattingRow: no match id or date."""
+    """One spell. No dot balls (§13.9)."""
 
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
+    match_id: Optional[int] = None  # see MatchBattingRow.match_id
+    match_date_time: Optional[str] = None
     # A number here (2.5, 7), unlike the tournament bowling leaderboard.
     overs: Optional[float] = None
     maidens: Optional[int] = None
@@ -224,6 +241,7 @@ class MatchInnings(CricHeroesModel):
 class TournamentMatch(CricHeroesModel):
     """One row of the tournament match list."""
 
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
     match_id: int
     # 1 live, 2 upcoming, 3 past; the same codes the `type` filter takes.
     type: Optional[int] = None
@@ -250,8 +268,9 @@ class TournamentMatch(CricHeroesModel):
     ground_id: Optional[int] = None
     ground_name: Optional[str] = None
     city_id: Optional[int] = None
-    city: Optional[str] = None
-    is_watch_live: Optional[int] = None
+    # `city_name` since the doc of 4 Nov 2026, which also dropped
+    # `is_watch_live`. Either would still come through as an extra.
+    city_name: Optional[str] = None
     index: Optional[int] = None
     match_summary: Optional[MatchSummary] = None
     toss_details: Optional[str] = None
@@ -264,7 +283,9 @@ class PointTableRow(CricHeroesModel):
     """One team's row in a tournament point table."""
 
     group: Optional[str] = Field(default=None, alias="Group")
+    team_id: Optional[int] = Field(default=None, alias="TeamID")
     team_name: str = Field(alias="Team Name")
+    team_logo: Optional[str] = None
     matches: Optional[int] = Field(default=None, alias="Matches")
     won: Optional[int] = Field(default=None, alias="Won")
     lost: Optional[int] = Field(default=None, alias="Lost")
@@ -272,8 +293,9 @@ class PointTableRow(CricHeroesModel):
     tied: Optional[int] = Field(default=None, alias="Tied")
     no_result: Optional[int] = Field(default=None, alias="N/R")
     points: Optional[int] = Field(default=None, alias="Points")
-    net_rr: Optional[str] = Field(default=None, alias="Net RR")  # "-0.030"
-    # Despite the name, every result so far: "W-L-W-W-W-L-L-W-W".
+    # "-0.200", or a bare 0 before a result counts; kept a string either way.
+    net_rr: Optional[str] = Field(default=None, alias="Net RR")
+    # Despite the name, every result so far: "W-W-W-W-W-W-W-L".
     last_5: Optional[str] = Field(default=None, alias="Last 5")
     quotient: Optional[float] = Field(default=None, alias="Quotient")
     group_id: Optional[int] = Field(default=None, alias="GroupID")
@@ -400,7 +422,7 @@ class SeasonOption(CricHeroesModel):
     """A season of the tournament: its label and tournament id."""
 
     key: str
-    # The tournament id as a string ("1493258"); "-1" for the "ALL" entry.
+    # The tournament id as a string ("2242502"); "-1" for the "ALL" entry.
     value: str
 
 
@@ -409,13 +431,14 @@ class LeaderboardFilterOption(CricHeroesModel):
     that serves it, and the sort_filter value to send."""
 
     key: str  # display name, sometimes a sponsor's ("Orange Cap")
-    url: str  # "thirdparty/client/get-tournament-batting-leaderboard"
+    url: str  # "thirdparty/mediahubble/get-tournament-batting-leaderboard"
     value: str  # the sort_filter value, e.g. "RUN"
 
 
 class LeaderboardFilterTeam(CricHeroesModel):
+    query_id: Optional[str] = None  # see SquadPlayer.query_id
     team_id: int
-    # The season this entry belongs to. The same team repeats once per season.
+    # The season (tournament) this entry belongs to.
     tournament_id: Optional[int] = None
     team_name: str
 
@@ -472,3 +495,28 @@ class PlayerBowlingSeason(CricHeroesModel):
     # No 3-wicket count on this endpoint, unlike the leaderboards.
     four_wickets: Optional[int] = Field(default=None, alias="4_wickets")
     five_wickets: Optional[int] = Field(default=None, alias="5_wickets")
+
+
+# -- MVP -----------------------------------------------------------------
+
+
+class PlayerMvp(CricHeroesModel):
+    """One player's row in a match's or a tournament's MVP table.
+
+    Points come from CricHeroes' own MVP formula (spec §13.5), not ours. They
+    are strings with three decimals ("8.719"), and `total` is the sum of the
+    other three. The doc's samples are marked provisional (§13.12).
+    """
+
+    player_id: int
+    name: str
+    team_id: Optional[int] = None
+    team_name: Optional[str] = None
+    profile_photo: Optional[str] = None
+    matches: Optional[int] = None  # 1 on the match table
+    batting: Optional[str] = None
+    bowling: Optional[str] = None
+    fielding: Optional[str] = None
+    total: Optional[str] = None
+    is_player_pro: Optional[int] = None  # 0 or 1
+    rank: Optional[int] = None

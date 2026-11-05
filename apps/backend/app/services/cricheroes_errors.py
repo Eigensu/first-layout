@@ -15,6 +15,16 @@ CREDENTIAL_ENV_VARS = (
     "CRICHEROES_UDID",
 )
 
+# Documented codes we act on (doc of 4 Nov 2026, spec §7). Compared as
+# strings: the doc shows numbers, but nothing promises it.
+ACCESS_DENIED_CODE = "170001"  # a tournament, or its match, outside our agreement
+MATCH_NOT_FOUND_CODE = "170002"  # no such match; sent with HTTP 403
+SQUAD_NOT_FOUND_CODE = "170003"  # the match has no playing squad
+
+# The codes CricHeroes send with HTTP 403 that are about the id, not about our
+# credentials. Any other 403 is read as rejected credentials.
+ID_REFUSAL_CODES = frozenset({ACCESS_DENIED_CODE, MATCH_NOT_FOUND_CODE})
+
 
 class CricHeroesError(Exception):
     """Base for every failure raised by the CricHeroes client."""
@@ -33,14 +43,16 @@ class CricHeroesConfigError(CricHeroesError):
 
 
 class CricHeroesAuthError(CricHeroesError):
-    """CricHeroes rejected our credentials (HTTP 401 or 403)."""
+    """CricHeroes rejected our credentials: HTTP 401, or a 403 without a
+    documented code (see ACCESS_DENIED_CODE and MATCH_NOT_FOUND_CODE)."""
 
     def __init__(self, status_code: int):
         self.status_code = status_code
         super().__init__(
             f"CricHeroes rejected the request credentials (HTTP {status_code}). "
-            f"Check {', '.join(CREDENTIAL_ENV_VARS)} -- the values in the "
-            "CricHeroes API doc are examples, not working credentials."
+            f"Check {', '.join(CREDENTIAL_ENV_VARS)} hold the values CricHeroes "
+            "issued us: the API doc's examples may not be ours, and its secret is a "
+            "placeholder."
         )
 
 
@@ -68,14 +80,42 @@ class CricHeroesRateLimitError(CricHeroesError):
 
 
 class CricHeroesAPIError(CricHeroesError):
-    """HTTP 200 carrying `status: false` -- CricHeroes has no such data."""
+    """`status: false` -- CricHeroes has no such data. Usually an HTTP 200; a
+    match that does not exist (170002) comes as a 403."""
 
-    def __init__(self, code: Optional[int], message: Optional[str]):
+    def __init__(
+        self, code: Optional[int], message: Optional[str], text: Optional[str] = None
+    ):
         self.code = code
         self.message = message
         super().__init__(
-            f"CricHeroes returned an error (code {code}): {message or 'no message'}"
+            text
+            or f"CricHeroes returned an error (code {code}): {message or 'no message'}"
         )
+
+
+class CricHeroesAccessError(CricHeroesAPIError):
+    """Code 170001: our credentials work, but CricHeroes serve us only the
+    tournaments in our agreement, and this id is not one of them."""
+
+    def __init__(self, code: Optional[int], message: Optional[str]):
+        super().__init__(
+            code,
+            message,
+            text=(
+                "CricHeroes do not give us access to this tournament or match "
+                f"(code {code}: {message or 'no message'}). Only the tournaments "
+                "in our CricHeroes agreement can be read."
+            ),
+        )
+
+
+def api_error(code: Optional[int], message: Optional[str]) -> CricHeroesAPIError:
+    """The exception for a `status: false` body, whatever the HTTP status it
+    came with: 170001 is an access refusal, anything else is "no such data"."""
+    if str(code) == ACCESS_DENIED_CODE:
+        return CricHeroesAccessError(code, message)
+    return CricHeroesAPIError(code, message)
 
 
 class CricHeroesTransportError(CricHeroesError):

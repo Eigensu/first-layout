@@ -1,15 +1,17 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
-**Status:** Phases 1–3 implemented (§12), all 17 endpoints fully modelled from
-the API doc (§8). Not yet run against real credentials. CricHeroes will add
-exactly two endpoints, Tournament MVP and Match MVP, and have closed the scope
-beyond that (§13.11).
+**Status:** Phases 1–3 implemented (§12), all 19 endpoints fully modelled from
+the API doc (§8), including the two MVP endpoints CricHeroes added. Not yet run
+against real credentials. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
+which changed every path, the `device-type` header and every error code, and
+serves us two tournaments only. CricHeroes have closed the scope beyond that
+(§13.11).
 **Owner:** Backend
 **Scope:** `apps/backend`
-**Upstream:** `https://cricheroes.in/api/v1`, "Client" resource group (17 GET endpoints)
-**Sources:** the CricHeroes API doc (endpoints, payloads) and their written
-answers on plan, quota, rate limits and SLA (§6), and on the follow-up
-questions (§13.4–13.11).
+**Upstream:** `https://cricheroes.in/api/v1`, "MediaHubble" resource group (19 GET endpoints)
+**Sources:** the CricHeroes API doc (MediaHubble build of 4 Nov 2026:
+endpoints, payloads, error codes) and their written answers on plan, quota,
+rate limits and SLA (§6), and on the follow-up questions (§13.4–13.11).
 
 ---
 
@@ -19,9 +21,9 @@ Add a typed, async server-side client for the CricHeroes third-party tournament
 API, plus a small set of admin-gated FastAPI routes that expose the
 tournament-level portion of it.
 
-The client covers **all 17** documented endpoints so any of them can be called
+The client covers **all 19** documented endpoints so any of them can be called
 from server code (imports, scheduled syncs, future screens). Only the
-**tournament-level 8** get HTTP routes today — routes are cheap to add later,
+**tournament-level 9** get HTTP routes today — routes are cheap to add later,
 and every route we publish is upstream quota exposed to a caller.
 
 That last point is not rhetorical. The plan is 100,000 calls per **year**, and
@@ -32,7 +34,7 @@ it out.
 
 | Question | Decision |
 |---|---|
-| Which endpoints get routes | Tournament-level set (8), client covers all 17 |
+| Which endpoints get routes | Tournament-level set (9), client covers all 19 |
 | Response model fidelity | Full fidelity, lenient — model every documented field, allow unknown extras |
 | Route access | **Platform admins only** (`get_platform_admin`) — §9. Originally "admin-only" via `get_admin_user`, which `main` has since replaced with separate platform and tournament admins |
 | Caching | Out of scope here (no caller yet), but a **hard precondition** on the first polling caller — §6.3 |
@@ -62,8 +64,9 @@ it out.
 - No caching layer, no scheduled sync, no webhook ingestion. **Caching is
   deferred, not optional** — see §6.3; the first caller that polls has to bring
   one with it.
-- No fantasy points computation. CricHeroes exposes no points or MVP endpoint
-  (§13.5), and `Player.points` has no per-tournament dimension today.
+- No fantasy points computation. CricHeroes' MVP points are served as they are
+  (§13.5); whether they can stand in for our fantasy points is a product
+  decision, and `Player.points` has no per-tournament dimension today.
 - No frontend work beyond the import button (§9.1).
 - No public (unauthenticated) exposure of any CricHeroes data.
 
@@ -77,9 +80,10 @@ apps/backend/
 ├── app/
 │   ├── schemas/cricheroes.py                 (new)  response models (§8)
 │   ├── services/
-│   │   ├── cricheroes_client.py              (new)  CricHeroesClient, 17 methods
-│   │   └── cricheroes_errors.py              (new)  exception taxonomy
-│   └── routes/admin/cricheroes.py            (new)  8 admin routes
+│   │   ├── cricheroes_client.py              (new)  CricHeroesClient, 19 methods
+│   │   ├── cricheroes_errors.py              (new)  exception taxonomy
+│   │   └── cricheroes_roster.py              (new)  player import (§9.1)
+│   └── routes/admin/cricheroes.py            (new)  9 read routes + player import
 ├── scripts/check_cricheroes_credentials.py   (new)  live smoke check
 └── tests/
     ├── test_cricheroes_client.py             (new)
@@ -127,10 +131,13 @@ instantiated at import in `config/settings.py`.
 `.env.example` gains a documented block. Real values go in the monorepo-root
 `.env` and in the Railway environment.
 
-> ⚠️ **The credentials printed in the CricHeroes API doc are examples.**
-> `api-key: 1`, `secret_access_key: "o5LgzLbpIb-…"`, `udid: "8817480565574762"`.
-> They will be rejected. This is the single most likely cause of a failed first
-> call, and the error messages are written to say so explicitly.
+> ⚠️ **Use the credentials CricHeroes issued us, not the doc's.** The doc of
+> 30 May 2025 printed example values that will be rejected. The MediaHubble
+> doc of 4 Nov 2026 prints an `api-key` and a `udid` in every example request,
+> and a placeholder, `<SECRET_ACCESS_KEY>`, for the secret; whether those two
+> are ours is unconfirmed (§13.12). Either way the values live in the
+> environment only — never in the repository. The test fixture leaves the
+> doc's request headers out for that reason.
 
 **Dependency change:** `httpx==0.27.2` moves from the dev block of
 `requirements.txt` to the runtime block. It is already pinned and already
@@ -143,16 +150,19 @@ already imports it at runtime today.
 
 ### 5.1 Request headers
 
-Every request carries the five documented headers. `device-type` is a constant
-(`thirdparty-client`) — the "Client" resource group is only reachable as a
-third-party client.
+Every request carries the five documented headers, under
+`/thirdparty/mediahubble/`. `device-type` is a constant
+(`thirdparty-media-hubble`): our credentials are for the "MediaHubble" resource
+group. The doc of 30 May 2025 had a generic "Client" group
+(`/thirdparty/client/`, `thirdparty-client`); the doc of 4 Nov 2026 replaced
+it, so a client still sending those reaches nothing.
 
 ```
 Content-Type: application/json
 api-key: <CRICHEROES_API_KEY>
 secret_access_key: <CRICHEROES_SECRET_ACCESS_KEY>
 udid: <CRICHEROES_UDID>
-device-type: thirdparty-client
+device-type: thirdparty-media-hubble
 ```
 
 If any credential is missing, the client raises **before** opening a connection
@@ -188,24 +198,25 @@ to omitting it upstream. Python-side names are snake_case (`team_id`,
 `round_id`, `group_id`); they are serialised to the upstream spellings
 (`teamId`, `roundId`, `groupId`, `sort_filter`).
 
-### 5.5 Method inventory (17)
+### 5.5 Method inventory (19)
 
-**Match (5)**
+**Match (6)**
 
 | Method | Upstream path |
 |---|---|
 | `get_match_playing_squad(match_id, team_id=None)` | `get-match-playing-squad/{matchId}` |
 | `get_match_current_partnership(match_id)` | `get-match-current-partnership/{matchId}` |
-| `get_match_partnership(match_id, team_id)` | `get-match-current-partnership/{matchId}/{teamId}` |
+| `get_match_partnership(match_id, team_id)` | `get-match-partnership/{matchId}/{teamId}` |
 | `get_match_manhattan_graph(match_id)` | `get-match-manhattan-graph/{matchId}` |
 | `get_match_worm_graph(match_id)` | `get-match-worm-graph/{matchId}` |
+| `get_match_player_mvp(match_id)` | `get-match-player-mvp/{matchId}` |
 
-> Note the first two partnership endpoints share a path. "Get Match
-> Partnership" is distinguished from "Get Match Current Partnership" only by the
-> trailing `teamId` segment, and returns a *list* where the other returns a
-> single object. This is easy to mis-wire; it gets a dedicated test.
+> The two partnership endpoints return different shapes: the current
+> partnership is one object, the per-team one a *list*. The doc of 30 May 2025
+> gave them the same path, told apart only by the trailing `teamId`; the doc of
+> 4 Nov 2026 gives the per-team one its own. Each path has a test.
 
-**Tournament (5)**
+**Tournament (6)**
 
 | Method | Upstream path |
 |---|---|
@@ -214,6 +225,10 @@ to omitting it upstream. Python-side names are snake_case (`team_id`,
 | `get_player_tournament_match_bowling_data(tournament_id, player_id)` | `get-player-tournament-match-bowling-data/{tid}/{pid}` |
 | `get_tournament_match_list(tournament_id, match_type=, team_id=, order=)` | `get-tournament-match-list/{id}` — `match_type` is sent as `type` |
 | `get_tournament_point_table(tournament_id, round_id=, group_id=)` | `get-tournament-point-table/{id}` |
+| `get_tournament_player_mvp(tournament_id)` | `get-tournament-player-mvp/{id}` |
+
+Only two tournament ids are served (§13.12). Every tournament endpoint except
+the MVP one also takes `-1`, meaning both.
 
 **Leaderboards (5)**
 
@@ -221,7 +236,7 @@ to omitting it upstream. Python-side names are snake_case (`team_id`,
 |---|---|
 | `get_tournament_batting_leaderboard` | RUN, HS, HSR, HAVG, MSIX, MFOUR, MFIFTY, MCENTURY |
 | `get_tournament_inning_batting_leaderboard` | MIHS, MISIX, MIFOUR, MIHSR |
-| `get_tournament_bowling_leaderboard` | WICKET, BB, MBSR, MBAVG, MBECO, MMOVB, MBBF |
+| `get_tournament_bowling_leaderboard` | WICKET, MMOVB, MODB, MBAVG, MBECO, MBSR, BB |
 | `get_tournament_inning_bowling_leaderboard` | MIMDB, MIBBE, MIBB, MIMRC |
 | `get_tournament_leaderboard_stats_filter` | — (discovery endpoint) |
 
@@ -339,15 +354,16 @@ request into several.
 ## 7. Error taxonomy
 
 A single generic exception would make the most common failure — placeholder
-credentials — indistinguishable from an unknown tournament id. Seven types, all
+credentials — indistinguishable from an unknown tournament id. Eight types, all
 subclassing `CricHeroesError`:
 
 | Exception | Trigger | Route status | Meaning |
 |---|---|---|---|
 | `CricHeroesConfigError` | credential missing, raised pre-flight | **503** | *We* are not configured |
-| `CricHeroesAuthError` | HTTP 401 / 403 | **502** | *Our* credentials were rejected |
+| `CricHeroesAuthError` | HTTP 401, or a 403 without a code below | **502** | *Our* credentials were rejected |
+| `CricHeroesAccessError` | code 170001, with any HTTP status (documented with 403) | **422** | The id is outside the tournaments CricHeroes serve us; our credentials work |
 | `CricHeroesRateLimitError` | HTTP 429 (after any opted-in retries) | **429** | We went over 50 RPS — and were charged for it |
-| `CricHeroesAPIError` | HTTP 200 + `status: false` | **404** | Upstream has no such tournament/match |
+| `CricHeroesAPIError` | `status: false` with any other code: HTTP 200, or 403 + code 170002 | **404** | Upstream has no such tournament/match, or no such data for it |
 | `CricHeroesTransportError` | timeout, DNS, connection reset | **504** | Never reached upstream |
 | `CricHeroesHTTPError` | any other non-2xx, or non-JSON body | **502** | Upstream is unhealthy |
 | `CricHeroesSchemaError` | HTTP 200, but `data` does not fit our model | **502** | Our model of the response is wrong |
@@ -363,11 +379,43 @@ Three mappings are deliberate and worth stating:
 
 - **401/403 → 502, not 401.** It is our upstream credentials that failed, not
   the admin's session. Returning 401 would tell them to log in again, which
-  cannot help. The detail string names the three env vars and says the doc's
-  values are examples.
-- **`status: false` → 404.** CricHeroes reports "no data for this id" as an
-  HTTP 200 carrying an error code (96001, 96003, 96007, 96010, …). That is a
-  not-found, not a transport failure, and should not page anyone.
+  cannot help. The detail string names the three env vars.
+- **170001 → 422, not 502, and not 403.** CricHeroes serve us two tournaments
+  (§13.12) and answer any other id — or a match from another tournament — with
+  a 403 carrying code 170001. The credentials worked, so reporting it as
+  rejected credentials would send someone to check keys that are fine. The
+  admin can act on it, by using a served id, and the detail says so. Not 403:
+  that is our own permission gate's answer, and the shared frontend API client
+  (`src/lib/api/client.ts`) replaces every 403's detail with "you do not have
+  permission" — the same trap as 401 above. A 422 keeps the detail.
+  The code decides, not the status: one mapping (`api_error`) turns a
+  `status: false` body into an exception whether it came with a 403 or a 200,
+  so a 170001 on a 200 is still an access refusal. On a 403, only 170001 and
+  170002 are read as being about the id; any other 403 is rejected credentials.
+  `CricHeroesAccessError` subclasses `CricHeroesAPIError`, so code that treats
+  refusals alike still does.
+- **`status: false` → 404.** CricHeroes report "no data for this id" with an
+  error code, one per endpoint, mostly on an HTTP 200. That is a not-found, not
+  a transport failure, and should not page anyone.
+
+The documented codes (doc of 4 Nov 2026; the 96xxx codes of the 30 May 2025
+doc are gone):
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| 170001 | 403 | Tournament not served to us ("Access to this tournament is not allowed.") |
+| 170002 | 403 | Match not found |
+| 170003 | 200 | Playing squad not found |
+| 170004 / 170005 | 200 | Current partnership / partnership not found |
+| 170006 / 170007 | 200 | Manhattan / worm graph data not found |
+| 170008 | 200 | Tournament boundary count not found |
+| 170009 / 170010 | 200 | Player match batting / bowling data not found |
+| 170011 | 200 | Tournament match list not found |
+| 170012 | 200 | Tournament point table not found |
+| 170013 / 170014 | 200 | Batting / bowling leaderboard data not found (tournament and innings alike) |
+
+No "not found" is documented for the stats filter, the season stats or the MVP
+endpoints, and none for bad credentials or a 429.
 - **429 → 429, and yes, that contradicts the rule above.** Everywhere else an
   upstream problem is translated so the caller is not blamed for something
   they cannot fix. 429 is the exception because here the caller *can* act: the
@@ -396,15 +444,18 @@ string if a row arrives with a bare number, instead of failing the response.
 
 ### 8.0 Where the models come from
 
-Every documented field of all 17 endpoints is modelled, from the example bodies
-in the CricHeroes API doc. Those bodies are checked in, verbatim with long lists
-trimmed, as `apps/backend/tests/fixtures/cricheroes_doc_examples.json`, so the
-models and the evidence for them now live together.
+Every documented field of all 19 endpoints is modelled, from the example bodies
+in the CricHeroes API doc (the MediaHubble build of 4 Nov 2026). Those bodies
+are checked in, verbatim with long lists trimmed, as
+`apps/backend/tests/fixtures/cricheroes_doc_examples.json`, so the models and
+the evidence for them now live together. The fixture also keeps every
+documented error body (`_errors`), and leaves the doc's request headers out.
 
-A test parses each of the 17 examples through the real client method and walks
+A test parses each of the 19 examples through the real client method and walks
 the result: any key that lands as an extra, at any depth, fails it, naming the
 path. So "every documented field is modelled" is checked, not asserted, and a
-field dropped from a model by mistake is caught.
+field dropped from a model by mistake is caught. Another sends each documented
+error body and checks the exception it becomes.
 
 > **History.** The first implementation was built from the doc, then parked
 > when this spec was requested; the parked code and the pasted doc were lost
@@ -415,6 +466,16 @@ field dropped from a model by mistake is caught.
 > three point-table columns (`Drawn`, `Tied`, `Quotient`) that the original
 > alias table had missed. Keeping the doc's examples in the repository is so
 > that this cannot happen again.
+>
+> **4 Nov 2026.** The MediaHubble doc replaced most examples (other matches and
+> players) and added fields: `query_id` on most rows, `match_id` and
+> `match_date_time` on the per-player match rows, `city_name` on the match list
+> (for `city`; `is_watch_live` is gone), `TeamID` and `team_logo` on the point
+> table, and the two MVP endpoints. The fixture was regenerated from it, and
+> diffing it against the old one is how the changes were found. The new
+> examples no longer show some traps of the old ones — an abandoned match, a
+> no-result, a rain-revised chase, an unbroken stand's `"-"` — so those tests
+> rebuild the old values on a current row rather than drop them.
 
 **Typing policy.** Types follow the examples, including where they disagree
 between endpoints (§8.2); values are passed on as sent, not normalised. Identity
@@ -433,7 +494,7 @@ safe attribute name plus an `alias`:
 | `50s`, `100s` | `fifties`, `hundreds` | tournament batting leaderboard, batting season |
 | `3_wickets` | `three_wickets` | bowling leaderboards (not bowling season) |
 | `4_wickets`, `5_wickets` | `four_wickets`, `five_wickets` | bowling leaderboards, bowling season |
-| `Team Name`, `Net RR`, `N/R`, `Last 5` | `team_name`, `net_rr`, `no_result`, `last_5` | point table |
+| `Team Name`, `Net RR`, `N/R`, `Last 5`, `TeamID` | `team_name`, `net_rr`, `no_result`, `last_5`, `team_id` | point table |
 | `Group`, `Matches`, `Won`, `Lost`, `Drawn`, `Tied`, `Points`, `Quotient`, `GroupID`, `RoundID`, `RoundName` | lowercased / snake_case | point table |
 | `SR`, `avg` | `strike_rate`, `average` | tournament bowling leaderboard |
 | `bbf` | `best_bowling_figure` | innings bowling leaderboard |
@@ -460,7 +521,11 @@ would reasonably get wrong. Each has a regression test using the doc's values.
 | `year` (season stats) | `"Career"` for the aggregate row, otherwise `"2023"` — not an int |
 | Placeholders (bowling season) | `bbm` is `""` on one row and `"-"` on the next; `ave` is `"-"` on `Career` and `"0.00"` on the season |
 | `match_result` | Free text, inconsistently cased: `"Resulted"`, `"Abandoned"`, `"abandoned"`. Use `winning_team_id`, not this, to classify results |
-| `Last 5` (point table) | Holds every result so far (`"W-L-W-W-W-L-L-W-W"`), not five |
+| `Last 5` (point table) | Holds every result so far (`"W-W-W-W-W-W-W-L"`), not five |
+| `Net RR` (point table) | A string (`"-0.200"`), but a bare `0` for a team with no result yet; kept a string (`"0"`) |
+| Point table rows | The doc of 4 Nov 2026 lists **every team twice**. The client drops exact repeats, so no consumer has to; rows that differ in any field (another round or group) are kept |
+| `query_id` | Undocumented, on most rows. The same on every row of one response, so it names the query, not the row |
+| MVP points | `batting`, `bowling`, `fielding`, `total` are **strings** with three decimals (`"8.719"`) |
 | boundary count `data` | A one-element **list** wrapping a single object |
 
 If CricHeroes sends a bare number where the doc shows a string, the base model's
@@ -491,9 +556,12 @@ mistake.
 | `GET /tournaments/{id}/inning-bowling-leaderboard` | `sort_filter` |
 | `GET /tournaments/{id}/stats-filter` | — |
 | `GET /tournaments/{id}/boundary-count` | — |
+| `GET /tournaments/{id}/mvp` | — |
 
 `{id}` is the **CricHeroes** tournament id, not our `Tournament` document id.
-The two are unrelated today; §13.1 covers linking them.
+The two are unrelated today; §13.1 covers linking them. Only the two
+tournaments CricHeroes serve us answer (§13.12); any other id gets a 422 that
+says so (§7).
 
 The client is supplied by a `yield` dependency, closed when the request ends —
 which is also the seam tests override.
@@ -527,7 +595,9 @@ tournament named by the request's `X-Tournament-Slug` (`get_tenant`), i.e. the
 admin page the button is pressed on. Platform admins only, like the rest of the
 router. The admin panel shows it as **Import from CricHeroes** in the Import
 Players dialog, to platform admins only; it takes the id or a CricHeroes
-tournament link (`/tournament/<id>/...`), previews, then imports.
+tournament link (`/tournament/<id>/...`), previews, then imports. Only the two
+tournaments CricHeroes serve us can be imported from (§13.12); any other id is
+refused with a 422 that says so, before anything is written.
 
 **Where the players come from.** There is no roster endpoint and there will not
 be one (§13.11). The import lists the tournament's matches, skips those not yet
@@ -537,11 +607,14 @@ a second, under the 50 allowed), within a 120-second deadline for the whole
 roster. A player is everyone named in any of those squads, substitutes
 included, filed under the team of their latest match.
 
-A played match the squad endpoint refuses with its documented code, 96001
-("Match is not longer to exist!"), or answers with empty squads is counted and
+A played match the squad endpoint answers with one of its two documented
+"nothing here" codes — 170003 ("Match playing squad is not found!") or 170002
+("Match is not found!", sent with a 403) — or with empty squads is counted and
 passed over. Any other refusal, or any other failure, stops further calls and
-fails the request, and nothing is written: an unexplained refusal might be
+fails the request, and nothing is written: a refusal such as 170001 is
 CricHeroes turning us away, and must not quietly import a partial roster.
+When a search finds nobody because every played match came back without a
+squad, the panel says so, rather than that the tournament has not started.
 
 | Cost | |
 |---|---|
@@ -549,10 +622,8 @@ CricHeroes turning us away, and must not quietly import a partial roster.
 | Preview, then import within 10 minutes | the preview's calls only: the import reuses the roster the preview read, so it writes exactly what the admin saw. Kept in process memory — after 10 minutes, a restart, or on another replica, the import reads the squads itself |
 | Reported | `cricheroes_calls` and `reused_preview` in every response; audit log on a real import |
 
-The match list is read as one page. CricHeroes say pagination is documented,
-but our copy shows none (§13.8); if a large tournament's match list does page,
-the import misses the later pages' players until the client learns to follow
-them.
+The match list is read as one page. No endpoint in the doc of 4 Nov 2026
+paginates (§13.8).
 
 **Before the first match there is nobody to find.** CricHeroes only know a
 tournament's players as they are named in playing squads. A pool needed before
@@ -593,14 +664,16 @@ hotlinking their images is a question for CricHeroes first.
 Running it again is safe: everyone it added or linked is `linked` the second
 time. It is not a sync — players dropped from CricHeroes stay here.
 
-**Not surfaced:** the 5 match-detail and 4 player-stats endpoints. Available on
-the client for server-side use; they get routes when a screen needs them.
+**Not surfaced:** the 6 match-detail endpoints (match MVP included) and the 4
+player-stats endpoints. Available on the client for server-side use; they get
+routes when a screen needs them.
 
 ---
 
 ## 10. Testing
 
-Two files, 104 tests, no network, `httpx.MockTransport` throughout. Response
+Four files — the client, the routes, the player import (§9.1) and the
+credential check (§11) — no network, `httpx.MockTransport` throughout. Response
 bodies come from the API doc's examples
 (`tests/fixtures/cricheroes_doc_examples.json`); hand-made bodies are used only
 for what the doc does not show — errors, and drift from the documented types.
@@ -615,7 +688,9 @@ example exists without a matching call, or the reverse.
 **`test_cricheroes_client.py`** — headers and config (all five headers sent;
 missing credentials raise pre-flight and name the missing vars; partial
 credentials name only what is missing); error mapping (401 and 403 → auth error
-with a message pointing at the env vars; 500 → HTTP error, *not* auth;
+with a message pointing at the env vars; 403 with 170001 → access error, with
+170002 → API error; every documented error body → the right exception; 500 →
+HTTP error, *not* auth;
 `status: false` → API error carrying the upstream code; connection failure →
 transport error; non-JSON body → HTTP error); retries (429 then 200 succeeds
 without surfacing; 429 throughout raises the rate-limit error after exactly
@@ -624,7 +699,7 @@ retried, nor is a transport error; `Retry-After` is honoured, a `Retry-After`
 beyond the budget gives up without retrying, total waiting stays within the
 budget, an HTTP-date `Retry-After` falls back to backoff); credentials never
 appear in logs; URLs and params (optional params omitted when unset; upstream
-param spellings; leaderboard paths; the shared partnership path); shapes
+param spellings; leaderboard paths; the separate partnership path); shapes
 (boundary-count unwrapping; a list endpoint answering an object, and a field
 that does not fit, both raise the schema error naming the endpoint); payload
 parsing (each alias group above; each type trap above; unknown fields kept);
@@ -634,16 +709,23 @@ lifecycle (owned client closed, injected client not).
 client dependency overridden by a *real* `CricHeroesClient` over a scripted
 upstream, so each test exercises gate, route, client, model and serialisation
 together. Covers the gate (401 signed out; 403 for a signed-in non-admin; **403
-for a tournament admin**; 200 for a platform admin), each of the 8 routes,
+for a tournament admin**; 200 for a platform admin), each of the 9 routes,
 query-param forwarding, alias-free serialisation, pass-through of unmodelled
 fields, and every row of the error table in §7 including `Retry-After`
 pass-through — and that, by default, a 429 reaches upstream exactly once.
 
-Both use the existing `client` / `anon_client` fixtures from `tests/conftest.py`
-unchanged.
+**`test_cricheroes_player_import.py`** covers the import (§9.1), and
+**`test_check_cricheroes_credentials.py`** what the check script may call
+success (§11). The `status: false` response they all build comes from one
+helper, `tests/cricheroes_responses.py`. The route and import files use the
+existing `client` / `anon_client` fixtures from `tests/conftest.py` unchanged.
 
-Both files were mutation-checked: disabling retries, mistyping a trap field,
-gating on tournament admin, and serialising by alias each turn tests red.
+Mutation-checked: disabling retries, mistyping a trap field, gating on
+tournament admin, and serialising by alias each turn the client and route tests
+red. For the move to the doc of 4 Nov 2026: ignoring a 403's code, reading
+170001 by status instead of code, dropping 170002 from the import's "no squad"
+codes, restoring the old partnership path, and keeping duplicate point-table
+rows each do too.
 
 ---
 
@@ -656,8 +738,11 @@ OK but this tournament has no data". Exits 0/1 so it can be a deploy smoke check
 
 The doc does not say how CricHeroes reports bad credentials — possibly as an
 HTTP 200 carrying `status: false` — so the only refusal the script counts as
-success is code 96007 ("boundary count not found"), which proves the request
-was looked up. Any other refusal exits 1.
+success is code 170008 ("Tournament boundary count is not found!"), which
+proves the request was looked up. Any other refusal exits 1. A 170001 (a
+tournament not served to us) proves nothing either way, since the doc does not
+say whether access is checked before or after the keys; the script says so and
+names the served ids. It defaults to 2242502 (§13.12).
 
 ```bash
 cd apps/backend
@@ -680,8 +765,9 @@ It runs with retries off: one invocation is exactly one charged call.
 | 3 | Admin routes + route tests + wiring | ✅ done |
 | 3b | Complete the models from the API doc (§8.0) | ✅ done — all 17 endpoints; 1,001 tests passing |
 | 3b′ | Import a tournament's players from match squads, with an admin button (§9.1) | ✅ done |
-| 3c | Tournament MVP and Match MVP endpoints, once CricHeroes publish them (§13.5, §13.11) | client method, model, doc example, tests for each |
-| 4 | Obtain real credentials, set in Railway, run the check script | script exits 0 |
+| 3c | Tournament MVP and Match MVP endpoints (§13.5) | ✅ done — client methods, `PlayerMvp` model, doc examples, tests; the tournament table has a route |
+| 3d | Move to the MediaHubble doc of 4 Nov 2026: paths, header, error codes, new fields (§13.12) | ✅ done |
+| 4 | Obtain real credentials (the secret above all, §13.12), set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable | in place *before* any scheduled or polling caller |
 | 6 | Frontend consumes the routes | separate change, ships with a cache (§6.3) |
 
@@ -701,7 +787,8 @@ allowance — far too late to change a polling interval cheaply.
 1. **Linking CricHeroes ids to our tournaments.** Callers must supply a raw
    CricHeroes tournament id today. Adding `cricheroes_tournament_id` to the
    `Tournament` document would let routes key off our own slug instead. Worth
-   doing — but it is a schema change and a separate PR.
+   doing — but it is a schema change and a separate PR. CricHeroes now serve us
+   two tournaments only (§13.12), so for now the link is small.
 2. **Player identity — decided: an explicit id, set at import.** `Player` has a
    `cricheroes_player_id`, filled from a "CricHeroes Player ID" column in the
    player import template (a `CricHeroes ID` header is accepted too). Name
@@ -731,7 +818,20 @@ allowance — far too late to change a polling interval cheaply.
    tournament roster endpoint, so before a tournament starts the sheet import
    remains the source of the player pool; once matches are played, the
    CricHeroes import (§9.1) can add and link players from the match squads.
-3. **Doc inconsistencies to confirm with CricHeroes.**
+3. **Doc inconsistencies to confirm with CricHeroes.** In the doc of 4 Nov 2026:
+   - **Which id is Tyrant Premier League Season 13?** The introduction says
+     60214; every parameter description, and the stats filter's own sample,
+     say 2242502. 60214 is the tournament the World Cup 2019 sample data came
+     from, so 2242502 is probably right. The example URIs still use 60214,
+     which the doc says answers 403.
+   - The point-table example lists every team twice (§8.2).
+   - The worm-graph example gives both teams the same id (362504).
+   - The MVP sections say "Sample body to be added from a staging call", yet
+     show one — World Cup 2019 data, unlike the stats filter's Tyrant Premier
+     League sample — and the match MVP's example URI has no match id.
+
+   **Resolved by the doc of 4 Nov 2026**, kept for the record — the doc of
+   30 May 2025 had:
    - `MODB` ("Most Dot Balls") appears in the stats-filter response as a
      bowling-leaderboard filter, but is absent from that endpoint's documented
      filter list.
@@ -751,6 +851,11 @@ allowance — far too late to change a polling interval cheaply.
    - The boundary-count error example is not valid JSON (unquoted keys, single
      quotes). If the live API really answers like that, the client reports it
      as a 502 "non-JSON body" rather than a 404 "no data" — wrong, but loud.
+
+   All of these are fixed: `MODB` is listed and `MMOVB` is "Most Maidens" in
+   both places; `MBBF` is gone; the `type` example is `1`; `sort_filter` is a
+   string; the squad example asks for one team and gets one; the stats filter
+   lists one tournament's teams; the boundary-count error is valid JSON.
    Because `get-tournament-stat-leaderboard-filter` returns the filters a given
    tournament actually supports, prefer calling it over hardcoding the lists.
 4. **Does a 429 consume quota? — Answered: yes.** CricHeroes: "Status code 429
@@ -787,7 +892,20 @@ allowance — far too late to change a polling interval cheaply.
    (§13.11), in "the standard response structure" — so expect the same
    `{status, data}` envelope, no extra fields on request.
 
-6. **Fielding data — no separate endpoint after all.** The second round of
+   **Arrived — doc of 4 Nov 2026.** `get-match-player-mvp/{matchId}` and
+   `get-tournament-player-mvp/{tournamentId}`: one row per player with
+   `player_id`, team, `batting`, `bowling`, `fielding` and `total` points
+   (strings, three decimals), `matches` and `rank`. The envelope adds a
+   `help_link` to the same MVP 2.0 article; the client drops it with the rest
+   of the envelope. Modelled as `PlayerMvp`; the tournament table has a route
+   (`/mvp`), the match table is on the client only. The samples are marked
+   provisional (§13.3). Fielding being its own figure answers half of §13.6.
+   The formula itself is still only that article, still unreadable from here.
+
+6. **Fielding data — points only.** The MVP rows (§13.5) break fielding
+   out, but as points, not as catches, stumpings and run-outs. Fielding
+   *points* now come from CricHeroes; fielding *events* still need a second
+   source. Earlier: **no separate endpoint after all.** The second round of
    answers limits new work to the two MVP endpoints (§13.11), so there is no
    fielding endpoint. Whether catches, stumpings and run-outs reach us at all
    now depends on the MVP responses breaking fielding out; if they only fold it
@@ -804,7 +922,11 @@ allowance — far too late to change a polling interval cheaply.
    Affordable nightly (§6.2), not hourly, and it must be paced below 50 RPS
    (§6.5).
 
-8. **Pagination — answered, but not by our copy of the doc.** Second round:
+8. **Pagination — none.** The doc of 4 Nov 2026, the one CricHeroes say
+   documents it, shows no page parameter on any endpoint and no page marker in
+   any envelope. Read with their answer, nothing paginates. With two
+   tournaments served, the largest response is one tournament's match list —
+   or both, with `-1`. Earlier: **answered, but not by our copy of the doc.** Second round:
    "Pagination details are already mentioned in the respective API
    documentation and sample responses." Our copy — the aglio build of 30 May
    2025, whose examples are the test fixture — documents no page parameter on
@@ -822,8 +944,12 @@ allowance — far too late to change a polling interval cheaply.
    for the specifics; until then, cross-check match-list counts against the
    point table's `Matches`.
 
-9. **Per-match player rows cannot be tied to a match — Answered: and they
-   will not be.** Second round: "We won't be able to add additional fields or
+9. **Per-match player rows can now be tied to a match.** Despite the answer
+   below, the doc of 4 Nov 2026 adds `match_id` and `match_date_time` to every
+   row of both per-player match-data endpoints. Fours, sixes and dot balls are
+   still absent, and it is still one call per player (§13.7). The fields are
+   modelled as optional until the live API is seen to send them. Earlier:
+   **Answered: and they will not be.** Second round: "We won't be able to add additional fields or
    change the response structure for these APIs." So the two per-player
    match-data endpoints stay without `match_id`, date, fours, sixes and dot
    balls. They did ask which API we meant; the answer is
@@ -864,7 +990,29 @@ allowance — far too late to change a polling interval cheaply.
       match ids on per-player rows** (§13.9).
     - Everything new must come through the two MVP endpoints. When their
       samples arrive, check: one row per player? `player_id` on every row?
-      fielding broken out? paginated, and how?
+      fielding broken out? paginated, and how? **Answered by the doc of
+      4 Nov 2026:** yes, yes, as points (§13.6), and no.
+
+12. **The MediaHubble doc (4 Nov 2026).** A rebuilt doc for our account. What
+    changed, all handled in the client:
+    - **Every path and the `device-type` header** — `/thirdparty/mediahubble/`
+      and `thirdparty-media-hubble` (§5.1). The per-team partnership got its
+      own path (§5.5).
+    - **Two tournaments only:** 2242502 (Tyrant Premier League Season 13) and
+      2251924 (its Test format), or `-1` for both. Any other tournament, or a
+      match from one, answers 403 with code 170001; we answer 422 (§7).
+    - **Every error code** — 96xxx became 1700xx, one "not found" per endpoint
+      (§7). The player import's "no squad" is now 170003 or 170002 (§9.1).
+    - **New fields** (§8.0) and the **two MVP endpoints** (§13.5).
+
+    Still to ask CricHeroes:
+    - Which id is Tyrant Premier League Season 13: 60214 or 2242502 (§13.3)?
+    - Are the MVP samples final? They are marked "to be added from a staging
+      call".
+    - Are the `api-key` and `udid` in the doc's example requests the ones
+      issued to us? The secret is shown only as `<SECRET_ACCESS_KEY>`, so it
+      must come from CricHeroes separately — without it nothing can be called.
+    - How do bad credentials and a 429 look? Neither is documented.
 
 ---
 
@@ -873,6 +1021,8 @@ allowance — far too late to change a polling interval cheaply.
 | Risk | Mitigation |
 |---|---|
 | Placeholder credentials mistaken for real ones | Dedicated exception, error text naming the env vars, smoke script |
+| A tournament outside our agreement mistaken for a credentials failure, or for a permissions problem | 170001 has its own exception, whatever status it comes with, and answers 422 saying so — not 502, and not the 403 our own gate uses (§7) |
+| The doc changes without notice | The 4 Nov 2026 doc moved every path and changed the header and every error code unannounced. Regenerate the fixture from each new doc and let the diff and the tests show what changed (§8.0) |
 | Upstream adds fields | `extra="allow"`; extras pass through rather than 500 |
 | Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` absorbs a number arriving where a string is documented; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |
 | Live API disagrees with its own doc | Models are built from the doc's examples, never called live yet. Statistics are optional, so only a wrong type or a missing id fails a response — with a schema error that says exactly what to fix |
@@ -880,6 +1030,6 @@ allowance — far too late to change a polling interval cheaply.
 | **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only routes, no public exposure; caching is a precondition on the first polling caller (§6.3); batch over poll; call counter from day one; CricHeroes warns at 80% |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
 | Throttling under burst | A 429 is charged (§13.4), so it is not retried by default; batch jobs pace themselves below 50 RPS (§6.5). At our volumes a 429 more likely signals a runaway loop than real load |
-| Response truncated at the 3 MB cap | Pagination undocumented (§13.8); until answered, treat large match lists as suspect and verify counts against the point table |
+| Response truncated at the 3 MB cap | No endpoint paginates (§13.8), and only two tournaments are served; if a match list looks short, verify its count against the point table |
 | Upstream slow or down | 15s timeout → 504, distinct from a 502; deliberately below their 30s allowance (§6.4). Platform-side failures are not charged to quota |
 | Secrets leaking to logs | Only URL and query params are logged; headers never are |

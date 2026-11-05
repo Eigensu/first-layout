@@ -6,6 +6,7 @@ cases the doc does not show (errors, drift from the documented types).
 """
 
 import asyncio
+import copy
 import json
 import logging
 from pathlib import Path
@@ -13,11 +14,13 @@ from pathlib import Path
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 from pydantic import BaseModel
 
 from app.schemas.cricheroes import BattingLeaderboardEntry
 from app.services.cricheroes_client import DEVICE_TYPE, CricHeroesClient
 from app.services.cricheroes_errors import (
+    CricHeroesAccessError,
     CricHeroesAPIError,
     CricHeroesAuthError,
     CricHeroesConfigError,
@@ -101,24 +104,24 @@ async def test_sends_the_five_documented_headers(make_client):
     upstream = Upstream(ok([]))
     client, _ = make_client(upstream)
 
-    await client.get_tournament_match_list(1493258)
+    await client.get_tournament_match_list(2242502)
 
     headers = upstream.requests[0].headers
     assert headers["content-type"] == "application/json"
     assert headers["api-key"] == CREDS["api_key"]
     assert headers["secret_access_key"] == CREDS["secret_access_key"]
     assert headers["udid"] == CREDS["udid"]
-    assert headers["device-type"] == DEVICE_TYPE == "thirdparty-client"
+    assert headers["device-type"] == DEVICE_TYPE == "thirdparty-media-hubble"
 
 
-async def test_requests_go_under_the_thirdparty_client_path(make_client):
+async def test_requests_go_under_the_mediahubble_path(make_client):
     upstream = Upstream(ok([]))
     client, _ = make_client(upstream)
 
-    await client.get_tournament_point_table(1493258)
+    await client.get_tournament_point_table(2242502)
 
     assert str(upstream.requests[0].url) == (
-        f"{BASE}/thirdparty/client/get-tournament-point-table/1493258"
+        f"{BASE}/thirdparty/mediahubble/get-tournament-point-table/2242502"
     )
 
 
@@ -127,7 +130,7 @@ async def test_missing_credentials_raise_before_any_request(make_client):
     client, _ = make_client(upstream, api_key="", secret_access_key="", udid="")
 
     with pytest.raises(CricHeroesConfigError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert caught.value.missing == [
         "CRICHEROES_API_KEY",
@@ -142,7 +145,7 @@ async def test_partial_credentials_name_only_what_is_missing(make_client):
     client, _ = make_client(upstream, udid="")
 
     with pytest.raises(CricHeroesConfigError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert caught.value.missing == ["CRICHEROES_UDID"]
     assert "CRICHEROES_API_KEY" not in str(caught.value)
@@ -154,7 +157,7 @@ async def test_credentials_never_reach_the_logs(make_client, caplog):
     client, _ = make_client(upstream)
 
     with caplog.at_level(logging.DEBUG, logger="app.cricheroes"):
-        await client.get_tournament_match_list(1493258, team_id=7)
+        await client.get_tournament_match_list(2242502, team_id=7)
 
     assert "get-tournament-match-list" in caplog.text
     for secret in CREDS.values():
@@ -171,7 +174,7 @@ async def test_rejected_credentials_raise_auth_error_naming_the_env_vars(
     client, _ = make_client(Upstream(httpx.Response(status, text="nope")))
 
     with pytest.raises(CricHeroesAuthError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert caught.value.status_code == status
     message = str(caught.value)
@@ -181,14 +184,104 @@ async def test_rejected_credentials_raise_auth_error_naming_the_env_vars(
         "CRICHEROES_UDID",
     ):
         assert name in message
-    assert "examples" in message
+    assert "examples" in message and "placeholder" in message
+
+
+@pytest.mark.parametrize("code", [170001, "170001"])
+async def test_a_tournament_outside_our_agreement_is_not_a_credentials_error(
+    make_client, code
+):
+    client, _ = make_client(
+        Upstream(refusal(code, "Access to this tournament is not allowed.", status=403))
+    )
+
+    with pytest.raises(CricHeroesAccessError) as caught:
+        await client.get_tournament_match_list(60214)
+
+    assert not isinstance(caught.value, CricHeroesAuthError)
+    # Still an API error, so callers that handle "no such data" handle it too.
+    assert isinstance(caught.value, CricHeroesAPIError)
+    assert caught.value.code == code
+    message = str(caught.value)
+    assert "do not give us access" in message
+    assert "Access to this tournament is not allowed." in message
+    assert "CRICHEROES_API_KEY" not in message
+
+
+async def test_a_tournament_refused_with_a_200_is_still_an_access_error(make_client):
+    """Their 96xxx refusals all came as 200s. Whichever status 170001 arrives
+    with, it is the agreement's limit, not "no such data"."""
+    client, _ = make_client(
+        Upstream(refusal(170001, "Access to this tournament is not allowed."))
+    )
+
+    with pytest.raises(CricHeroesAccessError):
+        await client.get_tournament_match_list(60214)
+
+
+async def test_a_missing_match_answered_with_403_is_an_api_error(make_client):
+    client, _ = make_client(
+        Upstream(refusal(170002, "Match is not found!", status=403))
+    )
+
+    with pytest.raises(CricHeroesAPIError) as caught:
+        await client.get_match_playing_squad(1)
+
+    assert type(caught.value) is CricHeroesAPIError
+    assert caught.value.code == 170002
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        refusal(170099, "Invalid credentials", status=403),
+        refusal(170001, "Access to this tournament is not allowed.", status=401),
+        httpx.Response(403, json={"status": False, "error": "Forbidden"}),
+        httpx.Response(403, json=["not", "an", "envelope"]),
+    ],
+    ids=["other-code", "401", "error-not-an-object", "not-an-object"],
+)
+async def test_any_other_refusal_is_still_a_credentials_error(make_client, response):
+    client, _ = make_client(Upstream(response))
+
+    with pytest.raises(CricHeroesAuthError):
+        await client.get_tournament_match_list(2242502)
+
+
+ERRORS = [
+    (endpoint, status, body)
+    for endpoint, examples in DOC["_errors"].items()
+    for status, body in examples
+]
+
+
+@pytest.mark.parametrize(
+    "endpoint, status, body",
+    ERRORS,
+    ids=[f"{e}-{b['error']['code']}" for e, _, b in ERRORS],
+)
+async def test_every_documented_error_is_reported_as_what_it_is(
+    make_client, endpoint, status, body
+):
+    """170001 is our agreement's limit, every other documented code is "no
+    such data", and none of them is a credentials problem."""
+    method, args, _ = next((m, a, p) for e, m, a, p in CALLS if e == endpoint)
+    client, _ = make_client(Upstream(httpx.Response(status, json=body)))
+
+    with pytest.raises(CricHeroesAPIError) as caught:
+        await getattr(client, method)(*args)
+
+    assert caught.value.code == body["error"]["code"]
+    assert isinstance(caught.value, CricHeroesAccessError) == (
+        body["error"]["code"] == 170001
+    )
 
 
 async def test_server_error_is_http_error_not_auth(make_client):
     client, _ = make_client(Upstream(httpx.Response(500, text="boom")))
 
     with pytest.raises(CricHeroesHTTPError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert not isinstance(caught.value, CricHeroesAuthError)
     assert caught.value.status_code == 500
@@ -196,14 +289,17 @@ async def test_server_error_is_http_error_not_auth(make_client):
 
 
 async def test_status_false_raises_api_error_with_upstream_code(make_client):
-    body = {"status": False, "error": {"code": 96003, "message": "No data found"}}
+    body = {
+        "status": False,
+        "error": {"code": 170011, "message": "Tournament match list is not found!"},
+    }
     client, _ = make_client(Upstream(httpx.Response(200, json=body)))
 
     with pytest.raises(CricHeroesAPIError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
-    assert caught.value.code == 96003
-    assert caught.value.message == "No data found"
+    assert caught.value.code == 170011
+    assert caught.value.message == "Tournament match list is not found!"
 
 
 @pytest.mark.parametrize(
@@ -215,7 +311,7 @@ async def test_no_answer_is_transport_error(make_client, failure):
     client, _ = make_client(Upstream(failure))
 
     with pytest.raises(CricHeroesTransportError):
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
 
 async def test_a_non_dict_error_is_still_an_api_error(make_client):
@@ -224,7 +320,7 @@ async def test_a_non_dict_error_is_still_an_api_error(make_client):
     client, _ = make_client(Upstream(httpx.Response(200, json=body)))
 
     with pytest.raises(CricHeroesAPIError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert caught.value.code is None
     assert caught.value.message == "Invalid api key"
@@ -241,7 +337,7 @@ async def test_a_slow_trickle_hits_the_overall_deadline(make_client):
     client, _ = make_client(slow, timeout=0.05)
 
     with pytest.raises(CricHeroesTransportError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert "took longer than 0.05s" in str(caught.value)
 
@@ -252,7 +348,7 @@ async def test_non_json_body_is_http_error(make_client):
     )
 
     with pytest.raises(CricHeroesHTTPError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert "non-JSON" in str(caught.value)
 
@@ -264,7 +360,7 @@ async def test_a_429_then_success_retries_once(make_client):
     upstream = Upstream(throttled(), ok([]))
     client, sleeps = make_client(upstream)
 
-    assert await client.get_tournament_match_list(1493258) == []
+    assert await client.get_tournament_match_list(2242502) == []
     assert len(upstream.requests) == 2
     assert len(sleeps) == 1
 
@@ -274,7 +370,7 @@ async def test_429_throughout_gives_up_after_max_retries(make_client):
     client, sleeps = make_client(upstream, max_retries=2)
 
     with pytest.raises(CricHeroesRateLimitError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert len(upstream.requests) == 3
     # Exponential with +/-20% jitter around 0.5s then 1.5s.
@@ -290,7 +386,7 @@ async def test_max_retries_zero_raises_on_the_first_429(make_client):
     client, sleeps = make_client(upstream, max_retries=0)
 
     with pytest.raises(CricHeroesRateLimitError):
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert len(upstream.requests) == 1
     assert sleeps == []
@@ -302,7 +398,7 @@ async def test_server_errors_are_not_retried(make_client, status):
     client, sleeps = make_client(upstream)
 
     with pytest.raises(CricHeroesHTTPError):
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert len(upstream.requests) == 1
     assert sleeps == []
@@ -313,7 +409,7 @@ async def test_transport_errors_are_not_retried(make_client):
     client, sleeps = make_client(upstream)
 
     with pytest.raises(CricHeroesTransportError):
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert len(upstream.requests) == 1
     assert sleeps == []
@@ -323,7 +419,7 @@ async def test_retry_after_is_honoured(make_client):
     upstream = Upstream(throttled(retry_after=2), ok([]))
     client, sleeps = make_client(upstream)
 
-    await client.get_tournament_match_list(1493258)
+    await client.get_tournament_match_list(2242502)
 
     assert sleeps == [2.0]
 
@@ -335,7 +431,7 @@ async def test_retry_after_beyond_the_budget_gives_up_without_retrying(make_clie
     client, sleeps = make_client(upstream, timeout=15.0)
 
     with pytest.raises(CricHeroesRateLimitError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     assert len(upstream.requests) == 1
     assert sleeps == []
@@ -347,7 +443,7 @@ async def test_total_waiting_stays_within_the_timeout_budget(make_client):
     client, sleeps = make_client(upstream, timeout=15.0, max_retries=5)
 
     with pytest.raises(CricHeroesRateLimitError):
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     # 8s fits in 15s once; a second 8s would not.
     assert sleeps == [8.0]
@@ -361,7 +457,7 @@ async def test_unparseable_retry_after_falls_back_to_backoff(make_client):
     )
     client, sleeps = make_client(upstream)
 
-    await client.get_tournament_match_list(1493258)
+    await client.get_tournament_match_list(2242502)
 
     assert len(sleeps) == 1 and 0.4 <= sleeps[0] <= 0.6
 
@@ -373,7 +469,7 @@ async def test_a_retry_after_nobody_can_honour_falls_back_to_backoff(
     upstream = Upstream(throttled(retry_after=value), ok([]))
     client, sleeps = make_client(upstream)
 
-    await client.get_tournament_match_list(1493258)
+    await client.get_tournament_match_list(2242502)
 
     assert len(sleeps) == 1 and 0.4 <= sleeps[0] <= 0.6
 
@@ -398,7 +494,7 @@ CALLS = [
         "get-match-partnership",
         "get_match_partnership",
         (458328, 362525),
-        "get-match-current-partnership/458328/362525",
+        "get-match-partnership/458328/362525",
     ),
     (
         "get-match-manhattan-graph",
@@ -415,62 +511,74 @@ CALLS = [
     (
         "get-tournament-boundary-count",
         "get_tournament_boundary_count",
-        (1493258,),
-        "get-tournament-boundary-count/1493258",
+        (2242502,),
+        "get-tournament-boundary-count/2242502",
     ),
     (
         "get-player-tournament-match-batting-data",
         "get_player_tournament_match_batting_data",
-        (1493258, 2826925),
-        "get-player-tournament-match-batting-data/1493258/2826925",
+        (2242502, 2826925),
+        "get-player-tournament-match-batting-data/2242502/2826925",
     ),
     (
         "get-player-tournament-match-bowling-data",
         "get_player_tournament_match_bowling_data",
-        (1493258, 2826556),
-        "get-player-tournament-match-bowling-data/1493258/2826556",
+        (2242502, 2826556),
+        "get-player-tournament-match-bowling-data/2242502/2826556",
     ),
     (
         "get-tournament-match-list",
         "get_tournament_match_list",
-        (1493258,),
-        "get-tournament-match-list/1493258",
+        (2242502,),
+        "get-tournament-match-list/2242502",
     ),
     (
         "get-tournament-point-table",
         "get_tournament_point_table",
-        (1493258,),
-        "get-tournament-point-table/1493258",
+        (2242502,),
+        "get-tournament-point-table/2242502",
     ),
     (
         "get-tournament-batting-leaderboard",
         "get_tournament_batting_leaderboard",
-        (1493258,),
-        "get-tournament-batting-leaderboard/1493258",
+        (2242502,),
+        "get-tournament-batting-leaderboard/2242502",
     ),
     (
         "get-tournament-inning-batting-leaderboard",
         "get_tournament_inning_batting_leaderboard",
-        (1493258,),
-        "get-tournament-inning-batting-leaderboard/1493258",
+        (2242502,),
+        "get-tournament-inning-batting-leaderboard/2242502",
     ),
     (
         "get-tournament-bowling-leaderboard",
         "get_tournament_bowling_leaderboard",
-        (1493258,),
-        "get-tournament-bowling-leaderboard/1493258",
+        (2242502,),
+        "get-tournament-bowling-leaderboard/2242502",
     ),
     (
         "get-tournament-inning-bowling-leaderboard",
         "get_tournament_inning_bowling_leaderboard",
-        (1493258,),
-        "get-tournament-inning-bowling-leaderboard/1493258",
+        (2242502,),
+        "get-tournament-inning-bowling-leaderboard/2242502",
     ),
     (
         "get-tournament-stat-leaderboard-filter",
         "get_tournament_leaderboard_stats_filter",
-        (1493258,),
-        "get-tournament-stat-leaderboard-filter/1493258",
+        (2242502,),
+        "get-tournament-stat-leaderboard-filter/2242502",
+    ),
+    (
+        "get-match-player-mvp",
+        "get_match_player_mvp",
+        (458328,),
+        "get-match-player-mvp/458328",
+    ),
+    (
+        "get-tournament-player-mvp",
+        "get_tournament_player_mvp",
+        (2242502,),
+        "get-tournament-player-mvp/2242502",
     ),
     (
         "get-player-batting-season-data",
@@ -502,7 +610,7 @@ def leftovers(value, path: str = "data") -> list[str]:
 
 def test_every_documented_endpoint_has_a_call_and_an_example():
     assert {c[0] for c in CALLS} == {k for k in DOC if not k.startswith("_")}
-    assert len(CALLS) == 17
+    assert len(CALLS) == 19
 
 
 @pytest.mark.parametrize(
@@ -518,7 +626,7 @@ async def test_the_documented_example_parses_with_nothing_left_over(
 
     result = await getattr(client, method)(*args)
 
-    assert upstream.requests[0].url.path == f"/api/v1/thirdparty/client/{path}"
+    assert upstream.requests[0].url.path == f"/api/v1/thirdparty/mediahubble/{path}"
     assert result, "the example parsed to nothing"
     assert leftovers(result) == []
 
@@ -530,7 +638,7 @@ async def test_unset_params_are_omitted_not_sent_empty(make_client):
     upstream = Upstream(ok([]))
     client, _ = make_client(upstream)
 
-    await client.get_tournament_match_list(1493258)
+    await client.get_tournament_match_list(2242502)
 
     assert upstream.requests[0].url.query == b""
 
@@ -563,26 +671,36 @@ async def test_current_partnership_is_one_object_and_partnership_a_list(make_cli
     current = await client.get_match_current_partnership(455172)
     every = await client.get_match_partnership(458328, 362525)
 
-    assert current.player_a_name == "Eoin Morgan"
-    # Only the per-team list carries to_over.
+    assert current.player_a_name == "Mark Wood"
+    # Only the per-team list carries to_over, as a string.
     assert current.to_over is None
-    assert [p.to_over for p in every] == ["6.2", "39", "49.3", "-"]
+    assert [p.to_over for p in every] == ["5.4", "16.3", "49.5", "50"]
     assert every[0].from_over == 0.0
+
+
+async def test_an_unbroken_stand_ends_at_a_dash(make_client):
+    # Shown by the doc of 30 May 2025, not by the current one.
+    row = dict(doc("get-match-partnership")[-1], to_over="-")
+    client, _ = make_client(Upstream(ok([row])))
+
+    [stand] = await client.get_match_partnership(458328, 362504)
+
+    assert stand.to_over == "-"
 
 
 async def test_boundary_count_one_element_list_is_unwrapped(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-boundary-count"))))
 
-    result = await client.get_tournament_boundary_count(1493258)
+    result = await client.get_tournament_boundary_count(2242502)
 
-    assert (result.total_six, result.total_four) == (357, 1982)
+    assert (result.total_six, result.total_four) == (291, 1571)
 
 
 async def test_list_endpoint_answering_an_object_raises_schema_error(make_client):
     client, _ = make_client(Upstream(ok({"rows": []})))
 
     with pytest.raises(CricHeroesSchemaError) as caught:
-        await client.get_tournament_match_list(1493258)
+        await client.get_tournament_match_list(2242502)
 
     # A subclass, so routes map it to 502 with the other upstream failures.
     assert isinstance(caught.value, CricHeroesHTTPError)
@@ -598,7 +716,7 @@ async def test_a_field_that_does_not_fit_raises_schema_error(make_client):
     client, _ = make_client(Upstream(ok(body)))
 
     with pytest.raises(CricHeroesSchemaError) as caught:
-        await client.get_tournament_leaderboard_stats_filter(1493258)
+        await client.get_tournament_leaderboard_stats_filter(2242502)
 
     assert "get-tournament-stat-leaderboard-filter" in str(caught.value)
     assert "team_id" in str(caught.value)
@@ -610,7 +728,7 @@ async def test_a_row_missing_its_identity_raises_schema_error(make_client):
     client, _ = make_client(Upstream(ok([row])))
 
     with pytest.raises(CricHeroesSchemaError) as caught:
-        await client.get_tournament_batting_leaderboard(1493258)
+        await client.get_tournament_batting_leaderboard(2242502)
 
     assert "player_id" in str(caught.value)
 
@@ -618,7 +736,7 @@ async def test_a_row_missing_its_identity_raises_schema_error(make_client):
 async def test_an_empty_data_list_is_an_empty_result(make_client):
     client, _ = make_client(Upstream(ok(None)))
 
-    assert await client.get_tournament_match_list(1493258) == []
+    assert await client.get_tournament_match_list(2242502) == []
 
 
 # -- type traps (spec §8.2), from the doc's own values ---------------------
@@ -627,7 +745,7 @@ async def test_an_empty_data_list_is_an_empty_result(make_client):
 async def test_batting_leaderboard_keeps_its_strings(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-batting-leaderboard"))))
 
-    rohit, shakib = await client.get_tournament_batting_leaderboard(1493258)
+    rohit, shakib = await client.get_tournament_batting_leaderboard(2242502)
 
     assert (rohit.fours, rohit.sixes, rohit.fifties, rohit.hundreds) == (67, 14, 1, 5)
     assert rohit.strike_rate == "98.33"
@@ -642,7 +760,7 @@ async def test_inning_batting_strike_rate_is_a_float(make_client):
         Upstream(ok(doc("get-tournament-inning-batting-leaderboard")))
     )
 
-    warner, _ = await client.get_tournament_inning_batting_leaderboard(1493258)
+    warner, _ = await client.get_tournament_inning_batting_leaderboard(2242502)
 
     # Passed on as sent, single-precision noise included.
     assert warner.strike_rate == 112.92500305175781
@@ -653,7 +771,7 @@ async def test_inning_batting_strike_rate_is_a_float(make_client):
 async def test_bowling_leaderboard_is_mostly_strings(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-bowling-leaderboard"))))
 
-    starc, _ = await client.get_tournament_bowling_leaderboard(1493258)
+    starc, _ = await client.get_tournament_bowling_leaderboard(2242502)
 
     assert (starc.balls, starc.overs, starc.economy) == ("554", "92.2", "5.45")
     assert starc.strike_rate == "20.52"
@@ -667,7 +785,7 @@ async def test_inning_bowling_overs_and_economy_are_numbers(make_client):
         Upstream(ok(doc("get-tournament-inning-bowling-leaderboard")))
     )
 
-    shaheen, amir = await client.get_tournament_inning_bowling_leaderboard(1493258)
+    shaheen, amir = await client.get_tournament_inning_bowling_leaderboard(2242502)
 
     assert (shaheen.overs, shaheen.economy) == (9.1, 3.82)
     assert (amir.overs, amir.economy) == (10.0, 3.0)
@@ -680,7 +798,7 @@ async def test_a_number_where_the_doc_shows_a_string_stays_a_string(make_client)
     row = dict(doc("get-tournament-bowling-leaderboard")[0], overs=92, SR=20.5)
     client, _ = make_client(Upstream(ok([row])))
 
-    [starc] = await client.get_tournament_bowling_leaderboard(1493258)
+    [starc] = await client.get_tournament_bowling_leaderboard(2242502)
 
     assert (starc.overs, starc.strike_rate) == ("92", "20.5")
 
@@ -688,25 +806,71 @@ async def test_a_number_where_the_doc_shows_a_string_stays_a_string(make_client)
 async def test_point_table_aliases(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-point-table"))))
 
-    england, south_africa = await client.get_tournament_point_table(1493258)
+    # The doc lists every team twice; the exact repeats are dropped (§8.2).
+    australia, pakistan, india = await client.get_tournament_point_table(2242502)
 
-    assert england.team_name == "England (WC19)"
-    assert (england.matches, england.won, england.lost) == (9, 6, 3)
-    assert (england.drawn, england.tied, england.no_result) == (0, 0, 0)
-    assert (england.points, england.quotient) == (12, 0)
-    assert south_africa.net_rr == "-0.030"
-    assert england.last_5 == "W-L-W-W-W-L-L-W-W"
-    assert (england.group, england.group_id) == ("A", 32750)
-    assert (england.round_id, england.round_name) == (98121, "League Matches")
+    assert (australia.team_name, australia.team_id) == ("Australia (WC19)", 362535)
+    assert australia.team_logo.endswith(".jpg")
+    assert (australia.matches, australia.won, australia.lost) == (8, 7, 1)
+    assert (australia.drawn, australia.tied, australia.no_result) == (0, 0, 0)
+    assert (australia.points, australia.quotient) == (14, 0)
+    assert australia.last_5 == "W-W-W-W-W-W-W-L"
+    assert (australia.group, australia.group_id) == ("A", 32750)
+    assert (australia.round_id, australia.round_name) == (98121, "League Matches")
+    # Net RR is a string, or a bare 0 before any result counts.
+    assert (pakistan.net_rr, india.net_rr) == ("-0.200", "0")
+
+
+async def test_point_table_keeps_rows_that_differ_in_any_field(make_client):
+    row = doc("get-tournament-point-table")[0]
+    other_round = dict(row, RoundID=98122, RoundName="Semi-Finals")
+    client, _ = make_client(Upstream(ok([row, row, other_round, row])))
+
+    rows = await client.get_tournament_point_table(2242502)
+
+    assert [r.round_id for r in rows] == [98121, 98122]
+
+
+async def test_match_list(make_client):
+    client, _ = make_client(Upstream(ok(doc("get-tournament-match-list"))))
+
+    first, second = await client.get_tournament_match_list(2242502)
+
+    assert first.winning_team_id == "362506"
+    assert first.type == 3 and first.status == "past"
+    assert first.city_name == "Manchester (England)"
+    assert first.team_a_innings[0].revised_target == 0
+    assert first.team_a_innings[0].summary.score == "325/6"
+    assert first.match_summary.target == "-"
+    assert first.query_id == second.query_id == "SS_DPvarSlM4erO5hV"
 
 
 async def test_match_list_results_and_revisions(make_client):
-    client, _ = make_client(Upstream(ok(doc("get-tournament-match-list"))))
+    """The doc of 30 May 2025 showed an abandoned match, a no-result and a
+    rain-revised chase; the current one shows only completed matches. The
+    same values, on a current example row."""
+    base = doc("get-tournament-match-list")[0]
+    dls = copy.deepcopy(base)
+    dls["team_a_innings"][0]["revised_target"] = 187
+    dls["team_b_innings"][0]["revised_overs"] = 41
+    abandoned = dict(
+        base,
+        match_result="abandoned",
+        winning_team_id="",
+        team_a_innings=[],
+        team_a_summary="",
+        team_b_innings=[],
+        team_b_summary="",
+    )
+    no_result = dict(
+        base, winning_team_id="0", team_b_innings=[], team_b_summary="Yet to bat"
+    )
+    client, _ = make_client(Upstream(ok([base, dls, abandoned, no_result])))
 
-    won, dls, abandoned, no_result = await client.get_tournament_match_list(1493258)
+    won, dls, abandoned, no_result = await client.get_tournament_match_list(2242502)
 
     # winning_team_id is a string: a team id, "" when abandoned, "0" for N/R.
-    assert won.winning_team_id == "362504"
+    assert won.winning_team_id == "362506"
     assert abandoned.winning_team_id == ""
     assert no_result.winning_team_id == "0"
     # Revisions are per innings; 0 means not revised.
@@ -716,20 +880,19 @@ async def test_match_list_results_and_revisions(make_client):
     # An abandoned match has no innings at all.
     assert abandoned.team_a_innings == [] and abandoned.team_a_summary == ""
     assert no_result.team_b_summary == "Yet to bat"
-    assert won.type == 3 and won.status == "past"
-    assert won.team_a_innings[0].summary.score == "311/8"
-    assert won.match_summary.target == "-"
 
 
 async def test_playing_squad(make_client):
     client, _ = make_client(Upstream(ok(doc("get-match-playing-squad"))))
 
-    new_zealand, england = await client.get_match_playing_squad(458328)
+    [england] = await client.get_match_playing_squad(458328, team_id=362504)
 
-    williamson, latham = new_zealand.match_squad
-    assert (williamson.player_name, williamson.is_captain) == ("Kane Williamson", 1)
-    assert latham.is_wicket_keeper == 1
-    assert england.team_id == 362504
+    morgan, archer, bairstow, buttler = england.match_squad
+    assert (morgan.player_name, morgan.is_captain) == ("Eoin Morgan", 1)
+    assert buttler.is_wicket_keeper == 1
+    assert archer.bowling_type == "Right-arm medium"
+    assert england.team_id == bairstow.team_id == 362504
+    assert morgan.query_id == "SS_Jov0kr2YJ7bEMIV"
 
 
 async def test_worm_overs_carry_a_running_total_and_manhattan_overs_do_not(
@@ -745,8 +908,8 @@ async def test_worm_overs_carry_a_running_total_and_manhattan_overs_do_not(
     assert manhattan.match_info[0].current_inning == 2
     assert not hasattr(manhattan.graph_data[0], "total_score")
     assert (worm.graph_data[-1].total_score, worm.graph_data[-1].run_rate) == (
-        241,
-        "4.82",
+        8,
+        "4.00",
     )
 
 
@@ -758,19 +921,26 @@ async def test_player_match_data(make_client):
         )
     )
 
-    batting = await client.get_player_tournament_match_batting_data(1493258, 2826925)
-    bowling = await client.get_player_tournament_match_bowling_data(1493258, 2826556)
+    batting = await client.get_player_tournament_match_batting_data(2242502, 2826555)
+    bowling = await client.get_player_tournament_match_bowling_data(2242502, 2826687)
 
-    assert batting.player_info.name == "Rohit Sharma"
+    assert batting.player_info.name == "Jason Roy"
     assert batting.player_info.dob == ""
-    assert batting.player_data[0].is_not_out == 1
-    # sr is a float, sent as 10 when whole.
-    assert batting.player_data[1].sr == 10.0
+    assert batting.player_data[0].is_not_out == 0
+    # sr is a float, sent as 85 when whole.
+    assert batting.player_data[-1].sr == 85.0
     # Overs are numbers here, unlike the tournament leaderboard's strings.
-    assert [row.overs for row in bowling.player_data[:2]] == [2.5, 6.0]
-    # No match id: a team met twice is two indistinguishable-by-id rows.
-    opponents = [row.opposition_team_name for row in bowling.player_data]
-    assert opponents.count("Australia (WC19)") == 2
+    assert [row.overs for row in bowling.player_data[2:4]] == [7.0, 10.0]
+    # Each row now names its match, so a team met twice is two matches.
+    assert [
+        (row.match_id, row.match_date_time)
+        for row in batting.player_data
+        if row.opposition_team_name == "New Zealand (WC19)"
+    ] == [
+        (419814, "2019-07-03T04:00:00.000Z"),
+        (458328, "2019-07-14T04:00:00.000Z"),
+    ]
+    assert bowling.player_data[0].match_id == 409537
 
 
 async def test_batting_season_aliases_and_strings(make_client):
@@ -811,27 +981,51 @@ async def test_bowling_season_balls_is_int_on_career_and_str_on_seasons(make_cli
 async def test_stats_filter_parses_the_documented_shape(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-stat-leaderboard-filter"))))
 
-    result = await client.get_tournament_leaderboard_stats_filter(1493258)
+    result = await client.get_tournament_leaderboard_stats_filter(2242502)
 
-    assert (result.season[0].key, result.season[0].value) == ("Client 2025", "1493258")
-    assert (result.season[-1].key, result.season[-1].value) == ("ALL", "-1")
+    assert [(s.key, s.value) for s in result.season] == [
+        ("Tyrant Premier League Season 13", "2242502"),
+        ("Tyrant Premier League Season 13 ( Test Format )", "2251924"),
+        ("ALL", "-1"),
+    ]
     orange = result.batting[0]
     assert (orange.key, orange.value) == ("Orange Cap", "RUN")
-    assert orange.url.endswith("get-tournament-batting-leaderboard")
-    # A filter the bowling leaderboard's own doc does not list (spec §13.3).
+    assert orange.url == "thirdparty/mediahubble/get-tournament-batting-leaderboard"
     assert "MODB" in [option.value for option in result.bowling]
-    # One entry per team per season.
-    assert [t.tournament_id for t in result.teams if t.team_id == 4660189] == [
-        702687,
-        1029866,
-    ]
+    assert {t.tournament_id for t in result.teams} == {2242502}
+    assert result.teams[0].team_name == "Kolkata Tigers"
+
+
+async def test_mvp_tables(make_client):
+    client, _ = make_client(
+        Upstream(ok(doc("get-match-player-mvp")), ok(doc("get-tournament-player-mvp")))
+    )
+
+    neesham, plunkett = await client.get_match_player_mvp(458328)
+    shakib, warner = await client.get_tournament_player_mvp(2242502)
+
+    assert (neesham.player_id, neesham.rank, neesham.matches) == (2826814, 1, 1)
+    # Points are strings, and fielding is broken out.
+    assert (neesham.batting, neesham.bowling, neesham.fielding, neesham.total) == (
+        "1.900",
+        "6.069",
+        "0.750",
+        "8.719",
+    )
+    assert plunkett.rank == 2
+    assert (shakib.name, shakib.matches, shakib.total) == (
+        "Shakib Al Hasan",
+        7,
+        "94.183",
+    )
+    assert warner.team_name == "Australia (WC19)"
 
 
 async def test_unknown_fields_are_kept(make_client):
     row = dict(doc("get-tournament-batting-leaderboard")[0], brand_new_field="kept")
     client, _ = make_client(Upstream(ok([row])))
 
-    [parsed] = await client.get_tournament_batting_leaderboard(1493258)
+    [parsed] = await client.get_tournament_batting_leaderboard(2242502)
 
     assert parsed.model_extra == {"brand_new_field": "kept"}
     assert parsed.model_dump()["brand_new_field"] == "kept"

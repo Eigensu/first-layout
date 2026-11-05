@@ -9,6 +9,7 @@ tournament" -- counts as success.
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 
 import scripts.check_cricheroes_credentials as check_script
 from app.services.cricheroes_client import CricHeroesClient
@@ -40,39 +41,52 @@ async def answer(monkeypatch):
         await http.aclose()
 
 
-def refusal(code) -> httpx.Response:
-    return httpx.Response(
-        200, json={"status": False, "error": {"code": code, "message": "nope"}}
-    )
-
-
 async def test_data_means_the_credentials_work(answer, capsys):
     answer(httpx.Response(200, json={"status": True, "data": [{"total_six": 1}]}))
 
-    assert await check_script.check(1493258) == 0
+    assert await check_script.check(2242502) == 0
     assert "OK: credentials accepted" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("code", [96007, "96007"])
+@pytest.mark.parametrize("code", [170008, "170008"])
 async def test_no_boundary_data_means_the_credentials_work(answer, capsys, code):
-    answer(refusal(code))
+    answer(refusal(code, "nope"))
 
-    assert await check_script.check(1493258) == 0
+    assert await check_script.check(2242502) == 0
     assert "OK: credentials accepted" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("code", [96001, 1, None])
+@pytest.mark.parametrize("code", [170003, 1, None])
 async def test_any_other_refusal_is_not_success(answer, capsys, code):
-    answer(refusal(code))
+    answer(refusal(code, "nope"))
 
-    assert await check_script.check(1493258) == 1
+    assert await check_script.check(2242502) == 1
     out = capsys.readouterr().out
     assert "OK" not in out
     assert "do not treat them as working" in out
 
 
+async def test_a_tournament_outside_our_agreement_proves_nothing(answer, capsys):
+    answer(refusal(170001, "Access to this tournament is not allowed.", status=403))
+
+    assert await check_script.check(60214) == 1
+    out = capsys.readouterr().out
+    assert "OK" not in out
+    assert "CricHeroesAccessError" in out
+    assert "try --tournament-id 2242502 or 2251924." in out
+
+
+async def test_a_refused_default_suggests_only_the_other_served_id(answer, capsys):
+    answer(refusal(170001, "Access to this tournament is not allowed.", status=403))
+
+    assert await check_script.check(2242502) == 1
+    out = capsys.readouterr().out
+    assert "try --tournament-id 2251924." in out
+    assert "--tournament-id 2242502" not in out
+
+
 async def test_a_rejection_is_failure(answer, capsys):
     answer(httpx.Response(401))
 
-    assert await check_script.check(1493258) == 1
+    assert await check_script.check(2242502) == 1
     assert "CricHeroesAuthError" in capsys.readouterr().out
