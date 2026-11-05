@@ -1105,7 +1105,7 @@ async def send_otp_email(
     if not settings.resend_api_key or not settings.resend_from_email:
         return False, "Resend is not configured"
 
-    brand = tournament_name or "Wall-E Fantasy"
+    brand = tournament_name or "Walle Fantasy"
     payload = {
         "from": settings.resend_from_email,
         "to": [to],
@@ -1137,7 +1137,7 @@ New settings:
 
 ```
 RESEND_API_KEY
-RESEND_FROM_EMAIL="Wall-E Fantasy <no-reply@send.wallearena.com>"
+RESEND_FROM_EMAIL="Walle Fantasy <no-reply@send.wallearena.com>"
 RESEND_REPLY_TO                       # optional
 ```
 
