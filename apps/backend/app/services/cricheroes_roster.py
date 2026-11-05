@@ -36,6 +36,7 @@ from app.schemas.cricheroes import SquadTeam, TournamentMatch
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
     MATCH_NOT_FOUND_CODE,
+    SQUAD_NOT_FOUND_CODE,
     CricHeroesAPIError,
     CricHeroesTransportError,
 )
@@ -56,7 +57,7 @@ UPCOMING_STATUS = "upcoming"
 # match": "Match playing squad is not found!" (170003) and "Match is not
 # found!" (170002, sent with a 403). Any other refusal -- 170001 above all,
 # a tournament outside our agreement -- must fail the import, not shrink it.
-NO_SQUAD_CODES = frozenset({"170003", MATCH_NOT_FOUND_CODE})
+NO_SQUAD_CODES = frozenset({SQUAD_NOT_FOUND_CODE, MATCH_NOT_FOUND_CODE})
 
 # Squads are read a few at a time, with a pause between starts: at most 20
 # calls a second, well under CricHeroes' 50 -- a 429 is charged like a

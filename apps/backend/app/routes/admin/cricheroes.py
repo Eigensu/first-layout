@@ -88,7 +88,9 @@ def _to_http_error(exc: CricHeroesError) -> HTTPException:
     if isinstance(exc, CricHeroesAccessError):
         # Our keys work, but this id is outside what CricHeroes serve us. The
         # admin can act on that (another id), unlike a credentials failure.
-        return HTTPException(status_code=403, detail=str(exc))
+        # Not 403: that is our own permission gate's answer, and the shared
+        # frontend client shows every 403 as "you do not have permission".
+        return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, CricHeroesAPIError):
         # CricHeroes report "no data for this id" as an error code, mostly
         # with a 200.

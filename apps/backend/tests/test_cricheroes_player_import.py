@@ -11,6 +11,7 @@ from collections import Counter
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 from httpx import ASGITransport, AsyncClient
 
 from app.common.enums.tournaments import TournamentStatus
@@ -35,12 +36,6 @@ from config.settings import settings
 BASE = "https://cricheroes.test/api/v1"
 CH_TOURNAMENT = 2242502
 IMPORT = f"/api/admin/cricheroes/tournaments/{CH_TOURNAMENT}/import-players"
-
-
-def refusal(code, message, status=200) -> httpx.Response:
-    return httpx.Response(
-        status, json={"status": False, "error": {"code": code, "message": message}}
-    )
 
 
 # The documented refusals: the squad endpoint's two, and the match list's.
@@ -519,12 +514,12 @@ async def test_a_tournament_cricheroes_has_no_data_for_is_a_404(client, serve):
     assert "not found" in response.json()["detail"]
 
 
-async def test_a_tournament_outside_our_agreement_is_a_403_saying_so(client, serve):
+async def test_a_tournament_outside_our_agreement_is_a_422_saying_so(client, serve):
     serve(matches=NOT_OURS)
 
     response = await client.post(IMPORT, params={"dry_run": "false"})
 
-    assert response.status_code == 403
+    assert response.status_code == 422
     assert "do not give us access" in response.json()["detail"]
     assert await Player.find_all().count() == 0
 

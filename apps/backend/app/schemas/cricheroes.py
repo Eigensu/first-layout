@@ -295,7 +295,7 @@ class PointTableRow(CricHeroesModel):
     points: Optional[int] = Field(default=None, alias="Points")
     # "-0.200", or a bare 0 before a result counts; kept a string either way.
     net_rr: Optional[str] = Field(default=None, alias="Net RR")
-    # Despite the name, every result so far: "W-L-W-W-W-L-L-W-W".
+    # Despite the name, every result so far: "W-W-W-W-W-W-W-L".
     last_5: Optional[str] = Field(default=None, alias="Last 5")
     quotient: Optional[float] = Field(default=None, alias="Quotient")
     group_id: Optional[int] = Field(default=None, alias="GroupID")
@@ -438,7 +438,7 @@ class LeaderboardFilterOption(CricHeroesModel):
 class LeaderboardFilterTeam(CricHeroesModel):
     query_id: Optional[str] = None  # see SquadPlayer.query_id
     team_id: int
-    # The season this entry belongs to. The same team repeats once per season.
+    # The season (tournament) this entry belongs to.
     tournament_id: Optional[int] = None
     team_name: str
 

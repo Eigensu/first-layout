@@ -13,6 +13,7 @@ happen on 429 only, with backoff, and only while there is time budget left.
 """
 
 import asyncio
+import json
 import logging
 import math
 import random
@@ -41,9 +42,7 @@ from app.schemas.cricheroes import (
     WormGraph,
 )
 from app.services.cricheroes_errors import (
-    ACCESS_DENIED_CODE,
-    MATCH_NOT_FOUND_CODE,
-    CricHeroesAccessError,
+    ID_REFUSAL_CODES,
     CricHeroesAPIError,
     CricHeroesAuthError,
     CricHeroesConfigError,
@@ -51,6 +50,7 @@ from app.services.cricheroes_errors import (
     CricHeroesRateLimitError,
     CricHeroesSchemaError,
     CricHeroesTransportError,
+    api_error,
 )
 from config.settings import get_settings
 
@@ -100,14 +100,9 @@ def _refusal(response: httpx.Response) -> Optional[CricHeroesAPIError]:
     except ValueError:
         return None
     error = payload.get("error") if isinstance(payload, dict) else None
-    if not isinstance(error, dict):
+    if not isinstance(error, dict) or str(error.get("code")) not in ID_REFUSAL_CODES:
         return None
-    code, message = error.get("code"), error.get("message")
-    if str(code) == ACCESS_DENIED_CODE:
-        return CricHeroesAccessError(code, message)
-    if str(code) == MATCH_NOT_FOUND_CODE:
-        return CricHeroesAPIError(code, message)
-    return None
+    return api_error(error.get("code"), error.get("message"))
 
 
 class CricHeroesClient:
@@ -278,7 +273,9 @@ class CricHeroesClient:
                 # The doc's own error examples are not all well-formed. Keep
                 # whatever came back as the message rather than fail on it.
                 error = {"message": str(error) if error else None}
-            raise CricHeroesAPIError(error.get("code"), error.get("message"))
+            # The same mapping as a 403's, so a 170001 is an access refusal
+            # whichever status it arrives with.
+            raise api_error(error.get("code"), error.get("message"))
         return payload.get("data")
 
     async def _get_model(
@@ -407,11 +404,25 @@ class CricHeroesClient:
         round_id: Optional[int] = None,
         group_id: Optional[int] = None,
     ) -> List[PointTableRow]:
-        return await self._get_model_list(
+        """One row per team, round and group.
+
+        The doc's example lists every team twice (§8.2). Exact repeats carry
+        nothing, so they are dropped here rather than by every consumer; rows
+        that differ in any field are all kept.
+        """
+        rows = await self._get_model_list(
             f"get-tournament-point-table/{tournament_id}",
             PointTableRow,
             {"roundId": round_id, "groupId": group_id},
         )
+        seen = set()
+        unique = []
+        for row in rows:
+            key = json.dumps(row.model_dump(mode="json"), sort_keys=True)
+            if key not in seen:
+                seen.add(key)
+                unique.append(row)
+        return unique
 
     # -- leaderboards -------------------------------------------------------
     #

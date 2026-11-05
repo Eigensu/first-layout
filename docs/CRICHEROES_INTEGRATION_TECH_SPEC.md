@@ -361,9 +361,9 @@ subclassing `CricHeroesError`:
 |---|---|---|---|
 | `CricHeroesConfigError` | credential missing, raised pre-flight | **503** | *We* are not configured |
 | `CricHeroesAuthError` | HTTP 401, or a 403 without a code below | **502** | *Our* credentials were rejected |
-| `CricHeroesAccessError` | HTTP 403 + code 170001 | **403** | The id is outside the tournaments CricHeroes serve us; our credentials work |
+| `CricHeroesAccessError` | code 170001, with any HTTP status (documented with 403) | **422** | The id is outside the tournaments CricHeroes serve us; our credentials work |
 | `CricHeroesRateLimitError` | HTTP 429 (after any opted-in retries) | **429** | We went over 50 RPS — and were charged for it |
-| `CricHeroesAPIError` | `status: false`: HTTP 200, or 403 + code 170002 | **404** | Upstream has no such tournament/match, or no such data for it |
+| `CricHeroesAPIError` | `status: false` with any other code: HTTP 200, or 403 + code 170002 | **404** | Upstream has no such tournament/match, or no such data for it |
 | `CricHeroesTransportError` | timeout, DNS, connection reset | **504** | Never reached upstream |
 | `CricHeroesHTTPError` | any other non-2xx, or non-JSON body | **502** | Upstream is unhealthy |
 | `CricHeroesSchemaError` | HTTP 200, but `data` does not fit our model | **502** | Our model of the response is wrong |
@@ -380,11 +380,18 @@ Three mappings are deliberate and worth stating:
 - **401/403 → 502, not 401.** It is our upstream credentials that failed, not
   the admin's session. Returning 401 would tell them to log in again, which
   cannot help. The detail string names the three env vars.
-- **170001 → 403, not 502.** CricHeroes serve us two tournaments (§13.12) and
-  answer any other id — or a match from another tournament — with a 403
-  carrying code 170001. The credentials worked, so reporting it as rejected
-  credentials would send someone to check keys that are fine. The admin can
-  act on it, by using a served id, and the detail says so.
+- **170001 → 422, not 502, and not 403.** CricHeroes serve us two tournaments
+  (§13.12) and answer any other id — or a match from another tournament — with
+  a 403 carrying code 170001. The credentials worked, so reporting it as
+  rejected credentials would send someone to check keys that are fine. The
+  admin can act on it, by using a served id, and the detail says so. Not 403:
+  that is our own permission gate's answer, and the shared frontend API client
+  (`src/lib/api/client.ts`) replaces every 403's detail with "you do not have
+  permission" — the same trap as 401 above. A 422 keeps the detail.
+  The code decides, not the status: one mapping (`api_error`) turns a
+  `status: false` body into an exception whether it came with a 403 or a 200,
+  so a 170001 on a 200 is still an access refusal. On a 403, only 170001 and
+  170002 are read as being about the id; any other 403 is rejected credentials.
   `CricHeroesAccessError` subclasses `CricHeroesAPIError`, so code that treats
   refusals alike still does.
 - **`status: false` → 404.** CricHeroes report "no data for this id" with an
@@ -516,7 +523,7 @@ would reasonably get wrong. Each has a regression test using the doc's values.
 | `match_result` | Free text, inconsistently cased: `"Resulted"`, `"Abandoned"`, `"abandoned"`. Use `winning_team_id`, not this, to classify results |
 | `Last 5` (point table) | Holds every result so far (`"W-W-W-W-W-W-W-L"`), not five |
 | `Net RR` (point table) | A string (`"-0.200"`), but a bare `0` for a team with no result yet; kept a string (`"0"`) |
-| Point table rows | The doc of 4 Nov 2026 lists **every team twice**. Passed on as sent; if the live API does the same, consumers de-duplicate by `team_id` |
+| Point table rows | The doc of 4 Nov 2026 lists **every team twice**. The client drops exact repeats, so no consumer has to; rows that differ in any field (another round or group) are kept |
 | `query_id` | Undocumented, on most rows. The same on every row of one response, so it names the query, not the row |
 | MVP points | `batting`, `bowling`, `fielding`, `total` are **strings** with three decimals (`"8.719"`) |
 | boundary count `data` | A one-element **list** wrapping a single object |
@@ -553,7 +560,7 @@ mistake.
 
 `{id}` is the **CricHeroes** tournament id, not our `Tournament` document id.
 The two are unrelated today; §13.1 covers linking them. Only the two
-tournaments CricHeroes serve us answer (§13.12); any other id gets a 403 that
+tournaments CricHeroes serve us answer (§13.12); any other id gets a 422 that
 says so (§7).
 
 The client is supplied by a `yield` dependency, closed when the request ends —
@@ -590,7 +597,7 @@ router. The admin panel shows it as **Import from CricHeroes** in the Import
 Players dialog, to platform admins only; it takes the id or a CricHeroes
 tournament link (`/tournament/<id>/...`), previews, then imports. Only the two
 tournaments CricHeroes serve us can be imported from (§13.12); any other id is
-refused with a 403 that says so, before anything is written.
+refused with a 422 that says so, before anything is written.
 
 **Where the players come from.** There is no roster endpoint and there will not
 be one (§13.11). The import lists the tournament's matches, skips those not yet
@@ -606,6 +613,8 @@ A played match the squad endpoint answers with one of its two documented
 passed over. Any other refusal, or any other failure, stops further calls and
 fails the request, and nothing is written: a refusal such as 170001 is
 CricHeroes turning us away, and must not quietly import a partial roster.
+When a search finds nobody because every played match came back without a
+squad, the panel says so, rather than that the tournament has not started.
 
 | Cost | |
 |---|---|
@@ -705,11 +714,18 @@ query-param forwarding, alias-free serialisation, pass-through of unmodelled
 fields, and every row of the error table in §7 including `Retry-After`
 pass-through — and that, by default, a 429 reaches upstream exactly once.
 
-Both use the existing `client` / `anon_client` fixtures from `tests/conftest.py`
-unchanged.
+**`test_cricheroes_player_import.py`** covers the import (§9.1), and
+**`test_check_cricheroes_credentials.py`** what the check script may call
+success (§11). The `status: false` response they all build comes from one
+helper, `tests/cricheroes_responses.py`. The route and import files use the
+existing `client` / `anon_client` fixtures from `tests/conftest.py` unchanged.
 
-Both files were mutation-checked: disabling retries, mistyping a trap field,
-gating on tournament admin, and serialising by alias each turn tests red.
+Mutation-checked: disabling retries, mistyping a trap field, gating on
+tournament admin, and serialising by alias each turn the client and route tests
+red. For the move to the doc of 4 Nov 2026: ignoring a 403's code, reading
+170001 by status instead of code, dropping 170002 from the import's "no squad"
+codes, restoring the old partnership path, and keeping duplicate point-table
+rows each do too.
 
 ---
 
@@ -984,7 +1000,7 @@ allowance — far too late to change a polling interval cheaply.
       own path (§5.5).
     - **Two tournaments only:** 2242502 (Tyrant Premier League Season 13) and
       2251924 (its Test format), or `-1` for both. Any other tournament, or a
-      match from one, answers 403 with code 170001 (§7).
+      match from one, answers 403 with code 170001; we answer 422 (§7).
     - **Every error code** — 96xxx became 1700xx, one "not found" per endpoint
       (§7). The player import's "no squad" is now 170003 or 170002 (§9.1).
     - **New fields** (§8.0) and the **two MVP endpoints** (§13.5).
@@ -1005,7 +1021,7 @@ allowance — far too late to change a polling interval cheaply.
 | Risk | Mitigation |
 |---|---|
 | Placeholder credentials mistaken for real ones | Dedicated exception, error text naming the env vars, smoke script |
-| A tournament outside our agreement mistaken for a credentials failure | 170001 has its own exception and answers 403 saying so, not 502 (§7) |
+| A tournament outside our agreement mistaken for a credentials failure, or for a permissions problem | 170001 has its own exception, whatever status it comes with, and answers 422 saying so — not 502, and not the 403 our own gate uses (§7) |
 | The doc changes without notice | The 4 Nov 2026 doc moved every path and changed the header and every error code unannounced. Regenerate the fixture from each new doc and let the diff and the tests show what changed (§8.0) |
 | Upstream adds fields | `extra="allow"`; extras pass through rather than 500 |
 | Upstream changes a field's type | Type traps documented in §8.2 and pinned by tests; `coerce_numbers_to_str` absorbs a number arriving where a string is documented; anything else surfaces as a 502 `CricHeroesSchemaError` naming the endpoint and field, not a 500 |

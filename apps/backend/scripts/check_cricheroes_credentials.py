@@ -38,10 +38,11 @@ from app.services.cricheroes_errors import (  # noqa: E402
     CricHeroesError,
 )
 
-# Tyrant Premier League Season 13, one of the two tournaments CricHeroes serve
-# us (the other is its Test format, 2251924). The doc's introduction calls it
-# 60214, but its parameters and its own sample data say 2242502 (spec §13.12).
-DEFAULT_TOURNAMENT_ID = 2242502
+# The two tournaments CricHeroes serve us: Tyrant Premier League Season 13 and
+# its Test format. The doc's introduction calls the first 60214, but its
+# parameters and its own sample data say 2242502 (spec §13.12).
+SERVED_TOURNAMENT_IDS = (2242502, 2251924)
+DEFAULT_TOURNAMENT_ID = SERVED_TOURNAMENT_IDS[0]
 
 # The one refusal that proves the credentials got through: CricHeroes looked
 # the tournament up and has no boundary data for it. The API doc does not say
@@ -58,9 +59,11 @@ async def check(tournament_id: int) -> int:
             # Probably past the credentials check, but the doc does not say
             # in which order CricHeroes check, so this proves nothing.
             print(f"FAILED ({type(exc).__name__}): {exc}")
+            others = [t for t in SERVED_TOURNAMENT_IDS if t != tournament_id]
             print(
-                f"Not proof either way: try --tournament-id {DEFAULT_TOURNAMENT_ID}"
-                " or 2251924."
+                "Not proof either way: try --tournament-id "
+                + " or ".join(str(t) for t in others)
+                + "."
             )
             return 1
         except CricHeroesAPIError as exc:

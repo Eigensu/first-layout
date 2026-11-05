@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 from pydantic import BaseModel
 
 from app.schemas.cricheroes import BattingLeaderboardEntry
@@ -186,18 +187,12 @@ async def test_rejected_credentials_raise_auth_error_naming_the_env_vars(
     assert "examples" in message and "placeholder" in message
 
 
-def refused(status: int, code, message: str) -> httpx.Response:
-    return httpx.Response(
-        status, json={"status": False, "error": {"code": code, "message": message}}
-    )
-
-
 @pytest.mark.parametrize("code", [170001, "170001"])
 async def test_a_tournament_outside_our_agreement_is_not_a_credentials_error(
     make_client, code
 ):
     client, _ = make_client(
-        Upstream(refused(403, code, "Access to this tournament is not allowed."))
+        Upstream(refusal(code, "Access to this tournament is not allowed.", status=403))
     )
 
     with pytest.raises(CricHeroesAccessError) as caught:
@@ -213,8 +208,21 @@ async def test_a_tournament_outside_our_agreement_is_not_a_credentials_error(
     assert "CRICHEROES_API_KEY" not in message
 
 
+async def test_a_tournament_refused_with_a_200_is_still_an_access_error(make_client):
+    """Their 96xxx refusals all came as 200s. Whichever status 170001 arrives
+    with, it is the agreement's limit, not "no such data"."""
+    client, _ = make_client(
+        Upstream(refusal(170001, "Access to this tournament is not allowed."))
+    )
+
+    with pytest.raises(CricHeroesAccessError):
+        await client.get_tournament_match_list(60214)
+
+
 async def test_a_missing_match_answered_with_403_is_an_api_error(make_client):
-    client, _ = make_client(Upstream(refused(403, 170002, "Match is not found!")))
+    client, _ = make_client(
+        Upstream(refusal(170002, "Match is not found!", status=403))
+    )
 
     with pytest.raises(CricHeroesAPIError) as caught:
         await client.get_match_playing_squad(1)
@@ -226,8 +234,8 @@ async def test_a_missing_match_answered_with_403_is_an_api_error(make_client):
 @pytest.mark.parametrize(
     "response",
     [
-        refused(403, 170099, "Invalid credentials"),
-        refused(401, 170001, "Access to this tournament is not allowed."),
+        refusal(170099, "Invalid credentials", status=403),
+        refusal(170001, "Access to this tournament is not allowed.", status=401),
         httpx.Response(403, json={"status": False, "error": "Forbidden"}),
         httpx.Response(403, json=["not", "an", "envelope"]),
     ],
@@ -798,7 +806,8 @@ async def test_a_number_where_the_doc_shows_a_string_stays_a_string(make_client)
 async def test_point_table_aliases(make_client):
     client, _ = make_client(Upstream(ok(doc("get-tournament-point-table"))))
 
-    australia, again, pakistan, india = await client.get_tournament_point_table(2242502)
+    # The doc lists every team twice; the exact repeats are dropped (§8.2).
+    australia, pakistan, india = await client.get_tournament_point_table(2242502)
 
     assert (australia.team_name, australia.team_id) == ("Australia (WC19)", 362535)
     assert australia.team_logo.endswith(".jpg")
@@ -808,10 +817,18 @@ async def test_point_table_aliases(make_client):
     assert australia.last_5 == "W-W-W-W-W-W-W-L"
     assert (australia.group, australia.group_id) == ("A", 32750)
     assert (australia.round_id, australia.round_name) == (98121, "League Matches")
-    # The doc lists every team twice; passed on as sent (spec §13.3).
-    assert again == australia
     # Net RR is a string, or a bare 0 before any result counts.
     assert (pakistan.net_rr, india.net_rr) == ("-0.200", "0")
+
+
+async def test_point_table_keeps_rows_that_differ_in_any_field(make_client):
+    row = doc("get-tournament-point-table")[0]
+    other_round = dict(row, RoundID=98122, RoundName="Semi-Finals")
+    client, _ = make_client(Upstream(ok([row, row, other_round, row])))
+
+    rows = await client.get_tournament_point_table(2242502)
+
+    assert [r.round_id for r in rows] == [98121, 98122]
 
 
 async def test_match_list(make_client):

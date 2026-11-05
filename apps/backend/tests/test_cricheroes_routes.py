@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 from httpx import ASGITransport, AsyncClient
 
 from app.common.enums.tournaments import TournamentStatus
@@ -412,23 +413,14 @@ async def test_rejected_credentials_answer_502_not_401(client, serve, status):
     assert "CRICHEROES_SECRET_ACCESS_KEY" in response.json()["detail"]
 
 
-async def test_a_tournament_outside_our_agreement_answers_403(client, serve):
-    serve(
-        httpx.Response(
-            403,
-            json={
-                "status": False,
-                "error": {
-                    "code": 170001,
-                    "message": "Access to this tournament is not allowed.",
-                },
-            },
-        )
-    )
+async def test_a_tournament_outside_our_agreement_answers_422(client, serve):
+    """Not 403: that is our own gate's answer, and the shared frontend client
+    turns every 403 into "you do not have permission"."""
+    serve(refusal(170001, "Access to this tournament is not allowed.", status=403))
 
     response = await client.get(f"{PREFIX}/matches")
 
-    assert response.status_code == 403
+    assert response.status_code == 422
     detail = response.json()["detail"]
     assert "do not give us access" in detail
     assert "CRICHEROES_SECRET_ACCESS_KEY" not in detail
@@ -458,18 +450,7 @@ async def test_a_429_is_not_retried_by_default(client, serve):
 
 
 async def test_no_such_data_answers_404(client, serve):
-    serve(
-        httpx.Response(
-            200,
-            json={
-                "status": False,
-                "error": {
-                    "code": 170011,
-                    "message": "Tournament match list is not found!",
-                },
-            },
-        )
-    )
+    serve(refusal(170011, "Tournament match list is not found!"))
 
     response = await client.get(f"{PREFIX}/matches")
 
