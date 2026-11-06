@@ -20,6 +20,10 @@ export interface RosterImportResponse {
   upcoming_matches: number;
   matches_read: number;
   matches_without_squad: number;
+  // From the tournament's public Teams page, read before the squads and at
+  // no cost to the call allowance. Placeholder "Dummy" players left out.
+  registered_players: number;
+  registered_teams: number;
   cricheroes_calls: number;
   // True when an import used the roster its preview read.
   reused_preview: boolean;

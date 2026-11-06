@@ -24,7 +24,7 @@ not model still come through under their upstream names.
 
 import math
 from collections import Counter
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Awaitable, Callable, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -48,7 +48,12 @@ from app.schemas.cricheroes import (
     TournamentBoundaryCount,
     TournamentMatch,
 )
-from app.services import cricheroes_cache, cricheroes_roster, cricheroes_usage
+from app.services import (
+    cricheroes_cache,
+    cricheroes_roster,
+    cricheroes_teams_page,
+    cricheroes_usage,
+)
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
     CricHeroesAccessError,
@@ -78,6 +83,16 @@ async def get_cricheroes_client() -> AsyncGenerator[CricHeroesClient, None]:
     client."""
     async with cricheroes_usage.counted_client() as client:
         yield client
+
+
+TeamsPageReader = Callable[[int], Awaitable[List[cricheroes_roster.RosterPlayer]]]
+
+
+async def get_teams_page_reader() -> TeamsPageReader:
+    """Reads a tournament's registered players off its public Teams page
+    (§9.1). Not an API call, so not counted. Tests override this so no test
+    reaches cricheroes.com."""
+    return cricheroes_teams_page.read_registered_players
 
 
 def _to_http_error(exc: CricHeroesError) -> HTTPException:
@@ -284,12 +299,17 @@ async def import_tournament_players(
     tournament_id: int,
     dry_run: bool = Query(default=True),
     client: CricHeroesClient = Depends(get_cricheroes_client),
+    read_teams_page: TeamsPageReader = Depends(get_teams_page_reader),
     current_user: User = Depends(get_platform_admin),
     target: TenantId = Depends(get_tenant),
 ):
     """Add the players of CricHeroes tournament `tournament_id` to ours (§9.1).
 
     `tournament_id` is CricHeroes'; ours is the one the request is made from.
+    The registered teams come from the tournament's public Teams page, read
+    first and free; played matches' squads then add anyone else. A page that
+    cannot be read fails the request before any API call is spent, rather
+    than import only those who have played.
     A preview costs one call plus one per played match. An import within
     PREVIEW_TTL_SECONDS of a preview uses that preview's roster -- what the
     admin saw, at no further cost; otherwise it reads the squads itself.
@@ -298,7 +318,10 @@ async def import_tournament_players(
     reused_preview = roster is not None
     if roster is None:
         try:
-            roster = await cricheroes_roster.fetch_roster(client, tournament_id)
+            registered = await read_teams_page(tournament_id)
+            roster = await cricheroes_roster.fetch_roster(
+                client, tournament_id, registered=registered
+            )
         except CricHeroesError as exc:
             raise _to_http_error(exc) from exc
         cricheroes_roster.remember(tournament_id, roster)
@@ -336,6 +359,8 @@ async def import_tournament_players(
                         "planned_linked": counts.linked,
                         "already_linked": counts.already_linked,
                         "skipped": counts.skipped,
+                        "registered_players": roster.registered_players,
+                        "registered_teams": roster.registered_teams,
                         "cricheroes_calls": calls,
                         "reused_preview": reused_preview,
                     },
@@ -348,6 +373,8 @@ async def import_tournament_players(
         upcoming_matches=roster.upcoming_matches,
         matches_read=roster.matches_read,
         matches_without_squad=roster.matches_without_squad,
+        registered_players=roster.registered_players,
+        registered_teams=roster.registered_teams,
         cricheroes_calls=calls,
         reused_preview=reused_preview,
         teams=roster.teams,
