@@ -221,6 +221,36 @@ async def test_an_uploaded_page_imports_a_tournament_not_started(client, serve):
     assert log.details["registered_teams"] == 2
 
 
+async def test_an_import_reuses_only_a_preview_of_the_same_page(client, serve):
+    """Another tab's search without the page must not stand in for this
+    one's search with it: the import writes what its own preview showed."""
+    upstream = serve(UPCOMING_ONLY, {})
+    await client.post(IMPORT, files=upload(page()))
+    await client.post(IMPORT)  # the other tab, no page
+    calls_before = len(upstream.paths)
+
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(page())
+    )
+
+    body = response.json()
+    assert body["reused_preview"] is True and body["created"] == 3
+    assert len(upstream.paths) == calls_before
+    assert len(await _players()) == 3
+
+
+async def test_an_import_with_a_page_never_previewed_reads_it_afresh(client, serve):
+    serve(UPCOMING_ONLY, {})
+    await client.post(IMPORT)  # previewed without the page
+
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(page())
+    )
+
+    body = response.json()
+    assert body["reused_preview"] is False and body["created"] == 3
+
+
 async def test_without_an_upload_the_squads_alone_are_read(client, serve):
     serve()
 
