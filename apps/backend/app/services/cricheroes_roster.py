@@ -252,26 +252,31 @@ async def _read_squads(
 
 # -- a preview's roster, kept for the import ------------------------------
 
-_previews: Dict[int, Tuple[float, Roster]] = {}
+# Keyed by the CricHeroes tournament and the uploaded Teams page (a digest of
+# its bytes, "" for none), so an import only reuses a preview of the same
+# inputs: another tab's search without the page must not stand in for one
+# with it.
+PreviewKey = Tuple[int, str]
+_previews: Dict[PreviewKey, Tuple[float, Roster]] = {}
 
 
-def remember(tournament_id: int, roster: Roster) -> None:
+def remember(key: PreviewKey, roster: Roster) -> None:
     """Keep a roster for the import that may follow. In process memory: on
     another replica, or after a restart, the import just reads it afresh."""
     now = time.monotonic()
-    for key, (at, _) in list(_previews.items()):
+    for stale, (at, _) in list(_previews.items()):
         if now - at > PREVIEW_TTL_SECONDS:
-            del _previews[key]
-    _previews[tournament_id] = (now, roster)
+            del _previews[stale]
+    _previews[key] = (now, roster)
 
 
-def recall(tournament_id: int) -> Optional[Roster]:
-    entry = _previews.get(tournament_id)
+def recall(key: PreviewKey) -> Optional[Roster]:
+    entry = _previews.get(key)
     if entry is None:
         return None
     at, roster = entry
     if time.monotonic() - at > PREVIEW_TTL_SECONDS:
-        _previews.pop(tournament_id, None)
+        _previews.pop(key, None)
         return None
     return roster
 
