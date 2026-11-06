@@ -2,7 +2,8 @@
 
 import csv
 import io
-from typing import BinaryIO, Optional
+from copy import copy
+from typing import Any, BinaryIO, Iterable, Optional
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -42,16 +43,55 @@ TEMPLATE_HEADERS = [
 ]
 
 
-async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> BinaryIO:
-    """
-    Generate XLSX template with data validations
+INSTRUCTION_TEXT = [
+    ("Player Import Template Instructions", True),
+    ("", False),
+    ("Required Fields:", True),
+    ("• Name: Player's full name (required)", False),
+    ("• Team: Team name (required)", False),
+    ("• Points: Player points (required)", False),
+    ("", False),
+    ("Optional Fields:", True),
+    (
+        "• Price: Auction sale value, used by auction-purse contests. Leave blank",
+        False,
+    ),
+    ("  and the Points value is used instead. A player left at 0 counts as", False),
+    ("  never auctioned and will not appear in auction contests.", False),
+    (
+        "• Slot Code/Name: Reference to slot assignment (e.g., 'SLOT 1 (Season)')",
+        False,
+    ),
+    ("• Mobile: Contact number for the player (digits only is recommended)", False),
+    ("• Status: Active, Inactive, or Injured (default: Active)", False),
+    ("• Image URL: Player image URL", False),
+    (
+        "• CricHeroes Player ID: the player's numeric id on CricHeroes, e.g. 12345678.",
+        False,
+    ),
+    ("  Links the player to their CricHeroes stats. Each player in a", False),
+    (
+        "  tournament needs their own. When updating existing players, a blank",
+        False,
+    ),
+    ("  cell keeps the ID they already have.", False),
+    (
+        "• Additional stats: Any extra columns (matches, runs, wickets, etc.) will be stored as stats",
+        False,
+    ),
+    ("", False),
+    ("Tips:", True),
+    ("• Use the dropdown menu for Status", False),
+    ("• Delete the example row before importing", False),
+    ("• Save file as .xlsx format", False),
+    ("• Maximum 5,000 rows per file", False),
+]
 
-    Args:
-        slot_codes: Optional list of slot codes for dropdown
 
-    Returns:
-        Binary file-like object with XLSX content
-    """
+def _new_players_workbook(slot_codes: Optional[list[str]]) -> tuple[Workbook, Any]:
+    """A workbook whose "Players" sheet has the template's headers, widths and
+    dropdowns, and no data rows yet. Shared by the template and the export so
+    an exported file is always one the importer reads back."""
     wb = Workbook()
     ws = wb.active
 
@@ -110,6 +150,39 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
         ws.add_data_validation(slot_dv)
         slot_dv.add(f"E2:E5000")
 
+    return wb, ws
+
+
+def _add_instructions_sheet(wb: Workbook) -> None:
+    instructions = wb.create_sheet("Instructions")
+    instructions.column_dimensions["A"].width = 80
+
+    for row_idx, (text, bold) in enumerate(INSTRUCTION_TEXT, start=1):
+        cell = instructions.cell(row=row_idx, column=1)
+        cell.value = text
+        if bold:
+            cell.font = Font(bold=True, size=12)
+
+
+def _to_bytes(wb: Workbook) -> BinaryIO:
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> BinaryIO:
+    """
+    Generate XLSX template with data validations
+
+    Args:
+        slot_codes: Optional list of slot codes for dropdown
+
+    Returns:
+        Binary file-like object with XLSX content
+    """
+    wb, ws = _new_players_workbook(slot_codes)
+
     # Add example row
     example_row = [
         "Ankit Shah",
@@ -132,65 +205,88 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
     for col_idx, value in enumerate(example_row, start=1):
         ws.cell(row=2, column=col_idx).value = value
 
-    # Add instructions in a new sheet
-    instructions = wb.create_sheet("Instructions")
-    instructions.column_dimensions["A"].width = 80
+    _add_instructions_sheet(wb)
+    return _to_bytes(wb)
 
-    instruction_text = [
-        ("Player Import Template Instructions", True),
-        ("", False),
-        ("Required Fields:", True),
-        ("• Name: Player's full name (required)", False),
-        ("• Team: Team name (required)", False),
-        ("• Points: Player points (required)", False),
-        ("", False),
-        ("Optional Fields:", True),
-        (
-            "• Price: Auction sale value, used by auction-purse contests. Leave blank",
-            False,
-        ),
-        ("  and the Points value is used instead. A player left at 0 counts as", False),
-        ("  never auctioned and will not appear in auction contests.", False),
-        (
-            "• Slot Code/Name: Reference to slot assignment (e.g., 'SLOT 1 (Season)')",
-            False,
-        ),
-        ("• Mobile: Contact number for the player (digits only is recommended)", False),
-        ("• Status: Active, Inactive, or Injured (default: Active)", False),
-        ("• Image URL: Player image URL", False),
-        (
-            "• CricHeroes Player ID: the player's numeric id on CricHeroes, e.g. 12345678.",
-            False,
-        ),
-        ("  Links the player to their CricHeroes stats. Each player in a", False),
-        (
-            "  tournament needs their own. When updating existing players, a blank",
-            False,
-        ),
-        ("  cell keeps the ID they already have.", False),
-        (
-            "• Additional stats: Any extra columns (matches, runs, wickets, etc.) will be stored as stats",
-            False,
-        ),
-        ("", False),
-        ("Tips:", True),
-        ("• Use the dropdown menu for Status", False),
-        ("• Delete the example row before importing", False),
-        ("• Save file as .xlsx format", False),
-        ("• Maximum 5,000 rows per file", False),
-    ]
 
-    for row_idx, (text, bold) in enumerate(instruction_text, start=1):
-        cell = instructions.cell(row=row_idx, column=1)
-        cell.value = text
-        if bold:
-            cell.font = Font(bold=True, size=12)
+# Template columns whose values live in Player.stats: the importer stores
+# every column it does not otherwise know as a stat (extract_stats).
+_STATS_COLUMNS = ("mobile", "matches", "runs", "wickets")
 
-    # Save to BytesIO
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
+
+def _cell_value(value: Any) -> Any:
+    """A stat as a cell. Nested values have no column shape and are left out
+    rather than written as text the importer would store back as a string."""
+    if isinstance(value, (dict, list, tuple, set)):
+        return None
+    return value
+
+
+async def generate_xlsx_export(
+    players: Iterable[Any],
+    slots: Iterable[Any],
+) -> BinaryIO:
+    """Every given player as a row of the import template.
+
+    The file is the template with the example row replaced by real players, so
+    it can be edited and imported back (conflict "update"). Stats beyond the
+    template's own columns get a column each after Wickets, headed by the
+    stat's key, which is what the importer reads them back as.
+
+    Args:
+        players: Admin Player documents, in the order to write them
+        slots: The tournament's Slot documents, to turn Player.slot ids into
+            the code and name the importer looks up
+    """
+    slots = list(slots)
+    slot_by_id = {str(slot.id): slot for slot in slots}
+    wb, ws = _new_players_workbook([slot.code for slot in slots][:50])
+
+    players = list(players)
+    extra_stats: list[str] = []
+    for player in players:
+        for key, value in (player.stats or {}).items():
+            if (
+                key not in _STATS_COLUMNS
+                and key not in TEMPLATE_COLUMNS
+                and key not in extra_stats
+                and _cell_value(value) is not None
+            ):
+                extra_stats.append(key)
+
+    header_style = ws.cell(row=1, column=1)
+    for offset, key in enumerate(extra_stats):
+        cell = ws.cell(row=1, column=len(TEMPLATE_HEADERS) + 1 + offset)
+        cell.value = key  # type: ignore[assignment]
+        cell.fill = copy(header_style.fill)
+        cell.font = copy(header_style.font)
+        cell.alignment = copy(header_style.alignment)
+
+    for row_idx, player in enumerate(players, start=2):
+        stats = player.stats or {}
+        slot = slot_by_id.get(player.slot) if player.slot else None
+        row = [
+            player.name,
+            player.team,
+            player.points,
+            player.price,
+            slot.code if slot else None,
+            slot.name if slot else None,
+            _cell_value(stats.get("mobile")),
+            player.status,
+            player.image_url,
+            player.cricheroes_player_id,
+            _cell_value(stats.get("matches")),
+            _cell_value(stats.get("runs")),
+            _cell_value(stats.get("wickets")),
+            *(_cell_value(stats.get(key)) for key in extra_stats),
+        ]
+        for col_idx, value in enumerate(row, start=1):
+            ws.cell(row=row_idx, column=col_idx).value = value
+
+    ws.freeze_panes = "A2"
+    _add_instructions_sheet(wb)
+    return _to_bytes(wb)
 
 
 def generate_csv_template() -> str:

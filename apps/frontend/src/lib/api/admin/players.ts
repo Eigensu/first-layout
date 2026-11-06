@@ -111,4 +111,23 @@ export const playersApi = {
     });
     return response.data;
   },
+
+  /**
+   * Download every player in this tournament as an .xlsx file in the import
+   * template's format, so it can be edited and imported back.
+   */
+  exportPlayers: async (): Promise<{ blob: Blob; filename: string }> => {
+    const response = await apiClient.get('/api/admin/players/import/export', {
+      responseType: 'blob',
+    });
+
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    let filename = 'players_export.xlsx';
+    const match = contentDisposition?.match(/filename=([^;]+)/i);
+    if (match?.[1]) {
+      filename = match[1].trim().replace(/^"|"$/g, '');
+    }
+
+    return { blob: response.data as Blob, filename };
+  },
 };
