@@ -24,9 +24,9 @@ not model still come through under their upstream names.
 
 import math
 from collections import Counter
-from typing import AsyncGenerator, Awaitable, Callable, List, Optional
+from typing import AsyncGenerator, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player
@@ -85,14 +85,27 @@ async def get_cricheroes_client() -> AsyncGenerator[CricHeroesClient, None]:
         yield client
 
 
-TeamsPageReader = Callable[[int], Awaitable[List[cricheroes_roster.RosterPlayer]]]
-
-
-async def get_teams_page_reader() -> TeamsPageReader:
-    """Reads a tournament's registered players off its public Teams page
-    (§9.1). Not an API call, so not counted. Tests override this so no test
-    reaches cricheroes.com."""
-    return cricheroes_teams_page.read_registered_players
+async def _read_uploaded_teams_page(
+    upload: Optional[UploadFile], tournament_id: int
+) -> List[cricheroes_roster.RosterPlayer]:
+    """The registered players in an uploaded Teams page (§9.1), or none when
+    no page was uploaded. A file that is not this tournament's Teams page is
+    the admin's to fix, so a 422 saying what is wrong with it."""
+    if upload is None:
+        return []
+    raw = await upload.read(cricheroes_teams_page.MAX_PAGE_BYTES + 1)
+    if len(raw) > cricheroes_teams_page.MAX_PAGE_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail="The uploaded page is larger than a CricHeroes Teams page "
+            "can be. Save the page as HTML only and upload that.",
+        )
+    try:
+        return cricheroes_teams_page.read_saved_teams_page(
+            raw.decode("utf-8", errors="replace"), tournament_id
+        )
+    except cricheroes_teams_page.TeamsPageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _to_http_error(exc: CricHeroesError) -> HTTPException:
@@ -299,17 +312,21 @@ async def import_tournament_players(
     tournament_id: int,
     dry_run: bool = Query(default=True),
     client: CricHeroesClient = Depends(get_cricheroes_client),
-    read_teams_page: TeamsPageReader = Depends(get_teams_page_reader),
+    teams_page: Optional[UploadFile] = File(
+        default=None,
+        description="The tournament's Teams page from cricheroes.com, saved as HTML",
+    ),
     current_user: User = Depends(get_platform_admin),
     target: TenantId = Depends(get_tenant),
 ):
     """Add the players of CricHeroes tournament `tournament_id` to ours (§9.1).
 
     `tournament_id` is CricHeroes'; ours is the one the request is made from.
-    The registered teams come from the tournament's public Teams page, read
-    first and free; played matches' squads then add anyone else. A page that
-    cannot be read fails the request before any API call is spent, rather
-    than import only those who have played.
+    The registered teams come from `teams_page`, the tournament's public
+    Teams page as the admin saved it in their browser: cricheroes.com refuses
+    our server, so we do not fetch it ourselves. It is read first, and a file
+    that is not this tournament's Teams page fails the request before any API
+    call is spent. Without it the roster is the played matches' squads alone.
     A preview costs one call plus one per played match. An import within
     PREVIEW_TTL_SECONDS of a preview uses that preview's roster -- what the
     admin saw, at no further cost; otherwise it reads the squads itself.
@@ -318,7 +335,7 @@ async def import_tournament_players(
     reused_preview = roster is not None
     if roster is None:
         try:
-            registered = await read_teams_page(tournament_id)
+            registered = await _read_uploaded_teams_page(teams_page, tournament_id)
             roster = await cricheroes_roster.fetch_roster(
                 client, tournament_id, registered=registered
             )

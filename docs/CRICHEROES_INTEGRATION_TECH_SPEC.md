@@ -736,21 +736,27 @@ refused with a 422 that says so, before anything is written.
 **Where the players come from.** There is no roster endpoint and there will not
 be one (§13.11), so the import reads two sources and merges them by player id.
 
-1. **The registered teams, from the public Teams page** (added 6 Nov 2026,
-   `app/services/cricheroes_teams_page.py`). `cricheroes.com/tournament/<id>/<slug>/teams`
-   is server-rendered and carries every registered team with its players, under
-   the same player ids the API uses, as a `teamResponse` object in the page's
-   Next.js flight data (`self.__next_f.push` chunks). One plain GET, sent with
-   our User-Agent; it spends nothing from the API allowance, and robots.txt
-   allows tournament pages. CricHeroes' shared "Dummy" placeholder, one per
-   team, is left out. For Tyrant Premier League Season 13 (2242502) it gave 12
-   teams and 150 players ten days before the first match. This page is **not
-   part of our API agreement** and its shape is theirs to change, so it fails
-   loudly: an unreachable page is a 504, and a page that answers with anything
-   but a readable team list (another status, no `teamResponse`, a team or
-   player without the fields above) is a 502 that names the page. Either way
-   the request fails before any API call is spent, and nothing is written — a
-   roster of only those who have played would look complete and is not.
+1. **The registered teams, from a saved copy of the public Teams page**
+   (`app/services/cricheroes_teams_page.py`). `cricheroes.com/tournament/<id>/<slug>/teams`
+   carries every registered team with its players, under the same player ids
+   the API uses, as a `teamResponse` object in the page's Next.js flight data
+   (`self.__next_f.push` chunks), beside a `tournamentDetails` object naming
+   the tournament. **We do not fetch it.** The first version did (#75), and
+   cricheroes.com's Cloudflare answered walle-api on Railway with HTTP 403
+   while serving browsers: CricHeroes keep servers off their website, and we
+   do not work around that (no browser User-Agent, proxies or headless
+   browser). Instead the admin opens the page in their own browser, saves it
+   (Ctrl/Cmd+S, either "HTML only" or "complete" — the flight scripts survive
+   both), and uploads the file as `teams_page` (multipart, at most 5 MB) with
+   the search; the panel links the page and sends the file with the import
+   too. CricHeroes' shared "Dummy" placeholder, one per team, is left out. For
+   Tyrant Premier League Season 13 (2242502) it gave 12 teams and 150 players
+   ten days before the first match. The page's shape is CricHeroes' to change,
+   so a file that is not readable, has no team list or tournament, or is
+   another tournament's page is a **422** saying what is wrong with it,
+   before any API call is spent, and nothing is written. Without a file the
+   roster is the squads alone, as before #75. Automating this again needs
+   CricHeroes: a roster endpoint, or an allowlist for our server on the page.
 2. **The playing squads of played matches.** The import lists the tournament's matches, skips those not yet
 played (`type` 2, or `status` "upcoming" in any case), and reads the playing
 squad of each of the rest: five at a time, starts 50 ms apart (at most 20 calls
@@ -770,20 +776,20 @@ squad, the panel says so, rather than that the tournament has not started.
 
 | Cost | |
 |---|---|
-| Calls | 1 + played matches — ~31 for a 30-match tournament. The Teams page is not an API call and is not counted |
-| Preview, then import within 10 minutes | the preview's calls only: the import reuses the roster the preview read (Teams page included), so it writes exactly what the admin saw. Kept in process memory — after 10 minutes, a restart, or on another replica, the import reads the squads itself |
+| Calls | 1 + played matches — ~31 for a 30-match tournament. The uploaded Teams page costs nothing |
+| Preview, then import within 10 minutes | the preview's calls only: the import reuses the roster the preview read (uploaded Teams page included), so it writes exactly what the admin saw. Kept in process memory — after 10 minutes, a restart, or on another replica, the import reads the squads itself |
 | Reported | `cricheroes_calls`, `reused_preview`, `registered_players` and `registered_teams` in every response; audit log on a real import |
 
 The match list is read as one page. No endpoint in the doc of 4 Nov 2026
 paginates (§13.8).
 
 **Before the first match the registered teams are the roster.** The API knows
-nobody until a squad is named, but the Teams page lists everyone teams have
-registered, so a pool needed before the tournament starts (an auction, say)
-can come from this import. The sheet import is still the way to set prices,
+nobody until a squad is named, but the saved Teams page lists everyone teams
+have registered, so a pool needed before the tournament starts (an auction,
+say) can come from this import. The sheet import is still the way to set prices,
 slots and anything CricHeroes do not have. A tournament whose fixtures are not drawn up yet
 answers the match list with 170011 ("Tournament match list is not found!");
-when the Teams page found registered players that counts as no matches, and
+when the uploaded Teams page has registered players that counts as no matches, and
 the import goes ahead with them. Without registered players it is still the
 404 it was.
 
@@ -985,7 +991,7 @@ allowance — far too late to change a polling interval cheaply.
    it yet, so a wrong id is fixed by re-importing the affected rows with
    `conflict=update`. CricHeroes offers no
    tournament roster endpoint; the CricHeroes import (§9.1) reads the
-   registered teams off the public Teams page instead, so it can add and link
+   registered teams from a saved copy of the public Teams page instead, so it can add and link
    the player pool before a tournament starts, and adds squad players as
    matches are played.
 3. **Doc inconsistencies to confirm with CricHeroes.** In the doc of 4 Nov 2026:
@@ -1155,9 +1161,10 @@ allowance — far too late to change a polling interval cheaply.
     - **No tournament roster endpoint.** Through the API, a tournament's
       players can only be collected from what has already been played: each
       match's playing squad, or the leaderboards (batters and bowlers only).
-      The import therefore also reads the public Teams page (§9.1), which lists
-      registered players before the first match — outside the API agreement,
-      worth telling CricHeroes we do.
+      The import therefore also takes a saved copy of the public Teams page
+      (§9.1), uploaded by an admin, which lists registered players before the
+      first match. CricHeroes' firewall refuses our server on that page; a
+      roster endpoint or an allowlist is theirs to grant.
     - **No fielding endpoint** (§13.6), **no bulk player data** (§13.7), **no
       match ids on per-player rows** (§13.9).
     - Everything new must come through the two MVP endpoints. When their

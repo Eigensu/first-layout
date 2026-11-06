@@ -20,7 +20,7 @@ from app.models.admin.player import Player
 from app.models.tournament import Tournament
 from app.models.tournament_membership import ROLE_ADMIN, TournamentMembership
 from app.models.user import User
-from app.routes.admin.cricheroes import get_cricheroes_client, get_teams_page_reader
+from app.routes.admin.cricheroes import get_cricheroes_client
 from app.services import cricheroes_roster
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
@@ -400,26 +400,13 @@ async def serve():
         finally:
             await http.aclose()
 
-    async def _read_teams_page(tournament_id: int) -> list:
-        installed["teams_page_reads"].append(tournament_id)
-        registered = installed["registered"]
-        if isinstance(registered, Exception):
-            raise registered
-        return list(registered)
-
-    def _serve(matches=MATCHES, squads=SQUADS, registered=()) -> CricHeroes:
-        """`registered`: the public Teams page's players, or an exception
-        for reading it to raise."""
+    def _serve(matches=MATCHES, squads=SQUADS) -> CricHeroes:
         installed["upstream"] = CricHeroes(matches, squads)
-        installed["registered"] = registered
-        installed["teams_page_reads"] = installed["upstream"].teams_page_reads = []
         return installed["upstream"]
 
     app.dependency_overrides[get_cricheroes_client] = _client
-    app.dependency_overrides[get_teams_page_reader] = lambda: _read_teams_page
     yield _serve
     app.dependency_overrides.pop(get_cricheroes_client, None)
-    app.dependency_overrides.pop(get_teams_page_reader, None)
 
 
 async def _players() -> dict:

@@ -2,8 +2,17 @@
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
-import { AlertCircle, CheckCircle2, Loader2, Search } from "lucide-react";
 import {
+  AlertCircle,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
+import {
+  cricHeroesTeamsPageUrl,
   RosterImportPlayer,
   RosterImportResponse,
   useCricHeroesImport,
@@ -16,15 +25,18 @@ interface CricHeroesImportProps {
 
 /**
  * Adds a CricHeroes tournament's players to this tournament. The API has no
- * player list per tournament, so the backend reads the registered teams off
- * the tournament's public Teams page, then the playing squad of every match
- * played so far (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9.1).
+ * player list per tournament, so the registered teams come from the
+ * tournament's public Teams page, which the admin saves in their own browser
+ * and uploads (CricHeroes refuse our server), then the playing squad of every
+ * match played so far (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9.1).
  * Platform admins only: every search spends the shared yearly call allowance.
  */
 export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
   const {
     input,
     updateInput,
+    teamsPage,
+    updateTeamsPage,
     tournamentId,
     loading,
     result,
@@ -42,11 +54,11 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
           Import from CricHeroes
         </h3>
         <p className="text-sm text-text-muted mb-4">
-          Adds everyone registered to a team of the tournament on CricHeroes,
-          and anyone else named in a playing squad of its matches so far.
-          Players already here with the same name are given their CricHeroes ID,
-          and their prices, slots and points are not changed. New players start
-          with a price of 0.
+          Adds everyone registered to a team of the tournament on CricHeroes
+          (from its saved Teams page), and anyone else named in a playing squad
+          of its matches so far. Players already here with the same name are
+          given their CricHeroes ID, and their prices, slots and points are not
+          changed. New players start with a price of 0.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-2">
@@ -80,9 +92,67 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
             Find players
           </Button>
         </div>
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="text-sm font-medium text-gray-900">
+            Registered teams (optional)
+          </p>
+          <p className="text-xs text-gray-600 mt-1">
+            CricHeroes don&apos;t let our server read their website, so save the
+            tournament&apos;s Teams page in your browser and choose the file
+            here. Open{" "}
+            {tournamentId !== null ? (
+              <a
+                href={cricHeroesTeamsPageUrl(tournamentId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center font-medium text-blue-700 underline"
+              >
+                its Teams page
+                <ExternalLink className="w-3 h-3 ml-0.5" />
+              </a>
+            ) : (
+              "the Teams page"
+            )}
+            , press Ctrl+S (⌘S on a Mac) and save it as a web page. Without it,
+            only players already in a match squad are found.
+          </p>
+          <div className="mt-2 flex items-center gap-2 min-w-0">
+            {teamsPage ? (
+              <>
+                <FileText className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <span className="text-sm text-gray-800 truncate">
+                  {teamsPage.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateTeamsPage(null)}
+                  disabled={loading}
+                  aria-label="Remove the Teams page"
+                  className="p-1 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <label className="cursor-pointer text-sm font-medium text-blue-700 hover:underline">
+                Choose saved Teams page…
+                <input
+                  type="file"
+                  accept=".html,.htm,text/html"
+                  disabled={loading}
+                  className="sr-only"
+                  onChange={(e) => {
+                    updateTeamsPage(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+          </div>
+        </div>
         <p className="text-xs text-text-muted mt-2">
           Each search uses 1 CricHeroes call plus 1 per match played, from the
-          yearly allowance; reading the registered teams is free. Importing
+          yearly allowance; reading the saved Teams page is free. Importing
           within 10 minutes of a search uses what it found, at no extra cost.
         </p>
 
@@ -93,7 +163,9 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
           </div>
         )}
 
-        {result && <RosterResult result={result} />}
+        {result && (
+          <RosterResult result={result} usedTeamsPage={teamsPage !== null} />
+        )}
 
         {result && (
           <div className="flex justify-end mt-4">
@@ -129,7 +201,13 @@ function importLabel(result: RosterImportResponse): string {
   }`;
 }
 
-function RosterResult({ result }: { result: RosterImportResponse }) {
+function RosterResult({
+  result,
+  usedTeamsPage,
+}: {
+  result: RosterImportResponse;
+  usedTeamsPage: boolean;
+}) {
   const planned = result.dry_run;
   const tiles = [
     {
@@ -170,7 +248,9 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
       </p>
 
       {result.players.length === 0 ? (
-        <p className="text-sm text-text-muted">{noPlayersReason(result)}</p>
+        <p className="text-sm text-text-muted">
+          {noPlayersReason(result, usedTeamsPage)}
+        </p>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -227,7 +307,10 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
 
 // Why a search found nobody. Matches that were played but have no squad on
 // CricHeroes are not the same as a tournament that has not started.
-function noPlayersReason(result: RosterImportResponse): string {
+function noPlayersReason(
+  result: RosterImportResponse,
+  usedTeamsPage: boolean,
+): string {
   const missing = result.matches_without_squad;
   if (missing > 0) {
     const which =
@@ -237,10 +320,12 @@ function noPlayersReason(result: RosterImportResponse): string {
       "played so far. Check the matches on CricHeroes before importing again."
     );
   }
-  return (
-    "No players found: no team of this tournament has registered players " +
-    "on CricHeroes yet, and no match has been played."
-  );
+  return usedTeamsPage
+    ? "No players found: the saved Teams page lists nobody yet, and no " +
+        "match has been played."
+    : "No players found. Before the first match CricHeroes' API knows " +
+        "nobody: add the tournament's saved Teams page above to import its " +
+        "registered teams.";
 }
 
 function describe(player: RosterImportPlayer, planned: boolean): string {

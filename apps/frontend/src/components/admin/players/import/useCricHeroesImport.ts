@@ -20,8 +20,8 @@ export interface RosterImportResponse {
   upcoming_matches: number;
   matches_read: number;
   matches_without_squad: number;
-  // From the tournament's public Teams page, read before the squads and at
-  // no cost to the call allowance. Placeholder "Dummy" players left out.
+  // From the uploaded Teams page, read before the squads and at no cost to
+  // the call allowance. Placeholder "Dummy" players left out.
   registered_players: number;
   registered_teams: number;
   cricheroes_calls: number;
@@ -49,8 +49,16 @@ export function parseCricHeroesTournamentId(input: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+/** Where the admin saves the registered teams from (the slug is ignored). */
+export function cricHeroesTeamsPageUrl(tournamentId: number): string {
+  return `https://cricheroes.com/tournament/${tournamentId}/teams/teams`;
+}
+
 export function useCricHeroesImport() {
   const [input, setInput] = useState("");
+  // The tournament's Teams page, saved from cricheroes.com in the admin's
+  // browser: CricHeroes refuse our server, so the backend cannot fetch it.
+  const [teamsPage, setTeamsPage] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RosterImportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +67,13 @@ export function useCricHeroesImport() {
 
   const updateInput = (value: string) => {
     setInput(value);
+    setResult(null);
+    setError(null);
+  };
+
+  // A new file needs a new search: the import writes what its preview showed.
+  const updateTeamsPage = (file: File | null) => {
+    setTeamsPage(file);
     setResult(null);
     setError(null);
   };
@@ -74,6 +89,13 @@ export function useCricHeroesImport() {
       setLoading(true);
       setError(null);
       const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN) || "";
+      // Sent with the import too: if the preview has expired on the server,
+      // the import reads everything again and must see the same page.
+      let body: FormData | undefined;
+      if (teamsPage) {
+        body = new FormData();
+        body.append("teams_page", teamsPage);
+      }
       const response = await fetch(
         `${API_BASE_URL}/api/admin/cricheroes/tournaments/${id}/import-players?dry_run=${dryRun}`,
         {
@@ -82,6 +104,7 @@ export function useCricHeroesImport() {
             [AUTH.HEADER]: `${AUTH.BEARER_PREFIX}${token}`,
             ...tenantHeaders(),
           },
+          body,
         },
       );
       const data = await response.json().catch(() => null);
@@ -106,6 +129,8 @@ export function useCricHeroesImport() {
   return {
     input,
     updateInput,
+    teamsPage,
+    updateTeamsPage,
     tournamentId,
     loading,
     result,

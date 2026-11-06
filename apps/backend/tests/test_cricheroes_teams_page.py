@@ -1,13 +1,12 @@
-"""Reading a tournament's registered players off CricHeroes' public Teams page
-(spec §9.1), and folding them into the player import.
+"""Reading a tournament's registered players from a saved copy of its public
+CricHeroes Teams page (spec §9.1), uploaded with the player import.
 
-No test reaches cricheroes.com: the page is built here in the shape the live
-one had on 6 Nov 2026 -- Next.js flight chunks carrying a `teamResponse`.
+The page is built here in the shape the live one had on 6 Nov 2026: Next.js
+flight chunks carrying `tournamentDetails` and `teamResponse`.
 """
 
 import json
 
-import httpx
 import pytest
 from test_cricheroes_player_import import (  # noqa: F401  (fixtures)
     CH_TOURNAMENT,
@@ -26,13 +25,11 @@ from test_cricheroes_player_import import (  # noqa: F401  (fixtures)
 
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player
-from app.services.cricheroes_errors import CricHeroesTransportError
 from app.services.cricheroes_roster import RosterPlayer, fetch_roster
 from app.services.cricheroes_teams_page import (
-    USER_AGENT,
-    CricHeroesPageError,
-    parse_teams_page,
-    read_registered_players,
+    MAX_PAGE_BYTES,
+    TeamsPageError,
+    read_saved_teams_page,
     teams_page_url,
 )
 
@@ -58,11 +55,15 @@ TEAMS = [
 ]
 
 
-def page(teams=TEAMS, *, response=None) -> str:
-    """A Teams page: the team list split across two flight chunks, as the
-    live page splits its data, among unrelated scripts."""
+def page(teams=TEAMS, *, response=None, tournament_id=CH_TOURNAMENT) -> str:
+    """A saved Teams page: the tournament's details, then its team list split
+    across two flight chunks as the live page splits its data."""
     response = response if response is not None else {"status": True, "data": teams}
-    payload = '11:["$","$L24",null,{"teamResponse":' + json.dumps(response) + "}]\n"
+    details = {"status": True, "data": {"tournament_id": tournament_id, "name": "T"}}
+    payload = (
+        '5:["$","$L1f",null,{"tournamentDetails":' + json.dumps(details) + "}]\n"
+        '11:["$","$L24",null,{"teamResponse":' + json.dumps(response) + "}]\n"
+    )
     half = len(payload) // 2
 
     def chunk(text: str) -> str:
@@ -77,11 +78,15 @@ def page(teams=TEAMS, *, response=None) -> str:
     )
 
 
-# -- parsing ------------------------------------------------------------------
+def upload(html: str) -> dict:
+    return {"teams_page": ("teams.html", html.encode(), "text/html")}
+
+
+# -- reading the page ---------------------------------------------------------
 
 
 def test_every_registered_player_is_read_without_the_placeholder():
-    players = parse_teams_page(page())
+    players = read_saved_teams_page(page(), CH_TOURNAMENT)
 
     assert players == [
         RosterPlayer(101, "Rohit Sharma", "India"),
@@ -96,74 +101,54 @@ def test_a_player_listed_twice_is_kept_under_their_first_team():
         {"team_name": "Titans", "players": [{"player_id": 1, "player_name": "A"}]},
     ]
 
-    assert parse_teams_page(page(teams)) == [RosterPlayer(1, "A", "India")]
+    assert read_saved_teams_page(page(teams), CH_TOURNAMENT) == [
+        RosterPlayer(1, "A", "India")
+    ]
 
 
 def test_a_tournament_with_no_teams_yet_has_nobody():
-    assert parse_teams_page(page([])) == []
+    assert read_saved_teams_page(page([]), CH_TOURNAMENT) == []
+
+
+def test_another_tournaments_page_is_refused_naming_both():
+    with pytest.raises(TeamsPageError) as raised:
+        read_saved_teams_page(page(tournament_id=999), CH_TOURNAMENT)
+
+    assert "999" in str(raised.value) and str(CH_TOURNAMENT) in str(raised.value)
 
 
 @pytest.mark.parametrize(
     "html",
     [
-        "<html>Tournament not found</html>",
+        "<html>Some other file</html>",
         page(response={"status": False, "data": None}),
         page(response={"status": False, "data": []}),
         page(response={"data": []}),
         page([{"team_name": "India"}]),
         page([{"team_name": "India", "players": [{"player_name": "No id"}]}]),
+        page().replace("tournamentDetails", "somethingElse"),
+        page().replace("teamResponse", "somethingElse"),
     ],
     ids=[
-        "no-team-list",
+        "not-a-cricheroes-page",
         "no-data",
         "failed-with-empty-data",
         "no-status",
         "team-without-players",
         "player-without-id",
+        "no-tournament",
+        "no-team-list",
     ],
 )
 def test_a_page_we_cannot_read_raises_rather_than_returning_nobody(html):
-    with pytest.raises(CricHeroesPageError):
-        parse_teams_page(html, url="u")
+    with pytest.raises(TeamsPageError):
+        read_saved_teams_page(html, CH_TOURNAMENT)
 
 
-# -- fetching -----------------------------------------------------------------
-
-
-async def test_the_page_is_fetched_naming_our_app():
-    seen = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(200, text=page())
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        players = await read_registered_players(
-            CH_TOURNAMENT, client=http, base_url="https://web.test"
-        )
-
-    assert len(players) == 3
-    [request] = seen
-    assert str(request.url) == teams_page_url(CH_TOURNAMENT, "https://web.test")
-    assert request.headers["User-Agent"] == USER_AGENT
-
-
-async def test_a_refused_page_raises_with_its_status():
-    transport = httpx.MockTransport(lambda request: httpx.Response(403, text="no"))
-    async with httpx.AsyncClient(transport=transport) as http:
-        with pytest.raises(CricHeroesPageError) as raised:
-            await read_registered_players(CH_TOURNAMENT, client=http)
-
-    assert raised.value.status_code == 403 and "HTTP 403" in str(raised.value)
-
-
-async def test_an_unreachable_page_is_a_transport_error():
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("down", request=request)
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        with pytest.raises(CricHeroesTransportError):
-            await read_registered_players(CH_TOURNAMENT, client=http)
+def test_the_page_to_save_is_named_by_tournament():
+    assert teams_page_url(CH_TOURNAMENT) == (
+        "https://cricheroes.com/tournament/2242502/teams/teams"
+    )
 
 
 # -- merged into the roster ---------------------------------------------------
@@ -200,7 +185,7 @@ async def test_before_the_first_match_the_registered_players_are_the_roster(
     roster = await fetch_roster(
         upstream_client(upstream),
         CH_TOURNAMENT,
-        registered=parse_teams_page(page()),
+        registered=read_saved_teams_page(page(), CH_TOURNAMENT),
         sleep=_no_sleep,
     )
 
@@ -213,16 +198,19 @@ async def test_before_the_first_match_the_registered_players_are_the_roster(
 UPCOMING_ONLY = [match(1, "2026-11-16", type=2, status="upcoming")]
 
 
-async def test_a_tournament_not_started_imports_its_registered_players(client, serve):
-    serve(UPCOMING_ONLY, {}, registered=parse_teams_page(page()))
+async def test_an_uploaded_page_imports_a_tournament_not_started(client, serve):
+    serve(UPCOMING_ONLY, {})
 
-    preview = (await client.post(IMPORT)).json()
+    preview = (await client.post(IMPORT, files=upload(page()))).json()
     assert (preview["registered_players"], preview["registered_teams"]) == (3, 2)
     assert preview["created"] == 3 and preview["cricheroes_calls"] == 1
 
-    response = await client.post(IMPORT, params={"dry_run": "false"})
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(page())
+    )
 
     assert response.status_code == 200, response.text
+    assert response.json()["reused_preview"] is True
     players = await _players()
     assert set(players) == {"Rohit Sharma", "Jasprit Bumrah", "Shubman Gill"}
     assert players["Shubman Gill"].team == "Titans"
@@ -233,14 +221,22 @@ async def test_a_tournament_not_started_imports_its_registered_players(client, s
     assert log.details["registered_teams"] == 2
 
 
+async def test_without_an_upload_the_squads_alone_are_read(client, serve):
+    serve()
+
+    body = (await client.post(IMPORT)).json()
+
+    assert body["registered_players"] == 0 and body["created"] == 5
+
+
 async def test_a_tournament_without_fixtures_imports_its_registered_players(
     client, serve
 ):
     """CricHeroes answer 170011 while a tournament has no fixtures yet. With
     registered players that is no matches to read, not a failure."""
-    serve(matches=NO_MATCHES, squads={}, registered=parse_teams_page(page()))
+    serve(matches=NO_MATCHES, squads={})
 
-    response = await client.post(IMPORT)
+    response = await client.post(IMPORT, files=upload(page()))
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -250,29 +246,33 @@ async def test_a_tournament_without_fixtures_imports_its_registered_players(
 async def test_without_registered_players_a_missing_match_list_is_still_a_404(
     client, serve
 ):
-    serve(matches=NO_MATCHES, registered=[])
+    serve(matches=NO_MATCHES)
 
     assert (await client.post(IMPORT)).status_code == 404
 
 
-async def test_an_import_that_reuses_its_preview_does_not_read_the_page_again(
-    client, serve
-):
-    upstream = serve(UPCOMING_ONLY, {}, registered=parse_teams_page(page()))
+@pytest.mark.parametrize(
+    "html",
+    ["<html>not it</html>", page(tournament_id=999)],
+    ids=["unreadable", "another-tournament"],
+)
+async def test_a_bad_upload_is_a_422_before_any_api_call(client, serve, html):
+    upstream = serve()
 
-    await client.post(IMPORT)
-    response = await client.post(IMPORT, params={"dry_run": "false"})
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(html)
+    )
 
-    assert response.json()["reused_preview"] is True
-    assert upstream.teams_page_reads == [CH_TOURNAMENT]
-
-
-async def test_an_unreadable_page_fails_the_search_before_any_api_call(client, serve):
-    upstream = serve(registered=CricHeroesPageError("u", "has no team list."))
-
-    response = await client.post(IMPORT, params={"dry_run": "false"})
-
-    assert response.status_code == 502
-    assert "Teams page" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "uploaded" in response.json()["detail"]
     assert upstream.paths == []
     assert await Player.find_all().count() == 0
+
+
+async def test_an_oversized_upload_is_refused(client, serve):
+    upstream = serve()
+
+    response = await client.post(IMPORT, files=upload("x" * (MAX_PAGE_BYTES + 1)))
+
+    assert response.status_code == 422
+    assert upstream.paths == []
