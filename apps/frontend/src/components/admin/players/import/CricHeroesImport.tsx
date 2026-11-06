@@ -15,9 +15,10 @@ interface CricHeroesImportProps {
 }
 
 /**
- * Adds a CricHeroes tournament's players to this tournament. CricHeroes have
- * no player list per tournament, so the backend reads the playing squad of
- * every match played so far (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9.1).
+ * Adds a CricHeroes tournament's players to this tournament. The API has no
+ * player list per tournament, so the backend reads the registered teams off
+ * the tournament's public Teams page, then the playing squad of every match
+ * played so far (docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9.1).
  * Platform admins only: every search spends the shared yearly call allowance.
  */
 export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
@@ -41,10 +42,11 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
           Import from CricHeroes
         </h3>
         <p className="text-sm text-text-muted mb-4">
-          Adds everyone named in a playing squad of the tournament&apos;s
-          matches so far. Players already here with the same name are given
-          their CricHeroes ID, and their prices, slots and points are not
-          changed. New players start with a price of 0.
+          Adds everyone registered to a team of the tournament on CricHeroes,
+          and anyone else named in a playing squad of its matches so far.
+          Players already here with the same name are given their CricHeroes ID,
+          and their prices, slots and points are not changed. New players start
+          with a price of 0.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-2">
@@ -80,8 +82,8 @@ export function CricHeroesImport({ onDone }: CricHeroesImportProps) {
         </div>
         <p className="text-xs text-text-muted mt-2">
           Each search uses 1 CricHeroes call plus 1 per match played, from the
-          yearly allowance. Importing within 10 minutes of a search uses what it
-          found, at no extra cost.
+          yearly allowance; reading the registered teams is free. Importing
+          within 10 minutes of a search uses what it found, at no extra cost.
         </p>
 
         {error && (
@@ -153,6 +155,8 @@ function RosterResult({ result }: { result: RosterImportResponse }) {
   return (
     <div className="mt-4 space-y-4">
       <p className="text-sm text-text-main">
+        {result.registered_players > 0 &&
+          `${result.registered_players} players registered in ${result.registered_teams} teams. `}
         Read the squads of {result.matches_read} of {result.matches_listed}{" "}
         matches
         {result.upcoming_matches > 0 &&
@@ -234,9 +238,8 @@ function noPlayersReason(result: RosterImportResponse): string {
     );
   }
   return (
-    "No players found. CricHeroes only list a player once they are named in " +
-    "a match's playing squad, so before the first match there is nobody to " +
-    "import."
+    "No players found: no team of this tournament has registered players " +
+    "on CricHeroes yet, and no match has been played."
   );
 }
 

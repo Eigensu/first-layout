@@ -1,13 +1,19 @@
 """Bring a CricHeroes tournament's players into one of our tournaments.
 
 docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §9.1. CricHeroes have no roster
-endpoint and will not add one (§13.11), so the players are collected from the
-playing squad of every match the tournament has played: one call for the match
-list, then one per match.
+endpoint and will not add one (§13.11), so the players come from two places:
+
+- the tournament's public Teams page on cricheroes.com, which lists every
+  registered team and player before a ball is bowled, at no API cost
+  (`cricheroes_teams_page`, read by the caller and passed in as `registered`);
+- the playing squad of every match the tournament has played: one API call
+  for the match list, then one per match. These add anyone who played without
+  being registered, and file a player who changed sides under their latest team.
 
 Three steps, kept apart so each can be tested on its own:
 
-- `fetch_roster` calls CricHeroes and returns who played, for which team;
+- `fetch_roster` calls CricHeroes and returns who is registered or played,
+  for which team;
 - `plan_import` compares that with the players already in our tournament and
   decides, per player, what to do -- it touches nothing;
 - `apply_plan` writes the plan.
@@ -29,7 +35,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from app.models.admin.player import Player
 from app.schemas.cricheroes import SquadTeam, TournamentMatch
@@ -89,6 +95,10 @@ class Roster:
     matches_read: int
     matches_without_squad: int
     calls: int
+    # Read from the public Teams page: players registered (placeholders left
+    # out), and the teams they are registered to.
+    registered_players: int = 0
+    registered_teams: int = 0
 
     @property
     def teams(self) -> List[str]:
@@ -116,20 +126,24 @@ async def fetch_roster(
     client: CricHeroesClient,
     tournament_id: int,
     *,
+    registered: Sequence[RosterPlayer] = (),
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     deadline: float = ROSTER_DEADLINE_SECONDS,
 ) -> Roster:
-    """Everyone named in a playing squad of the tournament's played matches.
+    """Everyone `registered` to a team, plus everyone named in a playing squad
+    of the tournament's played matches.
 
     Matches are read newest first, so a player who changed sides during the
-    tournament is filed under the team they played for last. A match
+    tournament is filed under the team they played for last; a squad's team
+    wins over the registered one for the same reason. A match
     CricHeroes have no squad for is counted and passed over; any other failure
     (credentials, rate limit, timeout, another refusal) propagates and nothing
     is returned.
     """
     try:
         return await asyncio.wait_for(
-            _fetch_roster(client, tournament_id, sleep), timeout=deadline
+            _fetch_roster(client, tournament_id, registered, sleep),
+            timeout=deadline,
         )
     except asyncio.TimeoutError as exc:
         raise CricHeroesTransportError(
@@ -141,6 +155,7 @@ async def fetch_roster(
 async def _fetch_roster(
     client: CricHeroesClient,
     tournament_id: int,
+    registered: Sequence[RosterPlayer],
     sleep: Callable[[float], Awaitable[None]],
 ) -> Roster:
     matches = await client.get_tournament_match_list(tournament_id)
@@ -168,6 +183,8 @@ async def _fetch_roster(
                         team=team.team_name,
                     ),
                 )
+    for member in registered:
+        players.setdefault(member.player_id, member)
 
     return Roster(
         players=list(players.values()),
@@ -176,6 +193,8 @@ async def _fetch_roster(
         matches_read=len(played) - without_squad,
         matches_without_squad=without_squad,
         calls=1 + len(played),
+        registered_players=len(registered),
+        registered_teams=len({member.team for member in registered}),
     )
 
 
