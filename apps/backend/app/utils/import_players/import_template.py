@@ -222,6 +222,21 @@ def _cell_value(value: Any) -> Any:
     return value
 
 
+def _write_literal(ws: Any, row: int, column: int, value: Any) -> None:
+    """Write a stored value as data, never as a formula.
+
+    openpyxl treats any string starting with "=" as a formula, so a player
+    named '=HYPERLINK(...)' -- which an admin's import accepts as plain text --
+    would become a live formula in the admin's spreadsheet. Typing the cell as
+    a string keeps the text exactly as stored, so it still imports back
+    unchanged.
+    """
+    cell = ws.cell(row=row, column=column)
+    cell.value = value
+    if isinstance(value, str):
+        cell.data_type = "s"
+
+
 async def generate_xlsx_export(
     players: Iterable[Any],
     slots: Iterable[Any],
@@ -256,8 +271,9 @@ async def generate_xlsx_export(
 
     header_style = ws.cell(row=1, column=1)
     for offset, key in enumerate(extra_stats):
-        cell = ws.cell(row=1, column=len(TEMPLATE_HEADERS) + 1 + offset)
-        cell.value = key  # type: ignore[assignment]
+        column = len(TEMPLATE_HEADERS) + 1 + offset
+        _write_literal(ws, 1, column, key)
+        cell = ws.cell(row=1, column=column)
         cell.fill = copy(header_style.fill)
         cell.font = copy(header_style.font)
         cell.alignment = copy(header_style.alignment)
@@ -282,7 +298,7 @@ async def generate_xlsx_export(
             *(_cell_value(stats.get(key)) for key in extra_stats),
         ]
         for col_idx, value in enumerate(row, start=1):
-            ws.cell(row=row_idx, column=col_idx).value = value
+            _write_literal(ws, row_idx, col_idx, value)
 
     ws.freeze_panes = "A2"
     _add_instructions_sheet(wb)

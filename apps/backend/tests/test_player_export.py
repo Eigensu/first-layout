@@ -86,3 +86,22 @@ async def test_a_slot_from_another_tournament_is_written_blank(db):
 
     assert rows[0]["slot_code"] is None
     assert rows[0]["slot_name"] is None
+
+
+async def test_formula_like_text_is_written_as_text(db):
+    """A name or stat that looks like a formula must not run when the admin
+    opens the export, and must still import back as the same text."""
+    payload = '=HYPERLINK("http://evil.example","click")'
+    player = Player(
+        name=payload, team="=1+1", stats={"mobile": "=2+2", "=note": "=3+3"}
+    )
+
+    ws = load_workbook(await generate_xlsx_export([player], []))["Players"]
+
+    cells = [c for c in ws[2] if isinstance(c.value, str)] + [
+        c for c in ws[1] if c.value == "=note"
+    ]
+    assert cells and all(c.data_type == "s" for c in cells)
+    _, rows = await _export([player], [])
+    assert rows[0]["name"] == payload
+    assert rows[0]["team"] == "=1+1"
