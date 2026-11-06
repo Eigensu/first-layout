@@ -65,6 +65,12 @@ UPCOMING_STATUS = "upcoming"
 # a tournament outside our agreement -- must fail the import, not shrink it.
 NO_SQUAD_CODES = frozenset({SQUAD_NOT_FOUND_CODE, MATCH_NOT_FOUND_CODE})
 
+# The match list's documented "Tournament match list is not found!": a
+# tournament whose fixtures are not drawn up yet. With registered players from
+# the Teams page that is simply no matches to read; without them it stays an
+# error, as before, since then there is nothing to import at all.
+NO_MATCH_LIST_CODE = "170011"
+
 # Squads are read a few at a time, with a pause between starts: at most 20
 # calls a second, well under CricHeroes' 50 -- a 429 is charged like a
 # success (§6.5). The whole roster has a deadline, so a slow upstream fails
@@ -158,7 +164,12 @@ async def _fetch_roster(
     registered: Sequence[RosterPlayer],
     sleep: Callable[[float], Awaitable[None]],
 ) -> Roster:
-    matches = await client.get_tournament_match_list(tournament_id)
+    try:
+        matches = await client.get_tournament_match_list(tournament_id)
+    except CricHeroesAPIError as exc:
+        if not (registered and str(exc.code) == NO_MATCH_LIST_CODE):
+            raise
+        matches = []
     played = [
         match
         for match in matches

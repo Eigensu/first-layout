@@ -139,7 +139,9 @@ def _team_list(html: str, url: str) -> List[Any]:
             url, f"has a team list that is not valid JSON: {exc}"
         ) from exc
 
-    teams = response.get("data") if isinstance(response, dict) else None
+    # A failed answer can still carry `data: []`; that is not "no teams".
+    ok = isinstance(response, dict) and response.get("status") is True
+    teams = response.get("data") if ok else None
     if not isinstance(teams, list):
         raise CricHeroesPageError(
             url, f"has an unexpected team list: {response!r:.200}"

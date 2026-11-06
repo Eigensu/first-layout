@@ -781,7 +781,11 @@ paginates (§13.8).
 nobody until a squad is named, but the Teams page lists everyone teams have
 registered, so a pool needed before the tournament starts (an auction, say)
 can come from this import. The sheet import is still the way to set prices,
-slots and anything CricHeroes do not have.
+slots and anything CricHeroes do not have. A tournament whose fixtures are not drawn up yet
+answers the match list with 170011 ("Tournament match list is not found!");
+when the Teams page found registered players that counts as no matches, and
+the import goes ahead with them. Without registered players it is still the
+404 it was.
 
 **What it decides, per CricHeroes player** (`plan_import`, which writes
 nothing):

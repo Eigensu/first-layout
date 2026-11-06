@@ -13,6 +13,7 @@ from test_cricheroes_player_import import (  # noqa: F401  (fixtures)
     CH_TOURNAMENT,
     IMPORT,
     MATCHES,
+    NO_MATCHES,
     SQUADS,
     CricHeroes,
     _forget_previews,
@@ -107,10 +108,19 @@ def test_a_tournament_with_no_teams_yet_has_nobody():
     [
         "<html>Tournament not found</html>",
         page(response={"status": False, "data": None}),
+        page(response={"status": False, "data": []}),
+        page(response={"data": []}),
         page([{"team_name": "India"}]),
         page([{"team_name": "India", "players": [{"player_name": "No id"}]}]),
     ],
-    ids=["no-team-list", "no-data", "team-without-players", "player-without-id"],
+    ids=[
+        "no-team-list",
+        "no-data",
+        "failed-with-empty-data",
+        "no-status",
+        "team-without-players",
+        "player-without-id",
+    ],
 )
 def test_a_page_we_cannot_read_raises_rather_than_returning_nobody(html):
     with pytest.raises(CricHeroesPageError):
@@ -220,6 +230,29 @@ async def test_a_tournament_not_started_imports_its_registered_players(client, s
     assert players["Shubman Gill"].price == 0.0
     [log] = await AdminActionLog.find_all().to_list()
     assert log.details["registered_players"] == 3
+    assert log.details["registered_teams"] == 2
+
+
+async def test_a_tournament_without_fixtures_imports_its_registered_players(
+    client, serve
+):
+    """CricHeroes answer 170011 while a tournament has no fixtures yet. With
+    registered players that is no matches to read, not a failure."""
+    serve(matches=NO_MATCHES, squads={}, registered=parse_teams_page(page()))
+
+    response = await client.post(IMPORT)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["matches_listed"], body["created"]) == (0, 3)
+
+
+async def test_without_registered_players_a_missing_match_list_is_still_a_404(
+    client, serve
+):
+    serve(matches=NO_MATCHES, registered=[])
+
+    assert (await client.post(IMPORT)).status_code == 404
 
 
 async def test_an_import_that_reuses_its_preview_does_not_read_the_page_again(

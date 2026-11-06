@@ -360,6 +360,7 @@ async def import_tournament_players(
                         "already_linked": counts.already_linked,
                         "skipped": counts.skipped,
                         "registered_players": roster.registered_players,
+                        "registered_teams": roster.registered_teams,
                         "cricheroes_calls": calls,
                         "reused_preview": reused_preview,
                     },
