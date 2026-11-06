@@ -11,10 +11,11 @@ from openpyxl import load_workbook
 
 from app.models.admin.player import Player
 from app.models.admin.slot import Slot
-from app.utils.import_players.import_parsers import normalize_header
+from app.utils.import_players.import_parsers import normalize_header, parse_xlsx
 from app.utils.import_players.import_template import (
     TEMPLATE_HEADERS,
     generate_xlsx_export,
+    generate_xlsx_template,
 )
 from app.utils.import_players.import_validators import validate_player_row
 
@@ -105,3 +106,39 @@ async def test_formula_like_text_is_written_as_text(db):
     _, rows = await _export([player], [])
     assert rows[0]["name"] == payload
     assert rows[0]["team"] == "=1+1"
+
+
+async def test_a_stat_named_like_a_column_is_not_exported(db):
+    """parse_xlsx normalizes headers, so a stat "Team" would read back as a
+    second team column and overwrite the player's real team."""
+    players = [
+        Player(name="A", team="Real XI", stats={"Team": "Wrong XI", "Run Rate": 7}),
+        Player(name="B", team="Real XI", stats={"run_rate": 8, "Slot Code": "X"}),
+        Player(name="C", team="Real XI", stats={"cricheroes_id": 1, "_hidden": 2}),
+    ]
+
+    headers, rows = parse_xlsx(await generate_xlsx_export(players, []))
+
+    assert headers == [normalize_header(h) for h in TEMPLATE_HEADERS] + ["run_rate"]
+    assert [r["team"] for r in rows] == ["Real XI"] * 3
+    assert [r["run_rate"] for r in rows] == [7, None, None]
+
+
+async def test_formula_like_text_reads_back_through_the_importer(db):
+    player = Player(name="=1+1", team="X", stats={"note": "=2+2"})
+
+    _, rows = parse_xlsx(await generate_xlsx_export([player], []))
+
+    assert rows[0]["name"] == "=1+1"
+    assert rows[0]["note"] == "=2+2"
+
+
+async def test_the_export_does_not_say_to_delete_an_example_row(db):
+    wb = load_workbook(await generate_xlsx_export([Player(name="A", team="X")], []))
+    text = [c.value for c in wb["Instructions"]["A"] if c.value]
+
+    assert not any("example row" in t for t in text)
+    assert any("Update" in t for t in text)
+    # The blank template still has its example row, and still says so.
+    template = load_workbook(await generate_xlsx_template())["Instructions"]
+    assert any("example row" in (c.value or "") for c in template["A"])

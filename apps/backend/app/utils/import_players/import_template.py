@@ -9,6 +9,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from app.utils.import_players.import_parsers import normalize_header
+from app.utils.import_players.import_validators import CRICHEROES_ID_COLUMNS
+
 # Define standard columns
 TEMPLATE_COLUMNS = [
     "name",
@@ -153,11 +156,25 @@ def _new_players_workbook(slot_codes: Optional[list[str]]) -> tuple[Workbook, An
     return wb, ws
 
 
-def _add_instructions_sheet(wb: Workbook) -> None:
+# Advice that only fits the blank template. An export has no example row, so
+# telling the admin to delete one would cost them their first real player.
+_TEMPLATE_ONLY_TIPS = {"• Delete the example row before importing"}
+
+EXPORT_TIPS = [
+    ("• To update these players, import this file with 'Update' on conflict", False),
+]
+
+
+def _add_instructions_sheet(wb: Workbook, *, for_export: bool = False) -> None:
     instructions = wb.create_sheet("Instructions")
     instructions.column_dimensions["A"].width = 80
 
-    for row_idx, (text, bold) in enumerate(INSTRUCTION_TEXT, start=1):
+    lines = INSTRUCTION_TEXT
+    if for_export:
+        lines = [line for line in lines if line[0] not in _TEMPLATE_ONLY_TIPS]
+        lines += EXPORT_TIPS
+
+    for row_idx, (text, bold) in enumerate(lines, start=1):
         cell = instructions.cell(row=row_idx, column=1)
         cell.value = text
         if bold:
@@ -213,6 +230,11 @@ async def generate_xlsx_template(slot_codes: Optional[list[str]] = None) -> Bina
 # every column it does not otherwise know as a stat (extract_stats).
 _STATS_COLUMNS = ("mobile", "matches", "runs", "wickets")
 
+# Every header the importer gives a meaning of its own, so no stat column may
+# read back as one of them: the template's columns plus the aliases
+# validate_player_row also accepts.
+_RESERVED_IMPORT_COLUMNS = (*TEMPLATE_COLUMNS, "image", *CRICHEROES_ID_COLUMNS)
+
 
 def _cell_value(value: Any) -> Any:
     """A stat as a cell. Nested values have no column shape and are left out
@@ -258,16 +280,22 @@ async def generate_xlsx_export(
     wb, ws = _new_players_workbook([slot.code for slot in slots][:50])
 
     players = list(players)
+    # The importer reads headers through normalize_header, so a stat column is
+    # only safe if its normalized key is new: a stat called "Team" would read
+    # back as a second team column and overwrite the real one, and "Run Rate"
+    # next to "run_rate" would collide with each other. Such stats are left
+    # out; keys starting with "_" are too, since extract_stats drops them.
+    taken = {normalize_header(c) for c in _RESERVED_IMPORT_COLUMNS}
     extra_stats: list[str] = []
     for player in players:
         for key, value in (player.stats or {}).items():
-            if (
-                key not in _STATS_COLUMNS
-                and key not in TEMPLATE_COLUMNS
-                and key not in extra_stats
-                and _cell_value(value) is not None
-            ):
-                extra_stats.append(key)
+            if key in extra_stats or _cell_value(value) is None:
+                continue
+            normalized = normalize_header(str(key))
+            if not normalized or normalized.startswith("_") or normalized in taken:
+                continue
+            taken.add(normalized)
+            extra_stats.append(key)
 
     header_style = ws.cell(row=1, column=1)
     for offset, key in enumerate(extra_stats):
@@ -301,7 +329,7 @@ async def generate_xlsx_export(
             _write_literal(ws, row_idx, col_idx, value)
 
     ws.freeze_panes = "A2"
-    _add_instructions_sheet(wb)
+    _add_instructions_sheet(wb, for_export=True)
     return _to_bytes(wb)
 
 
