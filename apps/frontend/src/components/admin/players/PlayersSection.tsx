@@ -2,7 +2,15 @@
 
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Search, Plus, Loader2, AlertCircle, Upload, X } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Loader2,
+  AlertCircle,
+  Upload,
+  Download,
+  X,
+} from "lucide-react";
 import { PlayerImport } from "./import/PlayerImport";
 import { PlayerTableRow } from "./PlayerTableRow";
 import { Pagination } from "./Pagination";
@@ -26,11 +34,13 @@ export function PlayersSection() {
     slotOptions,
     showImport,
     deletingAll,
+    exporting,
     setSearchQuery,
     setStatusFilter,
     setPage,
     handleDelete,
     handleDeleteAllPlayers,
+    handleExportPlayers,
     openImport,
     closeImport,
     handleImportSuccess,
@@ -83,6 +93,19 @@ export function PlayersSection() {
                 disabled={deletingAll}
               >
                 {deletingAll ? "Deleting All..." : "Delete All Players"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleExportPlayers}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                Export
               </Button>
               <Button variant="secondary" size="sm" onClick={openImport}>
                 <Upload className="w-4 h-4 mr-2" />

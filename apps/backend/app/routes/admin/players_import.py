@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 
 from app.models.admin.import_log import ImportLog
+from app.models.admin.player import Player
 from app.models.admin.slot import Slot
 from app.models.user import User
 from app.schemas.admin.player_import import (
@@ -17,6 +18,7 @@ from app.services.player_import.import_service import PlayerImportService
 from app.utils.dependencies import get_tournament_admin
 from app.utils.import_players.import_template import (
     generate_csv_template,
+    generate_xlsx_export,
     generate_xlsx_template,
 )
 from app.utils.tenant import TenantId, get_tenant, scoped
@@ -63,6 +65,29 @@ async def get_template(
                 "Content-Disposition": f"attachment; filename=players_import_template.csv"
             },
         )
+
+
+@router.get("/export")
+async def export_players(
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
+):
+    """
+    Download every player in this tournament as an Excel file in the import
+    template's format, so it can be edited and imported back.
+    """
+    players = (
+        await scoped(Player, tournament_id).sort(+Player.team, +Player.name).to_list()
+    )
+    slots = await scoped(Slot, tournament_id).to_list()
+
+    export_file = await generate_xlsx_export(players, slots)
+
+    return StreamingResponse(
+        export_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=players_export.xlsx"},
+    )
 
 
 @router.post("", response_model=ImportResponse)

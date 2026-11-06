@@ -749,6 +749,21 @@ async def test_the_import_template_lists_this_tournaments_slots(world, client):
     assert response.status_code == 200, response.text
 
 
+async def test_the_player_export_holds_only_this_tournaments_players(world, client):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    response = await client.get("/api/admin/players/import/export", headers=ALPHA)
+
+    assert response.status_code == 200, response.text
+    ws = load_workbook(BytesIO(response.content))["Players"]
+    names = [row[0] for row in ws.iter_rows(min_row=2, values_only=True)]
+    assert sorted(names) == ["alpha keeper", "alpha star"]
+    # The slot id is written back as alpha's slot code and name.
+    assert [c.value for c in ws[2]][4:6] == ["BAT", "alpha batters"]
+
+
 # --- settings ---------------------------------------------------------------
 
 

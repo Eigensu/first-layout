@@ -16,6 +16,7 @@ export function usePlayersSection() {
   const [slotOptions, setSlotOptions] = useState<SlotOption[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const pageSize = 10;
   const totalPages = Math.ceil(totalPlayers / pageSize);
@@ -102,6 +103,27 @@ export function usePlayersSection() {
     }
   };
 
+  // Download every player as an Excel file in the import template's format
+  const handleExportPlayers = async () => {
+    try {
+      setExporting(true);
+      const { blob, filename } = await playersApi.exportPlayers();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Error exporting players:", err);
+      alert("Failed to export players");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Open/close import modal
   const openImport = () => setShowImport(true);
   const closeImport = () => setShowImport(false);
@@ -161,6 +183,7 @@ export function usePlayersSection() {
     slotOptions,
     showImport,
     deletingAll,
+    exporting,
 
     // Actions
     setSearchQuery,
@@ -168,6 +191,7 @@ export function usePlayersSection() {
     setPage,
     handleDelete,
     handleDeleteAllPlayers,
+    handleExportPlayers,
     openImport,
     closeImport,
     handleImportSuccess,
