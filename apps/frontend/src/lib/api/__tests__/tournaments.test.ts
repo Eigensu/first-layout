@@ -6,7 +6,7 @@ import { getMyTournaments, type MyTournaments } from '../tournaments';
 import {
   formatPoints,
   tournamentLink,
-} from '@/components/dashboard/myTournaments';
+} from '@/components/profile/myTournaments';
 
 afterEach(() => {
   vi.restoreAllMocks();

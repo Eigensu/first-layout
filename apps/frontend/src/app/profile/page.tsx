@@ -12,10 +12,12 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE_URL, LS_KEYS, tenantHeaders } from "@/common/consts";
+import { LS_KEYS } from "@/common/consts";
+import { authApi } from "@/lib/api/auth";
+import { parseApiError } from "@/utils/errors";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
 import { getMyTournaments, type MyTournaments } from "@/lib/api/tournaments";
-import { MyTournamentsSection } from "@/components/dashboard/MyTournamentsSection";
+import { MyTournamentsSection } from "@/components/profile/MyTournamentsSection";
 import { getImageUrl } from "@/lib/utils";
 import {
   publicContestsApi,
@@ -24,7 +26,7 @@ import {
 } from "@/lib/api/public/contests";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
-import { ChangeEmailSection } from "@/components/dashboard/ChangeEmailSection";
+import { ChangeEmailSection } from "@/components/profile/ChangeEmailSection";
 import { getResetChannels } from "@/lib/api/emailCodes";
 
 type PastContestSummary = {
@@ -94,7 +96,7 @@ function ProfileContent() {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
-    const loadDashboardData = async () => {
+    const loadProfileData = async () => {
       setIsLoadingData(true);
       setLoadError(null);
 
@@ -200,11 +202,11 @@ function ProfileContent() {
       }
     };
 
-    loadDashboardData();
+    loadProfileData();
   }, [isAuthenticated, user]);
 
   // Apart from the load above, so a slow /me/tournaments never holds the rest
-  // of the dashboard behind its loading screen. A backend without memberships
+  // of the profile behind its loading screen. A backend without memberships
   // (a single-tournament one, or one from before them) leaves the section out.
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -264,48 +266,47 @@ function ProfileContent() {
       return;
     }
 
-    const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN);
-    if (!token) {
-      setPasswordError("Session expired. Please log in again.");
-      return;
-    }
-
     try {
       setIsChangingPassword(true);
-      const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          ...tenantHeaders(),
-        },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-          confirm_password: confirmPassword,
-        }),
+      await authApi.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
       });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail =
-          typeof data?.detail === "string"
-            ? data.detail
-            : "Failed to change password. Please try again.";
-        setPasswordError(detail);
-        return;
-      }
 
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setPasswordSuccess("Password changed successfully.");
-    } catch {
-      setPasswordError("Network error while changing password.");
+    } catch (error) {
+      setPasswordError(
+        parseApiError(error, "Failed to change password. Please try again."),
+      );
     } finally {
       setIsChangingPassword(false);
     }
   };
+
+  const statTiles = [
+    {
+      label: "Total Teams",
+      value: teams.length,
+      className: "border border-border-subtle bg-bg-elevated text-text-main",
+      labelClassName: "text-text-muted",
+    },
+    {
+      label: "Past Teams",
+      value: pastTeams.length,
+      className: "bg-bg-chip text-text-main",
+      labelClassName: "text-text-muted",
+    },
+    {
+      label: "Past Contests",
+      value: pastContests.length,
+      className: "bg-gradient-brand text-white",
+      labelClassName: "text-white/80",
+    },
+  ];
 
   const profileRows = [
     { label: "User ID", value: user?.id || "-" },
@@ -355,58 +356,22 @@ function ProfileContent() {
               </div>
             </div>
 
-            <div className="sm:hidden grid grid-cols-3 gap-2 text-center">
-              <div className="min-w-0 rounded-2xl border border-border-subtle bg-bg-elevated text-text-main px-2 py-2">
-                <div className="text-lg font-black leading-none">
-                  {teams.length}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+              {statTiles.map((tile) => (
+                <div
+                  key={tile.label}
+                  className={`min-w-0 rounded-2xl px-2 py-2 sm:px-4 sm:py-3 ${tile.className}`}
+                >
+                  <div className="text-lg sm:text-xl font-black leading-none sm:leading-normal">
+                    {tile.value}
+                  </div>
+                  <div
+                    className={`mt-1 sm:mt-0 text-[10px] sm:text-xs uppercase tracking-wide leading-tight ${tile.labelClassName}`}
+                  >
+                    {tile.label}
+                  </div>
                 </div>
-                <div className="mt-1 text-[10px] uppercase tracking-wide text-text-muted leading-tight">
-                  Total Teams
-                </div>
-              </div>
-              <div className="min-w-0 rounded-2xl bg-bg-chip text-text-main px-2 py-2">
-                <div className="text-lg font-black leading-none">
-                  {pastTeams.length}
-                </div>
-                <div className="mt-1 text-[10px] uppercase tracking-wide text-text-muted leading-tight">
-                  Past Teams
-                </div>
-              </div>
-              <div className="min-w-0 rounded-2xl bg-gradient-brand text-white px-2 py-2">
-                <div className="text-lg font-black leading-none">
-                  {pastContests.length}
-                </div>
-                <div className="mt-1 text-[10px] uppercase tracking-wide text-white/80 leading-tight">
-                  Past Contests
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden sm:grid grid-cols-3 gap-2 sm:gap-3 text-center">
-              <div className="rounded-2xl border border-border-subtle bg-bg-elevated text-text-main px-3 py-2 sm:px-4 sm:py-3">
-                <div className="text-lg sm:text-xl font-black">
-                  {teams.length}
-                </div>
-                <div className="text-[11px] sm:text-xs uppercase tracking-wide text-text-muted">
-                  Total Teams
-                </div>
-              </div>
-              <div className="rounded-2xl bg-bg-chip text-text-main px-3 py-2 sm:px-4 sm:py-3">
-                <div className="text-lg sm:text-xl font-black">
-                  {pastTeams.length}
-                </div>
-                <div className="text-[11px] sm:text-xs uppercase tracking-wide text-text-muted">
-                  Past Teams
-                </div>
-              </div>
-              <div className="rounded-2xl bg-gradient-brand text-white px-3 py-2 sm:px-4 sm:py-3">
-                <div className="text-lg sm:text-xl font-black">
-                  {pastContests.length}
-                </div>
-                <div className="text-[11px] sm:text-xs uppercase tracking-wide text-white/80">
-                  Past Contests
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>

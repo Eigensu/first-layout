@@ -1258,7 +1258,7 @@ POST /api/users/me/email/verify    { otp }      → commits the change
 
 **Built (2026-10-21, stage C3).** `app/services/auth/email_change.py`, the two routes
 in `routes/users.py`, and the profile's "Change Email" card
-(`components/dashboard/ChangeEmailSection.tsx`). Added in building it:
+(`components/profile/ChangeEmailSection.tsx`). Added in building it:
 
 - **Re-authentication on `/request`**: `{email, password}`, or for an account without
   a password a fresh Google or Apple sign-in (`google_id_token` /
@@ -1457,7 +1457,7 @@ code path, which also means the refresh is exercised long before it runs in prod
 
 - `apps/frontend/src/lib/api/` gains `tournaments.ts` (public module) with
   `getMyTournaments()` and its response types.
-- The dashboard/profile page gains a **Tournaments** section: a "Played" list of cards
+- The profile page (`/profile`, formerly `/dashboard`) gains a **Tournaments** section: a "Played" list of cards
   (name, logo, teams, contests, best rank, points) and a muted "Also registered" list.
 - Colors come from the `--bg-*`/`--accent-*`/`--text-*` custom properties in
   `globals.css` — no hex literals, per `colour-spec.md`.
@@ -1466,11 +1466,11 @@ code path, which also means the refresh is exercised long before it runs in prod
 
 **Built (stage F, 2026-10-19).**
 - `src/lib/api/tournaments.ts` has `getMyTournaments()`.
-- The profile's **Your Tournaments** card is `src/components/dashboard/MyTournamentsSection.tsx`. It sits first in the dashboard's right-hand column.
+- The profile's **Your Tournaments** card is `src/components/profile/MyTournamentsSection.tsx`. It sits first in the profile page's right-hand column.
 - Each card shows its name, logo, status, teams, contests, best rank, points and last played date. It also shows "Played as …" when that name differs from the account's username.
 - A tournament links to its own subdomain, except the site already open (marked "This site") and archived ones, whose subdomain is gone.
 - The card is left out entirely when there is nothing to list or the backend has no such endpoint. That is what today's single-tournament services report, so they look as they did.
-- **Colours follow the dashboard page, not the tokens above.** That page is styled with its own slate, cyan and amber palette and uses none of the `--bg-*` custom properties, so the new card matches its neighbours. Moving the whole page onto the tokens is a separate job.
+- **Colours use the tokens above.** The page was first styled with its own slate, cyan and amber palette and the card matched it. When `/dashboard` became `/profile` (2026-11), the whole page, this card and the change-email section moved onto the `--bg-*`/`--text-*`/`--accent-*` tokens.
 - The login form says "Mobile number or email", with a line saying a username still works for now. Validation still accepts anything of three or more characters, which keeps old usernames working.
 - The **change-email UI is not built**: it needs the email-code channel (C3).
 
@@ -2118,7 +2118,7 @@ tests/conftest.py           new models in DOCUMENT_MODELS, index exclusions
 ```
 src/lib/api/tournaments.ts          new: getMyTournaments()
 src/lib/api/client.ts               send X-Tournament-Slug
-src/app/dashboard/page.tsx          Tournaments section (played / also registered)
+src/app/profile/page.tsx            Tournaments section (played / also registered)
 src/components/auth/LoginForm.tsx   "Mobile number or email"
 src/components/auth/ForgotPasswordModal.tsx  CREATE new: request → verify → set
                                     password, with an SMS/email channel choice
@@ -2126,7 +2126,7 @@ src/components/auth/ForgotPasswordModal.tsx  CREATE new: request → verify → 
 src/lib/api/auth.ts                 add the three forgot-password calls that were
                                     never wired up (resetPasswordByMobile already
                                     dropped — shipped, §5.1)
-src/app/dashboard/page.tsx          change-email flow (§5.7)
+src/app/profile/page.tsx            change-email flow (§5.7)
 src/utils/errors.ts                 ambiguous_identifier branch
 src/common/consts/index.ts          header name constant
 ```
