@@ -33,12 +33,13 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_ist, to_utc_naive, utc_now
 from app.models.cricheroes import CricHeroesSnapshot
 from app.schemas.admin.cricheroes_ops import SnapshotStatus, SyncReport
 from app.schemas.cricheroes import (
@@ -50,7 +51,6 @@ from app.schemas.cricheroes import (
 )
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import CricHeroesConfigError, CricHeroesError
-from app.utils.timezone import to_ist
 from config.settings import get_settings
 
 logger = logging.getLogger("app.cricheroes")
@@ -104,11 +104,16 @@ def _key(resource: str, tournament_id: int) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return utc_now()
 
 
 def _when(moment: Optional[datetime]) -> Optional[datetime]:
-    # MongoDB hands datetimes back without a timezone; they are UTC.
+    # For comparison with _now(): naive UTC, which is what MongoDB hands back.
+    return to_utc_naive(moment) if moment is not None else None
+
+
+def _shown(moment: Optional[datetime]) -> Optional[datetime]:
+    # For display only.
     return to_ist(moment) if moment is not None else None
 
 
@@ -214,7 +219,7 @@ async def read(resource: str, tournament_id: int) -> Optional[Cached]:
     rows = snapshot.data if isinstance(snapshot.data, list) else [snapshot.data]
     return Cached(
         data=[spec.model.model_validate(row) for row in rows],
-        fetched_at=_when(snapshot.fetched_at),
+        fetched_at=_shown(snapshot.fetched_at),
         last_error=snapshot.last_error,
     )
 
@@ -231,10 +236,10 @@ async def status() -> List[SnapshotStatus]:
         SnapshotStatus(
             resource=d["resource"],
             cricheroes_tournament_id=d["cricheroes_tournament_id"],
-            fetched_at=_when(d.get("fetched_at")),
+            fetched_at=_shown(d.get("fetched_at")),
             rows=d.get("rows", 0),
             last_error=d.get("last_error"),
-            last_error_at=_when(d.get("last_error_at")),
+            last_error_at=_shown(d.get("last_error_at")),
         )
         for d in documents
     ]
@@ -314,7 +319,7 @@ async def sync_tournament(
     credential is raised (it would fail every call); any other failure is
     recorded in the report and on the resource, and the run goes on.
     """
-    now = now or _now()
+    now = to_utc_naive(now) if now is not None else _now()
     reason = await _claim(tournament_id, now)
     if reason is not None:
         return SyncReport(tournament_id=tournament_id, skipped=reason)

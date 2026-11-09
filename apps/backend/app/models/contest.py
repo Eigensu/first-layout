@@ -5,6 +5,7 @@ from beanie import Document, PydanticObjectId
 from pydantic import Field
 from pymongo import IndexModel
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import (
     ContestFormat,
     ContestStatus,
@@ -12,7 +13,6 @@ from app.common.enums.contests import (
     ContestVisibility,
     PointsScope,
 )
-from app.utils.timezone import now_ist
 
 
 class Contest(Document):
@@ -63,8 +63,8 @@ class Contest(Document):
     # backfill fills it in; None means "written before the migration".
     tournament_id: Optional[PydanticObjectId] = None
 
-    created_at: datetime = Field(default_factory=now_ist)
-    updated_at: datetime = Field(default_factory=now_ist)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "contests"

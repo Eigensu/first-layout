@@ -19,6 +19,7 @@ import pytest_asyncio
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.tournaments import TournamentStatus
 from app.models.contest import Contest
 from app.models.team import Team
@@ -35,7 +36,6 @@ from app.utils.dependencies import (
     get_tournament_admin,
 )
 from app.utils.tenant import TENANT_HEADER
-from app.utils.timezone import now_ist
 from config.settings import settings
 
 ALPHA = {TENANT_HEADER: "alpha"}
@@ -217,7 +217,7 @@ async def test_only_a_platform_admin_runs_the_registry(shared, people, http):
 
 async def test_a_refused_admin_changed_nothing(shared, people, http):
     """A write, not just a read: alpha's admin cannot create bravo's contest."""
-    start = now_ist()
+    start = utc_now()
     contest = {
         "code": "FINAL",
         "name": "Final",

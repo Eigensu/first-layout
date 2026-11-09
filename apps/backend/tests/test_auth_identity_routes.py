@@ -5,13 +5,14 @@ reached. This ships to live tournaments whose users have empty identity arrays,
 so anything that only worked post-backfill would be an outage on deploy.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 import pytest_asyncio
 from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.models.password_reset import PasswordResetSession
 from app.models.user import LegacyHash, RefreshToken, User
 from app.services.auth import password_reset
@@ -334,7 +335,7 @@ async def test_an_id_subject_is_never_read_as_a_username(db, legacy_user):
 async def refresh_with(client, user, claims):
     token = create_refresh_token(data=claims)
     await RefreshToken(
-        user_id=user.id, token=token, expires_at=datetime.utcnow() + timedelta(days=7)
+        user_id=user.id, token=token, expires_at=utc_now() + timedelta(days=7)
     ).insert()
     return await client.post("/api/auth/refresh", params={"refresh_token": token})
 
@@ -397,7 +398,7 @@ async def two_stored_copies(user):
         await RefreshToken(
             user_id=user.id,
             token=token,
-            expires_at=datetime.utcnow() + timedelta(days=7),
+            expires_at=utc_now() + timedelta(days=7),
         ).insert()
     return token
 
@@ -461,12 +462,12 @@ async def test_an_owner_sees_their_team_before_the_contest_starts(client, legacy
     The owner check went through a resolver that read `sub` as a username, so
     once tokens carried ids every owner was treated as a stranger and got 403.
     """
+    from app.common.datetime_utils import utc_now
     from app.models.contest import Contest
     from app.models.team import Team
     from app.models.team_contest_enrollment import TeamContestEnrollment
-    from app.utils.timezone import now_ist
 
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     contest = Contest(
         code="c1", name="Contest", start_at=start, end_at=start + timedelta(days=7)
     )

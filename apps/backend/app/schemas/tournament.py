@@ -5,8 +5,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.common.consts.index import RESERVED_SUBDOMAINS, TOURNAMENT_SLUG_PATTERN
+from app.common.datetime_utils import IST, to_ist
 from app.common.enums.tournaments import TournamentStatus
-from app.utils.timezone import IST, to_ist
 
 SLUG_RE = re.compile(TOURNAMENT_SLUG_PATTERN)
 

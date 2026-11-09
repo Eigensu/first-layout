@@ -15,11 +15,12 @@ CricHeroes all the same, but nothing counts it.
 """
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.cricheroes import CricHeroesCallCount
 from app.schemas.admin.cricheroes_ops import DayUsage, UsageReport
 from app.services.cricheroes_client import CricHeroesClient
@@ -45,7 +46,7 @@ async def record_call(
     `status` is the HTTP status CricHeroes answered with, or None when no
     answer came; `sent` is False only when the request never left.
     """
-    day = (now or datetime.now(timezone.utc)).date().isoformat()
+    day = (now or utc_now()).date().isoformat()
     if not sent:
         increments = {"not_sent": 1}
     else:
@@ -95,7 +96,7 @@ def term_start(today: date) -> Tuple[date, bool]:
 async def usage(days: int = 30, *, today: Optional[date] = None) -> UsageReport:
     """Calls this quota term, and per day and per endpoint for recent days."""
     settings = get_settings()
-    today = today or datetime.now(timezone.utc).date()
+    today = today or utc_now().date()
     start, configured = term_start(today)
     window_start = today - timedelta(days=days - 1)
     since = min(start, window_start).isoformat()

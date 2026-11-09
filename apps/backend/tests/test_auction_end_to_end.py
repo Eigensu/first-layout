@@ -9,10 +9,10 @@ from datetime import timedelta
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player as AdminPlayer
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
-from app.utils.timezone import now_ist
 
 
 @pytest_asyncio.fixture
@@ -51,7 +51,7 @@ async def test_auction_flow_from_admin_config_to_submitted_squad(
     await AdminPlayer(name="unsold", team="A", price=0, status="Active").insert()
     await AdminPlayer(name="hurt", team="B", price=90_000, status="Injured").insert()
 
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     created = await client.post(
         "/api/admin/contests",
         json={
@@ -110,7 +110,7 @@ async def test_third_player_from_one_team_is_refused(client, user_client, db):
                 name=f"{team}{i}", team=team, price=1000, status="Active"
             ).insert()
 
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     created = await client.post(
         "/api/admin/contests",
         json={

@@ -14,7 +14,7 @@ deleted never wins, and never contributes a way in (spec §13.2, R1).
 import csv
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .identity_graph import Component, Edge, LegacyRow
@@ -259,7 +259,7 @@ def build_unified_account(
         merge_group_id=merge_group_id,
         # The oldest signup is when this person joined, whichever row it was.
         created_at=min(created) if created else None,
-        updated_at=datetime.utcnow(),
+        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         last_login=max(logins) if logins else None,
         avatar_file_id=avatar_file_id,
         avatar_source_db=avatar_row.source_db if avatar_row else None,

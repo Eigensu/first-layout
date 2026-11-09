@@ -1,10 +1,10 @@
-from datetime import datetime
 from typing import Optional
 
 from beanie import PydanticObjectId
 from beanie.operators import And, Or, RegEx
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player
 from app.models.player import Player as PublicPlayer
@@ -53,7 +53,7 @@ async def delete_all_players(
                 "vice_captain_id": None,
                 "total_points": 0.0,
                 "total_value": 0.0,
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         }
     )
@@ -207,8 +207,8 @@ async def create_player(
         slot=player_data.slot,
         image_url=player_data.image_url,
         stats=player_data.stats,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now(),
+        updated_at=utc_now(),
     )
 
     await player.insert()
@@ -252,7 +252,7 @@ async def update_player(
         for field, value in update_data.items():
             setattr(player, field, value)
 
-        player.updated_at = datetime.utcnow()
+        player.updated_at = utc_now()
         await player.save()
 
         # If points changed, recompute totals for all impacted teams
@@ -297,7 +297,7 @@ async def update_player(
                     player_points_map.get(obj_id, 0.0) for obj_id in player_object_ids
                 )
                 team.total_points = total
-                team.updated_at = datetime.utcnow()
+                team.updated_at = utc_now()
                 await team.save()
 
     return PlayerResponse(
@@ -378,7 +378,7 @@ async def delete_player(
         # against drift pushing a total negative.
         team.total_points = max(team.total_points - player.points, 0.0)
         team.total_value = max(team.total_value - player.price, 0.0)
-        team.updated_at = datetime.utcnow()
+        team.updated_at = utc_now()
         await team.save()
 
     await player.delete()

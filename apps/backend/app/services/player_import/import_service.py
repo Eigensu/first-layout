@@ -1,12 +1,12 @@
 """Player import service - Business logic for importing players"""
 
 import hashlib
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from beanie.operators import In
 from fastapi import UploadFile
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.import_log import ImportLog
 from app.models.admin.player import Player
 from app.schemas.admin.player_import import (
@@ -305,7 +305,7 @@ class PlayerImportService:
                             "cricheroes_player_id"
                         ]
                     existing.stats = validated_data.get("stats")
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = utc_now()
                     await existing.save()
                     updated_count += 1
                 else:
@@ -321,8 +321,8 @@ class PlayerImportService:
                         image_url=validated_data.get("image_url"),
                         cricheroes_player_id=validated_data.get("cricheroes_player_id"),
                         stats=validated_data.get("stats"),
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
+                        created_at=utc_now(),
+                        updated_at=utc_now(),
                     )
                     await new_player.insert()
                     created_count += 1
@@ -354,8 +354,8 @@ class PlayerImportService:
         import_log = ImportLog(
             tournament_id=tournament_id,
             user_id=user_id,
-            started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
+            started_at=utc_now(),
+            completed_at=utc_now(),
             dry_run=dry_run,
             filename=filename,
             file_size=file_size,

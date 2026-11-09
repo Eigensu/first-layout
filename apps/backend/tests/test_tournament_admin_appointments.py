@@ -288,7 +288,9 @@ async def test_a_removed_admin_stays_a_member_without_admin(shared, world, http)
 async def test_removing_someone_who_is_not_an_admin(shared, world, http):
     as_user(world["platform"])
 
-    assert (await http.delete(f"{_admins(world)}/{world['asha'].id}")).status_code == 404
+    assert (
+        await http.delete(f"{_admins(world)}/{world['asha'].id}")
+    ).status_code == 404
     assert (await http.delete(f"{_admins(world)}/not-an-id")).status_code == 400
 
 

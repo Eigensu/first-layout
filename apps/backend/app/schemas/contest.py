@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.utils.timezone import IST, to_ist
+from app.common.datetime_utils import IST, to_ist
 
 
 class ContestCreate(BaseModel):

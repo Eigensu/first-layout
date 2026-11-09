@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, field_validator
 
-from app.utils.timezone import to_ist
+from app.common.datetime_utils import to_ist
 
 
 class _DatesInIST(BaseModel):

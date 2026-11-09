@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from secrets import token_hex
 from typing import Optional
 
@@ -6,6 +6,7 @@ import jwt
 from jwt import PyJWTError
 from passlib.context import CryptContext
 
+from app.common.datetime_utils import utc_now
 from config.settings import get_settings
 
 settings = get_settings()
@@ -27,15 +28,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = utc_now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
+        expire = utc_now() + timedelta(minutes=settings.jwt_expire_minutes)
 
     to_encode.update(
         {
             "exp": expire,
             "type": "access",
-            "iat": datetime.utcnow(),
+            "iat": utc_now(),
             "jti": token_hex(16),
         }
     )
@@ -49,7 +50,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def create_refresh_token(data: dict, expires_days: int = 7) -> str:
     """Create a JWT refresh token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=expires_days)
+    expire = utc_now() + timedelta(days=expires_days)
 
     # jti makes every token distinct. Without it, two sign-ins by one account
     # in the same second minted byte-identical tokens -- Dcpl held 35 such
@@ -58,7 +59,7 @@ def create_refresh_token(data: dict, expires_days: int = 7) -> str:
         {
             "exp": expire,
             "type": "refresh",
-            "iat": datetime.utcnow(),
+            "iat": utc_now(),
             "jti": token_hex(16),
         }
     )

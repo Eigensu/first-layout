@@ -15,6 +15,7 @@ from typing import Optional
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from app.common.datetime_utils import utc_now
 from app.models.tournament import Tournament
 from app.models.tournament_membership import (
     STATUS_PLAYED,
@@ -23,7 +24,6 @@ from app.models.tournament_membership import (
 )
 from app.models.user import User
 from app.utils.tenant import TenantId
-from app.utils.timezone import now_ist
 
 logger = logging.getLogger("app.membership")
 
@@ -35,7 +35,7 @@ async def record_sign_in(user: User, tournament_id: TenantId) -> None:
     site signed in is what registering for it now means. A row that already
     exists only has its last_login_at moved on; its status never goes back.
     """
-    now = now_ist()
+    now = utc_now()
     await _touch(
         user,
         tournament_id,
@@ -48,7 +48,7 @@ async def record_sign_in(user: User, tournament_id: TenantId) -> None:
 
 async def record_play(user: User, tournament_id: TenantId) -> None:
     """Note that this person made a team or entered a contest in this tournament."""
-    now = now_ist()
+    now = utc_now()
     await _touch(
         user,
         tournament_id,

@@ -4,6 +4,8 @@ from typing import Optional
 from beanie import Document, PydanticObjectId
 from pydantic import Field
 
+from app.common.datetime_utils import utc_now
+
 PURPOSE_PASSWORD_RESET = "password_reset"
 PURPOSE_EMAIL_CHANGE = "email_change"
 
@@ -37,10 +39,10 @@ class PasswordResetSession(Document):
     attempts: int = 0
     max_attempts: int = 5
     expires_at: datetime = Field(
-        default_factory=lambda: datetime.utcnow() + timedelta(minutes=10)
+        default_factory=lambda: utc_now() + timedelta(minutes=10)
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "password_reset_sessions"
@@ -59,7 +61,7 @@ class PasswordResetToken(Document):
     token_hash: str
     expires_at: datetime
     used_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "password_reset_tokens"

@@ -16,6 +16,7 @@ from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 from pymongo.errors import PyMongoError
 
+from app.common.datetime_utils import to_ist, utc_now
 from app.common.enums.enrollments import EnrollmentStatus
 from app.common.enums.tournaments import TournamentStatus
 from app.models.admin.player import Player as AdminPlayer
@@ -38,7 +39,6 @@ from app.services.membership_stats import refresh_tournament
 from app.utils.dependencies import get_current_active_user
 from app.utils.security import get_password_hash
 from app.utils.tenant import TENANT_HEADER
-from app.utils.timezone import now_ist, to_ist
 from config.settings import settings
 
 ALPHA = {TENANT_HEADER: "alpha"}
@@ -247,7 +247,7 @@ async def squad(tournaments):
     ]
     for p in players:
         await p.insert()
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     contest = Contest(
         tournament_id=alpha.id,
         code="FINAL",
@@ -547,7 +547,7 @@ async def season(shared, tournaments):
     """
     alpha, bravo = tournaments
     p1, p2, p3 = (PydanticObjectId() for _ in range(3))
-    start = now_ist() - timedelta(days=2)
+    start = utc_now() - timedelta(days=2)
     c1, c2 = (
         Contest(
             tournament_id=alpha.id,

@@ -103,7 +103,13 @@ async def test_identifier_limit_is_per_account(anon_client, rahul, priya, enforc
 
 
 async def test_reformatting_a_number_shares_its_bucket(anon_client, rahul, enforcing):
-    for typed in ("9876543210", "+91 98765 43210", "919876543210", "09876543210", "98765-43210"):
+    for typed in (
+        "9876543210",
+        "+91 98765 43210",
+        "919876543210",
+        "09876543210",
+        "98765-43210",
+    ):
         assert (await _login(anon_client, typed)).status_code == 401
 
     assert (await _login(anon_client, "+919876543210")).status_code == 429
@@ -112,7 +118,7 @@ async def test_reformatting_a_number_shares_its_bucket(anon_client, rahul, enfor
 async def test_a_look_alike_username_is_not_someone_elses_number(
     anon_client, rahul, enforcing
 ):
-    """"98_765_432_10" is a valid username, and need not be rahul's.
+    """ "98_765_432_10" is a valid username, and need not be rahul's.
 
     Keyed on the text, it would share rahul's mobile's bucket, and guesses at
     his number would lock its owner out (Greptile on #55).
@@ -126,11 +132,19 @@ async def test_a_look_alike_username_is_not_someone_elses_number(
     for _ in range(6):
         await _login(anon_client, "9876543210")
 
-    assert (await _login(anon_client, "98_765_432_10", password=PASSWORD)).status_code == 200
+    assert (
+        await _login(anon_client, "98_765_432_10", password=PASSWORD)
+    ).status_code == 200
 
 
 async def test_unknown_numbers_share_a_bucket_however_typed(anon_client, db, enforcing):
-    for typed in ("9000000001", "+91 90000 00001", "919000000001", "09000000001", "90000-00001"):
+    for typed in (
+        "9000000001",
+        "+91 90000 00001",
+        "919000000001",
+        "09000000001",
+        "90000-00001",
+    ):
         assert (await _login(anon_client, typed)).status_code == 401
 
     assert (await _login(anon_client, "9000000001")).status_code == 429
@@ -187,7 +201,9 @@ async def test_an_address_over_its_limit_is_refused_before_any_lookup(
     anon_client, db, enforcing, monkeypatch
 ):
     """The account lookup can scan stored mobiles; a refused client gets none."""
-    monkeypatch.setitem(rl.RULES, "login", {IDENTIFIER: Limit(5, HOUR), IP: Limit(1, HOUR)})
+    monkeypatch.setitem(
+        rl.RULES, "login", {IDENTIFIER: Limit(5, HOUR), IP: Limit(1, HOUR)}
+    )
     lookups = []
 
     async def _resolve(identifier):
@@ -232,7 +248,9 @@ async def test_spoofed_forwarded_for_cannot_pick_a_bucket(
     monkeypatch.setitem(rl.RULES, "login", {IP: Limit(3, HOUR)})
     for n in range(3):
         spoofed = f"10.9.9.{n}, 203.0.113.7"
-        assert (await _login(anon_client, f"nobody{n}", forwarded=spoofed)).status_code == 401
+        assert (
+            await _login(anon_client, f"nobody{n}", forwarded=spoofed)
+        ).status_code == 401
 
     response = await _login(anon_client, "nobody9", forwarded="10.9.9.99, 203.0.113.7")
     assert response.status_code == 429
@@ -261,14 +279,18 @@ async def test_observe_mode_never_blocks(anon_client, rahul, caplog):
 
 async def test_one_rule_can_be_enforced_alone(anon_client, rahul, monkeypatch):
     """The rollout enforces the SMS route first, while login keeps observing."""
-    monkeypatch.setattr(rl.settings, "rate_limit_enforce_rules", " forgot_password_request ,")
+    monkeypatch.setattr(
+        rl.settings, "rate_limit_enforce_rules", " forgot_password_request ,"
+    )
 
     async def _send(phone):
         pass
 
     monkeypatch.setattr("app.routes.auth.pr_start_session", _send)
     for _ in range(3):
-        await anon_client.post("/api/auth/forgot-password/request", json={"phone": "9876543210"})
+        await anon_client.post(
+            "/api/auth/forgot-password/request", json={"phone": "9876543210"}
+        )
     otp = await anon_client.post(
         "/api/auth/forgot-password/request", json={"phone": "9876543210"}
     )
@@ -316,7 +338,9 @@ async def test_racing_first_hits_both_count(db, monkeypatch):
                 raise DuplicateKeyError("E11000 duplicate key")
             return await real(*args, **kwargs)
 
-    monkeypatch.setattr(RateLimitCounter, "get_motor_collection", lambda: RacingCollection())
+    monkeypatch.setattr(
+        RateLimitCounter, "get_motor_collection", lambda: RacingCollection()
+    )
 
     wait = await rl._hit("login", IP, "203.0.113.7", Limit(1, HOUR), NOW)
 
@@ -347,7 +371,9 @@ async def test_a_stalled_store_does_not_hold_up_sign_in(
 
 
 async def test_a_stalled_store_closes_the_otp_route(anon_client, rahul, monkeypatch):
-    monkeypatch.setattr(rl.settings, "rate_limit_enforce_rules", "forgot_password_request")
+    monkeypatch.setattr(
+        rl.settings, "rate_limit_enforce_rules", "forgot_password_request"
+    )
     monkeypatch.setattr(rl, "STORE_TIMEOUT_SECONDS", 0.01)
     monkeypatch.setattr(rl, "_hit", _store_stalls)
 
@@ -359,13 +385,17 @@ async def test_a_stalled_store_closes_the_otp_route(anon_client, rahul, monkeypa
     assert response.json()["detail"]["code"] == "temporarily_unavailable"
 
 
-async def test_store_failure_fails_open_on_login(anon_client, rahul, enforcing, monkeypatch):
+async def test_store_failure_fails_open_on_login(
+    anon_client, rahul, enforcing, monkeypatch
+):
     monkeypatch.setattr(rl, "_hit", _store_down)
 
     assert (await _login(anon_client, "rahul", password=PASSWORD)).status_code == 200
 
 
-async def test_store_failure_fails_closed_on_otp(anon_client, rahul, enforcing, monkeypatch):
+async def test_store_failure_fails_closed_on_otp(
+    anon_client, rahul, enforcing, monkeypatch
+):
     sent = []
 
     async def _send(phone):
@@ -383,7 +413,9 @@ async def test_store_failure_fails_closed_on_otp(anon_client, rahul, enforcing, 
     assert sent == []
 
 
-async def test_store_failure_in_observe_mode_still_sends(anon_client, rahul, monkeypatch):
+async def test_store_failure_in_observe_mode_still_sends(
+    anon_client, rahul, monkeypatch
+):
     sent = []
 
     async def _send(phone):
@@ -514,8 +546,7 @@ def test_hot_path_is_not_limited():
 
     assert limited
     assert all(
-        path.startswith("/api/auth/") or path in EMAIL_CHANGE_PATHS
-        for path in limited
+        path.startswith("/api/auth/") or path in EMAIL_CHANGE_PATHS for path in limited
     ), limited
     assert set(EMAIL_CHANGE_PATHS) <= set(limited)
 

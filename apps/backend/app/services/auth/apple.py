@@ -1,11 +1,11 @@
 import time
-from datetime import datetime
 from typing import Optional
 
 import httpx
 import jwt
 from jwt import PyJWK, PyJWTError
 
+from app.common.datetime_utils import utc_now
 from app.models.user import User
 from app.services.auth.google import _email_held_by_other, _generate_unique_username
 from app.services.auth.identity import link_provider_identity
@@ -150,8 +150,8 @@ async def find_or_create_apple_user(
         apple_id=apple_id,
         full_name=full_name,
         is_verified=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now(),
+        updated_at=utc_now(),
     )
     await new_user.insert()
     return new_user

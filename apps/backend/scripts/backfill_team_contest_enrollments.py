@@ -1,9 +1,9 @@
 import asyncio
-from datetime import datetime
 from typing import Optional
 
 from beanie import PydanticObjectId
 
+from app.common.datetime_utils import utc_now
 from app.models.contest import Contest
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
@@ -78,7 +78,7 @@ async def backfill(dry_run: bool = True) -> None:
                 user_id=team.user_id,
                 contest_id=contest.id,
                 status="active",
-                enrolled_at=datetime.utcnow(),
+                enrolled_at=utc_now(),
             )
             await enr.insert()
             print(

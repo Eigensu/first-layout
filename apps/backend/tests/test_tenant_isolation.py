@@ -14,6 +14,7 @@ import pytest_asyncio
 from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.tournaments import TournamentStatus
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.import_log import ImportLog
@@ -30,7 +31,6 @@ from app.models.tournament import Tournament
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
 from app.utils.tenant import TENANT_HEADER, TENANT_MODELS
-from app.utils.timezone import now_ist
 from config.settings import settings
 
 ALPHA = {TENANT_HEADER: "alpha"}
@@ -76,7 +76,7 @@ async def _seed(
     t = Tournament(slug=slug, name=slug.title(), status=TournamentStatus.LIVE)
     await t.insert()
     tid = t.id
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
 
     slot = Slot(
         tournament_id=tid,
@@ -206,7 +206,7 @@ async def world(db, shared, player, admin_user):
         slug="gone", name="Gone", status=TournamentStatus.ARCHIVED
     ).insert()
     # Written before the backfill: belongs to no tournament on this backend.
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     await Contest(
         code="LEGACY",
         name="untagged legacy",
@@ -538,7 +538,7 @@ async def test_delete_all_players_means_this_tournaments(world, client):
 
 
 async def test_contest_codes_are_per_tournament(world, client):
-    start = now_ist() + timedelta(days=2)
+    start = utc_now() + timedelta(days=2)
     body = {
         "code": "QF",
         "name": "quarter final",
@@ -916,7 +916,7 @@ async def test_a_slot_and_its_player_count(world, user_client):
 
 async def test_a_private_contest_shows_to_its_entrant(world, user_client, player):
     a = world.alpha
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     private = Contest(
         tournament_id=a.id,
         code="INVITE",
@@ -940,7 +940,7 @@ async def test_a_daily_contest_checks_the_squad_against_this_tournaments_players
     world, user_client
 ):
     a = world.alpha
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     daily = Contest(
         tournament_id=a.id,
         code="DAY1",
@@ -965,7 +965,7 @@ async def test_a_team_in_a_contest_shows_its_own_players(world, user_client):
     """Anyone may look once the contest is under way."""
     a = world.alpha
     await Contest.get_motor_collection().update_one(
-        {"_id": a.final.id}, {"$set": {"start_at": now_ist() - timedelta(hours=1)}}
+        {"_id": a.final.id}, {"$set": {"start_at": utc_now() - timedelta(hours=1)}}
     )
     response = await user_client.get(
         f"/api/contests/{a.final.id}/teams/{a.team.id}", headers=ALPHA

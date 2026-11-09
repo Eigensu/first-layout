@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 from fastapi import (
@@ -14,6 +13,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.sponsor import Sponsor, SponsorTier
 from app.models.user import User
 from app.schemas.sponsor import (
@@ -318,7 +318,7 @@ async def update_sponsor(
                     tournament_id=tournament_id,
                 )
 
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
         for field, value in update_data.items():
             setattr(sponsor, field, value)
         try:
@@ -404,7 +404,7 @@ async def upload_sponsor_logo(
         sponsor.logo_public_id = upload_result["public_id"]
         # Keep this null to indicate the asset is no longer stored in GridFS.
         sponsor.logo_file_id = None
-        sponsor.updated_at = datetime.utcnow()
+        sponsor.updated_at = utc_now()
         await sponsor.save()
         return UploadResponse(
             url=uploaded_logo_url, message="Logo uploaded successfully"
@@ -469,7 +469,7 @@ async def toggle_featured(
         sponsor.priority = await _get_next_priority(
             sponsor.featured, tournament_id=tournament_id
         )
-    sponsor.updated_at = datetime.utcnow()
+    sponsor.updated_at = utc_now()
     await sponsor.save()
 
     return SponsorDetailResponse(
@@ -497,7 +497,7 @@ async def toggle_active(
         )
 
     sponsor.active = not sponsor.active
-    sponsor.updated_at = datetime.utcnow()
+    sponsor.updated_at = utc_now()
     await sponsor.save()
 
     return SponsorDetailResponse(

@@ -1,11 +1,11 @@
 import re
 import secrets
-from datetime import datetime
 from typing import Optional
 
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
+from app.common.datetime_utils import utc_now
 from app.models.user import User
 from app.services.auth.identity import link_provider_identity
 from config.settings import get_settings
@@ -132,8 +132,8 @@ async def find_or_create_google_user(payload: dict) -> User:
         full_name=full_name,
         avatar_url=avatar_url,
         is_verified=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now(),
+        updated_at=utc_now(),
     )
     await new_user.insert()
     return new_user

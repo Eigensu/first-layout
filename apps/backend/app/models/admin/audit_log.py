@@ -4,6 +4,8 @@ from typing import Any, Dict, Optional
 from beanie import Document, PydanticObjectId
 from pydantic import Field
 
+from app.common.datetime_utils import utc_now
+
 
 class AdminActionLog(Document):
     """Lightweight audit trail for admin actions that have no record of their
@@ -16,7 +18,7 @@ class AdminActionLog(Document):
     target_type: str  # e.g. "player"
     target_id: str
     details: Optional[Dict[str, Any]] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
     # Tenant scope -- see app/utils/tenant.py. Optional only until the
     # backfill fills it in; None means "written before the migration".

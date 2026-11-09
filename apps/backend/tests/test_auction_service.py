@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import ContestFormat
 from app.models.admin.player import Player as AdminPlayer
 from app.models.contest import Contest
@@ -13,7 +14,6 @@ from app.services.auction import (
     resolve_max_players_per_team,
     validate_auction_squad,
 )
-from app.utils.timezone import now_ist
 
 
 def _entries(*pairs) -> list[PoolEntry]:
@@ -81,8 +81,8 @@ def test_contest_override_beats_global_setting(db):
     contest = Contest(
         code="c",
         name="c",
-        start_at=now_ist(),
-        end_at=now_ist(),
+        start_at=utc_now(),
+        end_at=utc_now(),
         max_players_per_team=4,
     )
     settings = GlobalSettings(max_players_per_team=7)
@@ -90,7 +90,7 @@ def test_contest_override_beats_global_setting(db):
 
 
 def test_global_setting_used_when_contest_has_no_override(db):
-    contest = Contest(code="c", name="c", start_at=now_ist(), end_at=now_ist())
+    contest = Contest(code="c", name="c", start_at=utc_now(), end_at=utc_now())
     settings = GlobalSettings(max_players_per_team=7)
     assert resolve_max_players_per_team(contest, settings) == 7
     assert resolve_max_players_per_team(None, settings) == 7
@@ -179,8 +179,8 @@ def _auction_contest(squad_size=4, purse=1_000_000):
     return Contest(
         code="auc",
         name="Auction",
-        start_at=now_ist(),
-        end_at=now_ist(),
+        start_at=utc_now(),
+        end_at=utc_now(),
         contest_format=ContestFormat.AUCTION_PURSE,
         purse=purse,
         squad_size=squad_size,

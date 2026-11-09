@@ -6,7 +6,7 @@ SMS codes are generated and checked by 2Factor; email codes by us
 """
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import timedelta
 from secrets import token_urlsafe
 from typing import Optional, Tuple
 
@@ -14,6 +14,7 @@ from beanie import PydanticObjectId
 from beanie.operators import In
 from pymongo import ReturnDocument
 
+from app.common.datetime_utils import utc_now
 from app.models.password_reset import (
     CHANNEL_EMAIL,
     CHANNEL_SMS,
@@ -48,7 +49,7 @@ INVALID_SESSION = "Invalid or expired session"
 
 
 def _now():
-    return datetime.utcnow()
+    return utc_now()
 
 
 def _hash_token(token: str) -> str:

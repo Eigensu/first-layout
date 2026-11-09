@@ -4,6 +4,8 @@ from typing import Optional, Union
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field, field_validator
 
+from app.common.datetime_utils import utc_now
+
 
 class Player(Document):
     """Player document model for MongoDB using Beanie ODM"""
@@ -22,8 +24,8 @@ class Player(Document):
     # §13.2); unique within a tournament, which the importer enforces.
     cricheroes_player_id: Optional[int] = None
     stats: Optional[dict] = None  # Batting avg, bowling avg, etc.
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     @field_validator("slot", mode="before")
     @classmethod

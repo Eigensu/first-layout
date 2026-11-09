@@ -6,14 +6,14 @@ Slot-based contests keep seeing everyone, since price is cosmetic there.
 
 from datetime import timedelta
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import ContestFormat
 from app.models.contest import Contest
 from app.models.player import Player
-from app.utils.timezone import now_ist
 
 
 async def _contest(**overrides) -> Contest:
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     fields = {
         "code": "c1",
         "name": "Contest",

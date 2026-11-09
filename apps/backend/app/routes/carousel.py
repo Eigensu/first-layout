@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 from fastapi import (
@@ -13,6 +12,7 @@ from fastapi import (
 )
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.carousel import CarouselImage
 from app.models.user import User
 from app.schemas.carousel import (
@@ -185,7 +185,7 @@ async def update_carousel_image(
     # Update fields
     update_data = carousel_data.model_dump(exclude_unset=True)
     if update_data:
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
         for field, value in update_data.items():
             setattr(carousel, field, value)
         await carousel.save()
@@ -255,7 +255,7 @@ async def upload_carousel_image(
         # Update carousel with API URL and file id
         carousel.image_file_id = file_id
         carousel.image_url = f"/api/v1/carousel/{carousel_id}/image"
-        carousel.updated_at = datetime.utcnow()
+        carousel.updated_at = utc_now()
         await carousel.save()
         return UploadResponse(
             url=carousel.image_url, message="Image uploaded successfully"
@@ -288,7 +288,7 @@ async def toggle_active(
         )
 
     carousel.active = not carousel.active
-    carousel.updated_at = datetime.utcnow()
+    carousel.updated_at = utc_now()
     await carousel.save()
 
     return CarouselImageResponse(**carousel_to_response(carousel))
@@ -314,7 +314,7 @@ async def reorder_carousel_images(
             carousel = await get_scoped(CarouselImage, tournament_id, carousel_id)
             if carousel:
                 carousel.display_order = new_order
-                carousel.updated_at = datetime.utcnow()
+                carousel.updated_at = utc_now()
                 await carousel.save()
 
     return {"message": "Carousel images reordered successfully"}

@@ -11,13 +11,13 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import ContestFormat
 from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user, get_tournament_admin
-from app.utils.timezone import now_ist
 
 
 @pytest_asyncio.fixture
@@ -49,7 +49,7 @@ async def user_client(db, user):
 
 
 async def _make_contest(**overrides) -> Contest:
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     fields = {
         "code": "c1",
         "name": "Contest",

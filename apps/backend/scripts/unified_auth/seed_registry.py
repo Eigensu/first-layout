@@ -26,8 +26,8 @@ sys.path.insert(
 
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 
+from app.common.datetime_utils import utc_now  # noqa: E402
 from app.common.enums.tournaments import TournamentStatus  # noqa: E402
-from app.utils.timezone import now_ist  # noqa: E402
 from scripts.unified_auth.destination import refuse_source_as_destination  # noqa: E402
 
 # The registry the two live tournaments are copied from.
@@ -232,7 +232,7 @@ async def main() -> None:
     client = AsyncIOMotorClient(settings.mongodb_url)
     try:
         outcomes = await seed(
-            client, client[settings.mongodb_db_name], args.apply, now_ist()
+            client, client[settings.mongodb_db_name], args.apply, utc_now()
         )
     finally:
         client.close()

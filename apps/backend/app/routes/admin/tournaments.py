@@ -5,6 +5,7 @@ from beanie.operators import In
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_utc_naive, utc_now
 from app.common.enums.tournaments import TournamentStatus
 from app.models.admin.audit_log import AdminActionLog
 from app.models.tournament import Tournament
@@ -27,7 +28,6 @@ from app.schemas.tournament import (
 )
 from app.services.auth.identity import AmbiguousIdentifier, resolve_login_identity
 from app.utils.dependencies import get_platform_admin
-from app.utils.timezone import now_ist, to_ist
 from config.settings import settings
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
@@ -90,7 +90,7 @@ async def create_tournament(
     if existing:
         raise HTTPException(status_code=400, detail="Slug is already taken")
 
-    now = now_ist()
+    now = utc_now()
     tournament = Tournament(
         slug=data.slug,
         name=data.name,
@@ -187,11 +187,11 @@ async def update_tournament(
     if (
         tournament.start_at
         and tournament.end_at
-        and to_ist(tournament.start_at) >= to_ist(tournament.end_at)
+        and to_utc_naive(tournament.start_at) >= to_utc_naive(tournament.end_at)
     ):
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
-    tournament.updated_at = now_ist()
+    tournament.updated_at = utc_now()
     await tournament.save()
     return to_response(tournament)
 
@@ -209,7 +209,7 @@ async def delete_tournament(
         return {"message": f"Tournament '{tournament.slug}' permanently deleted"}
 
     tournament.status = TournamentStatus.ARCHIVED
-    tournament.updated_at = now_ist()
+    tournament.updated_at = utc_now()
     await tournament.save()
     return {
         "message": f"Tournament '{tournament.slug}' archived; its subdomain no longer resolves"
@@ -274,7 +274,9 @@ async def _set_role(membership: TournamentMembership, role: str) -> None:
     await membership.set({TournamentMembership.role: role})
 
 
-_NOT_SHARED = {409: {"description": "Not the shared backend; admins there are is_admin"}}
+_NOT_SHARED = {
+    409: {"description": "Not the shared backend; admins there are is_admin"}
+}
 
 
 @router.get(

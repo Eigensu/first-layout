@@ -4,6 +4,8 @@ from typing import Dict, Optional
 from beanie import Document, PydanticObjectId
 from pydantic import Field, field_validator
 
+from app.common.datetime_utils import utc_now
+
 
 class Player(Document):
     """Player model for cricket players"""
@@ -28,8 +30,8 @@ class Player(Document):
     image_url: Optional[str] = None
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     @field_validator("slot", mode="before")
     @classmethod

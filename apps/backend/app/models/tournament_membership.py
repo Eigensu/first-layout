@@ -5,7 +5,7 @@ from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, Field, model_validator
 from pymongo import IndexModel
 
-from app.utils.timezone import now_ist
+from app.common.datetime_utils import utc_now
 
 # status values
 STATUS_REGISTERED = "registered"
@@ -78,7 +78,7 @@ class TournamentMembership(Document):
     # having played a tournament is not something that later becomes untrue.
     status: str = STATUS_REGISTERED
 
-    joined_at: datetime = Field(default_factory=now_ist)
+    joined_at: datetime = Field(default_factory=utc_now)
     first_played_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     last_active_at: Optional[datetime] = None

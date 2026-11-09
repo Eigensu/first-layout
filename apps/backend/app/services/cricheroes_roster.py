@@ -34,9 +34,9 @@ import asyncio
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Awaitable, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player
 from app.schemas.cricheroes import SquadTeam, TournamentMatch
 from app.services.cricheroes_client import CricHeroesClient
@@ -423,7 +423,7 @@ async def apply_plan(
     record how far an import got if a write fails part way.
     """
     done = Counter() if done is None else done
-    now = datetime.utcnow()
+    now = utc_now()
     for item in plan:
         if item.action == "create":
             await Player(
