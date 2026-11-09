@@ -505,6 +505,43 @@ async def test_my_tournaments_lists_what_was_played_and_what_was_not(
         await doc.insert()
     await gone.delete()
 
+    # What alpha's numbers are counted from: three teams, two of them entered
+    # in contests, plus an entry that was withdrawn and another player's team.
+    contests = [PydanticObjectId(), PydanticObjectId()]
+    for i in range(3):
+        team = Team(
+            tournament_id=alpha.id,
+            user_id=user.id,
+            team_name=f"rahul {i}",
+            player_ids=[],
+            captain_id="c",
+            vice_captain_id="v",
+        )
+        await team.insert()
+        if i < 2:
+            await TeamContestEnrollment(
+                tournament_id=alpha.id,
+                team_id=team.id,
+                user_id=user.id,
+                contest_id=contests[i],
+                status=EnrollmentStatus.ACTIVE,
+            ).insert()
+    await TeamContestEnrollment(
+        tournament_id=alpha.id,
+        team_id=PydanticObjectId(),
+        user_id=user.id,
+        contest_id=PydanticObjectId(),
+        status=EnrollmentStatus.REMOVED,
+    ).insert()
+    await Team(
+        tournament_id=alpha.id,
+        user_id=other.id,
+        team_name="not rahul's",
+        player_ids=[],
+        captain_id="c",
+        vice_captain_id="v",
+    ).insert()
+
     as_user(user)
     response = await http.get("/api/users/me/tournaments")
     assert response.status_code == 200, response.text
@@ -520,12 +557,48 @@ async def test_my_tournaments_lists_what_was_played_and_what_was_not(
     # Stored as UTC without a zone; served in IST with the offset written out.
     assert first["joined_at"] == "2025-04-02T15:30:00+05:30"
     assert body["registered_only"][0]["joined_at"] == "2026-01-01T05:30:00+05:30"
+    # closed has no teams or entries left to count.
+    assert body["totals"] == {
+        "tournaments_played": 2,
+        "teams_count": 3,
+        "contests_count": 2,
+    }
+
+
+async def test_my_tournaments_counts_a_team_before_the_job_runs(
+    shared, tournaments, http
+):
+    alpha, _ = tournaments
+    user = await _user("rahul")
+    await Team(
+        tournament_id=alpha.id,
+        user_id=user.id,
+        team_name="fresh",
+        player_ids=[],
+        captain_id="c",
+        vice_captain_id="v",
+    ).insert()
+    await record_play(user, alpha.id)
+
+    as_user(user)
+    body = (await http.get("/api/users/me/tournaments")).json()
+
+    # The job has not run, so rank and points are still unknown, but the team
+    # is already counted.
+    played = body["played"][0]
+    assert (played["teams_count"], played["contests_count"]) == (1, 0)
+    assert played["best_rank"] is None
+    assert body["totals"]["teams_count"] == 1
 
 
 async def test_my_tournaments_is_empty_for_a_new_account(shared, tournaments, http):
     as_user(await _user("rahul"))
     response = await http.get("/api/users/me/tournaments")
-    assert response.json() == {"played": [], "registered_only": []}
+    assert response.json() == {
+        "played": [],
+        "registered_only": [],
+        "totals": {"tournaments_played": 0, "teams_count": 0, "contests_count": 0},
+    }
 
 
 async def test_my_tournaments_needs_a_sign_in(anon_client):

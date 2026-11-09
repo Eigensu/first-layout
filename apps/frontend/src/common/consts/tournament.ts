@@ -102,7 +102,9 @@ function normalizeHost(rawHost: string | null): string {
  *  - unrelated hosts (Vercel previews *.vercel.app, localhost, IPs)
  *  - local development via <slug>.localhost:3000
  */
-export function getTournamentSlugFromHost(rawHost: string | null): string | null {
+export function getTournamentSlugFromHost(
+  rawHost: string | null,
+): string | null {
   const host = normalizeHost(rawHost);
   if (!host) return null;
 
@@ -133,7 +135,17 @@ export const TENANT_HEADER = "X-Tournament-Slug";
  * server rendering, where there is no window to read the host from.
  */
 export function tenantHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const slug = getTournamentSlugFromHost(window.location.host);
+  const slug = currentTournamentSlug();
   return slug ? { [TENANT_HEADER]: slug } : {};
+}
+
+/**
+ * The tournament whose subdomain this page is served on. Null off a
+ * tournament host (apex, previews) and during server rendering, where there is
+ * no window to read the host from. Whether the backend knows the tournament
+ * is another matter: an archived one still has a slug here.
+ */
+export function currentTournamentSlug(): string | null {
+  if (typeof window === "undefined") return null;
+  return getTournamentSlugFromHost(window.location.host);
 }

@@ -11,6 +11,7 @@ from app.models.tournament_membership import STATUS_PLAYED, TournamentMembership
 from app.models.user import RefreshToken, User
 from app.schemas.membership import (
     MyTournamentsResponse,
+    MyTournamentsTotals,
     PlayedTournament,
     RegisteredTournament,
 )
@@ -29,6 +30,7 @@ from app.services.auth.email_change import confirm_email_change as confirm_chang
 from app.services.auth.email_change import request_email_change as request_change
 from app.services.auth.google import GoogleTokenError, verify_google_id_token
 from app.services.auth.identity import set_profile_mobile, verify_user_password
+from app.services.membership_stats import live_play_counts
 from app.utils.dependencies import (
     get_current_active_user,
     is_platform_admin,
@@ -121,7 +123,8 @@ async def get_my_tournaments(
     """Every tournament this account has joined, played or not (spec §6.1).
 
     Archived tournaments are included: a profile is a history. Most recently
-    active first, falling back to when they joined.
+    active first, falling back to when they joined. Teams and contests are
+    counted live; rank and points come from the stats job.
     """
     memberships = await TournamentMembership.find(
         TournamentMembership.user_id == current_user.id
@@ -132,6 +135,17 @@ async def get_my_tournaments(
             In(Tournament.id, [m.tournament_id for m in memberships])
         ).to_list()
     }
+
+    # Teams and contests are counted now rather than read from the stats job,
+    # so a team made a minute ago is already in them (spec §6.2).
+    counts = await live_play_counts(
+        current_user.id,
+        [
+            m.tournament_id
+            for m in memberships
+            if m.status == STATUS_PLAYED and m.tournament_id in tournaments
+        ],
+    )
 
     played, registered_only = [], []
     for m in sorted(
@@ -156,15 +170,22 @@ async def get_my_tournaments(
                     display_name=m.display_name,
                     first_played_at=m.first_played_at,
                     last_active_at=m.last_active_at,
-                    teams_count=m.stats.teams_count,
-                    contests_count=m.stats.contests_count,
+                    teams_count=counts[m.tournament_id][0],
+                    contests_count=counts[m.tournament_id][1],
                     best_rank=m.stats.best_rank,
                     total_points=m.stats.total_points,
                 )
             )
         else:
             registered_only.append(RegisteredTournament(**common))
-    return MyTournamentsResponse(played=played, registered_only=registered_only)
+    totals = MyTournamentsTotals(
+        tournaments_played=len(played),
+        teams_count=sum(t.teams_count for t in played),
+        contests_count=sum(t.contests_count for t in played),
+    )
+    return MyTournamentsResponse(
+        played=played, registered_only=registered_only, totals=totals
+    )
 
 
 @router.put("/me", response_model=UserResponse)

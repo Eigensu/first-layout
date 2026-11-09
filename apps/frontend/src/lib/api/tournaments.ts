@@ -47,17 +47,29 @@ export interface RegisteredTournament {
   joined_at: string;
 }
 
+/** The whole account's numbers, summed over `played` by the backend. */
+export interface MyTournamentsTotals {
+  tournaments_played: number;
+  teams_count: number;
+  contests_count: number;
+}
+
 export interface MyTournaments {
   played: PlayedTournament[];
   registered_only: RegisteredTournament[];
+  // Absent from a backend older than the field.
+  totals?: MyTournamentsTotals;
 }
 
 /**
  * Every tournament this account has joined, most recently active first
- * (GET /api/users/me/tournaments). The numbers come from a job, so they can
- * trail a live tournament by a refresh.
+ * (GET /api/users/me/tournaments). Teams and contests are counted when asked;
+ * rank and points come from a job, so they can trail a live tournament by a
+ * refresh.
  */
 export async function getMyTournaments(): Promise<MyTournaments> {
-  const response = await apiClient.get<MyTournaments>("/api/users/me/tournaments");
+  const response = await apiClient.get<MyTournaments>(
+    "/api/users/me/tournaments",
+  );
   return response.data;
 }

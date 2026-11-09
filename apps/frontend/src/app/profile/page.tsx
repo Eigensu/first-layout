@@ -12,11 +12,16 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { LS_KEYS, getTournamentSlugFromHost } from "@/common/consts";
+import axios from "axios";
+import { LS_KEYS, currentTournamentSlug } from "@/common/consts";
 import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/utils/errors";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
-import { getMyTournaments, type MyTournaments } from "@/lib/api/tournaments";
+import {
+  getMyTournaments,
+  type MyTournaments,
+  type MyTournamentsTotals,
+} from "@/lib/api/tournaments";
 import { MyTournamentsSection } from "@/components/profile/MyTournamentsSection";
 import { getImageUrl } from "@/lib/utils";
 import {
@@ -56,9 +61,16 @@ function ProfileContent() {
   const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
     null,
   );
-  // The tournament whose subdomain this is, or null on the main site. Read
-  // after mount: the server render has no host to read it from.
+  const [myTournamentsFailed, setMyTournamentsFailed] = useState(false);
+  // The tournament whose subdomain this is, once the backend has answered for
+  // it; null on the main site and on a subdomain it does not know. Set after
+  // mount: the server render has no host to read it from.
   const [tournamentSlug, setTournamentSlug] = useState<string | null>(null);
+  // This tournament's own numbers, for when the account-wide ones are missing.
+  const [localTotals, setLocalTotals] = useState<MyTournamentsTotals | null>(
+    null,
+  );
+  const userId = user?.id;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -96,17 +108,16 @@ function ProfileContent() {
     );
   };
 
+  // Keyed on the account, not the user object: an email change replaces the
+  // object, and none of this depends on the email.
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
 
     // Teams and enrollments belong to one tournament, and the backend reads
     // which from the subdomain. The main site names none, so there is nothing
     // to load there: the account-wide numbers come from /me/tournaments.
-    const slug = getTournamentSlugFromHost(window.location.host);
-    setTournamentSlug(slug);
+    const slug = currentTournamentSlug();
     if (!slug) {
-      setTeams([]);
-      setPastContests([]);
       setIsLoadingData(false);
       return;
     }
@@ -121,14 +132,42 @@ function ProfileContent() {
           throw new Error("Session expired. Please log in again.");
         }
 
-        const [teamsRes, enrollmentsRes] = await Promise.all([
+        const [teamsResult, enrollmentsResult] = await Promise.allSettled([
           getUserTeams(token),
-          publicContestsApi
-            .myEnrollments()
-            .catch(() => [] as EnrollmentResponse[]),
+          publicContestsApi.myEnrollments(),
         ]);
 
+        // The backend refuses a slug it does not know (an archived tournament,
+        // a mistyped subdomain) with a 400. There is no tournament here to show
+        // history for, which is not an error on a profile.
+        if (
+          enrollmentsResult.status === "rejected" &&
+          axios.isAxiosError(enrollmentsResult.reason) &&
+          enrollmentsResult.reason.response?.status === 400
+        ) {
+          return;
+        }
+        if (teamsResult.status === "rejected") {
+          throw teamsResult.reason;
+        }
+        setTournamentSlug(slug);
+
+        const teamsRes = teamsResult.value;
         setTeams(teamsRes.teams || []);
+
+        if (enrollmentsResult.status === "rejected") {
+          setPastContests([]);
+          return;
+        }
+        const enrollmentsRes = enrollmentsResult.value;
+        const teamsHere = teamsRes.teams?.length ?? 0;
+        const contestsHere = new Set(enrollmentsRes.map((e) => e.contest_id))
+          .size;
+        setLocalTotals({
+          tournaments_played: teamsHere || contestsHere ? 1 : 0,
+          teams_count: teamsHere,
+          contests_count: contestsHere,
+        });
 
         if (!enrollmentsRes.length) {
           setPastContests([]);
@@ -218,23 +257,25 @@ function ProfileContent() {
     };
 
     loadProfileData();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   // Apart from the load above, so a slow /me/tournaments never holds the rest
   // of the profile behind its loading screen. A backend without memberships
   // (a single-tournament one, or one from before them) leaves the section out.
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
     let active = true;
     getMyTournaments()
-      .catch(() => null)
       .then((found) => {
         if (active) setMyTournaments(found);
+      })
+      .catch(() => {
+        if (active) setMyTournamentsFailed(true);
       });
     return () => {
       active = false;
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   const pastContestIdSet = useMemo(
     () => new Set(pastContests.map((item) => item.contestId)),
@@ -303,27 +344,39 @@ function ProfileContent() {
   };
 
   // The header counts every tournament this account has played, from the same
-  // source as the tournament cards. Teams and enrollments above are only the
-  // current subdomain's, so counting those showed 0 on the main site. Until
-  // /me/tournaments answers, a dash rather than a misleading 0.
-  const played = myTournaments?.played ?? [];
-  const accountStat = (value: number) => (myTournaments ? value : "–");
+  // source as the tournament cards; teams and enrollments above are only this
+  // subdomain's. Where the account-wide numbers are missing (the request
+  // failed, or a single-tournament backend, which keeps no memberships) this
+  // tournament's own are the best there is. A dash while waiting, and where
+  // there is nothing at all, rather than a misleading 0.
+  const accountTotals = myTournaments
+    ? (myTournaments.totals ?? sumPlayed(myTournaments))
+    : null;
+  let headerTotals: MyTournamentsTotals | null = null;
+  if (myTournaments || myTournamentsFailed) {
+    headerTotals =
+      accountTotals && (accountTotals.tournaments_played > 0 || !localTotals)
+        ? accountTotals
+        : localTotals;
+  }
+  const accountStat = (pick: (t: MyTournamentsTotals) => number) =>
+    headerTotals ? pick(headerTotals) : "–";
   const statTiles = [
     {
       label: "Total Teams",
-      value: accountStat(played.reduce((sum, t) => sum + t.teams_count, 0)),
+      value: accountStat((t) => t.teams_count),
       className: "border border-border-subtle bg-bg-elevated text-text-main",
       labelClassName: "text-text-muted",
     },
     {
       label: "Tournaments",
-      value: accountStat(played.length),
+      value: accountStat((t) => t.tournaments_played),
       className: "bg-bg-chip text-text-main",
       labelClassName: "text-text-muted",
     },
     {
       label: "Contests",
-      value: accountStat(played.reduce((sum, t) => sum + t.contests_count, 0)),
+      value: accountStat((t) => t.contests_count),
       className: "bg-gradient-brand text-white",
       labelClassName: "text-white/80",
     },
@@ -653,4 +706,13 @@ function ProfileContent() {
       </main>
     </div>
   );
+}
+
+/** Totals for a backend that predates the `totals` field. */
+function sumPlayed({ played }: MyTournaments): MyTournamentsTotals {
+  return {
+    tournaments_played: played.length,
+    teams_count: played.reduce((sum, t) => sum + t.teams_count, 0),
+    contests_count: played.reduce((sum, t) => sum + t.contests_count, 0),
+  };
 }

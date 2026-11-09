@@ -1404,6 +1404,15 @@ are two reasons for the change:
 `record_play` runs on team create and contest entry. It sets `played`,
 `last_active_at`, and `first_played_at` the first time only.
 
+**Changed 2026-11-10:** `teams_count` and `contests_count` are now counted when
+`GET /api/users/me/tournaments` is asked, not read from the job. With the job alone, a
+player's first team marked the tournament as played straight away but left its counts
+at 0 until the next run, so the profile's header disagreed with itself. As the table
+above says, counting them costs about two cheap queries per tournament. `best_rank`
+and `total_points` still come from the job. The response also carries `totals`
+(`tournaments_played`, `teams_count`, `contests_count`), so every client shows the
+same account-wide numbers.
+
 Both do nothing under `TENANCY=single`, or on the apex where there is no tournament.
 Neither can fail the request that called it: a failed write is logged and left to the
 job. A row created by a concurrent request between the update and the insert still
