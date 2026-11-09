@@ -12,11 +12,16 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { LS_KEYS } from "@/common/consts";
+import axios from "axios";
+import { LS_KEYS, currentTournamentSlug } from "@/common/consts";
 import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/utils/errors";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
-import { getMyTournaments, type MyTournaments } from "@/lib/api/tournaments";
+import {
+  getMyTournaments,
+  type MyTournaments,
+  type MyTournamentsTotals,
+} from "@/lib/api/tournaments";
 import { MyTournamentsSection } from "@/components/profile/MyTournamentsSection";
 import { getImageUrl } from "@/lib/utils";
 import {
@@ -56,6 +61,16 @@ function ProfileContent() {
   const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
     null,
   );
+  const [myTournamentsFailed, setMyTournamentsFailed] = useState(false);
+  // The tournament whose subdomain this is, once the backend has answered for
+  // it; null on the main site and on a subdomain it does not know. Set after
+  // mount: the server render has no host to read it from.
+  const [tournamentSlug, setTournamentSlug] = useState<string | null>(null);
+  // This tournament's own numbers, for when the account-wide ones are missing.
+  const [localTotals, setLocalTotals] = useState<MyTournamentsTotals | null>(
+    null,
+  );
+  const userId = user?.id;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -93,8 +108,19 @@ function ProfileContent() {
     );
   };
 
+  // Keyed on the account, not the user object: an email change replaces the
+  // object, and none of this depends on the email.
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
+
+    // Teams and enrollments belong to one tournament, and the backend reads
+    // which from the subdomain. The main site names none, so there is nothing
+    // to load there: the account-wide numbers come from /me/tournaments.
+    const slug = currentTournamentSlug();
+    if (!slug) {
+      setIsLoadingData(false);
+      return;
+    }
 
     const loadProfileData = async () => {
       setIsLoadingData(true);
@@ -106,14 +132,42 @@ function ProfileContent() {
           throw new Error("Session expired. Please log in again.");
         }
 
-        const [teamsRes, enrollmentsRes] = await Promise.all([
+        const [teamsResult, enrollmentsResult] = await Promise.allSettled([
           getUserTeams(token),
-          publicContestsApi
-            .myEnrollments()
-            .catch(() => [] as EnrollmentResponse[]),
+          publicContestsApi.myEnrollments(),
         ]);
 
+        // The backend refuses a slug it does not know (an archived tournament,
+        // a mistyped subdomain) with a 400. There is no tournament here to show
+        // history for, which is not an error on a profile.
+        if (
+          enrollmentsResult.status === "rejected" &&
+          axios.isAxiosError(enrollmentsResult.reason) &&
+          enrollmentsResult.reason.response?.status === 400
+        ) {
+          return;
+        }
+        if (teamsResult.status === "rejected") {
+          throw teamsResult.reason;
+        }
+        setTournamentSlug(slug);
+
+        const teamsRes = teamsResult.value;
         setTeams(teamsRes.teams || []);
+
+        if (enrollmentsResult.status === "rejected") {
+          setPastContests([]);
+          return;
+        }
+        const enrollmentsRes = enrollmentsResult.value;
+        const teamsHere = teamsRes.teams?.length ?? 0;
+        const contestsHere = new Set(enrollmentsRes.map((e) => e.contest_id))
+          .size;
+        setLocalTotals({
+          tournaments_played: teamsHere || contestsHere ? 1 : 0,
+          teams_count: teamsHere,
+          contests_count: contestsHere,
+        });
 
         if (!enrollmentsRes.length) {
           setPastContests([]);
@@ -203,23 +257,25 @@ function ProfileContent() {
     };
 
     loadProfileData();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   // Apart from the load above, so a slow /me/tournaments never holds the rest
   // of the profile behind its loading screen. A backend without memberships
   // (a single-tournament one, or one from before them) leaves the section out.
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
     let active = true;
     getMyTournaments()
-      .catch(() => null)
       .then((found) => {
         if (active) setMyTournaments(found);
+      })
+      .catch(() => {
+        if (active) setMyTournamentsFailed(true);
       });
     return () => {
       active = false;
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   const pastContestIdSet = useMemo(
     () => new Set(pastContests.map((item) => item.contestId)),
@@ -287,22 +343,40 @@ function ProfileContent() {
     }
   };
 
+  // The header counts every tournament this account has played, from the same
+  // source as the tournament cards; teams and enrollments above are only this
+  // subdomain's. Where the account-wide numbers are missing (the request
+  // failed, or a single-tournament backend, which keeps no memberships) this
+  // tournament's own are the best there is. A dash while waiting, and where
+  // there is nothing at all, rather than a misleading 0.
+  const accountTotals = myTournaments
+    ? (myTournaments.totals ?? sumPlayed(myTournaments))
+    : null;
+  let headerTotals: MyTournamentsTotals | null = null;
+  if (myTournaments || myTournamentsFailed) {
+    headerTotals =
+      accountTotals && (accountTotals.tournaments_played > 0 || !localTotals)
+        ? accountTotals
+        : localTotals;
+  }
+  const accountStat = (pick: (t: MyTournamentsTotals) => number) =>
+    headerTotals ? pick(headerTotals) : "–";
   const statTiles = [
     {
       label: "Total Teams",
-      value: teams.length,
+      value: accountStat((t) => t.teams_count),
       className: "border border-border-subtle bg-bg-elevated text-text-main",
       labelClassName: "text-text-muted",
     },
     {
-      label: "Past Teams",
-      value: pastTeams.length,
+      label: "Tournaments",
+      value: accountStat((t) => t.tournaments_played),
       className: "bg-bg-chip text-text-main",
       labelClassName: "text-text-muted",
     },
     {
-      label: "Past Contests",
-      value: pastContests.length,
+      label: "Contests",
+      value: accountStat((t) => t.contests_count),
       className: "bg-gradient-brand text-white",
       labelClassName: "text-white/80",
     },
@@ -328,7 +402,6 @@ function ProfileContent() {
       <div className="h-20 md:h-24" />
 
       <main className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-12 sm:pb-16">
-
         <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card p-4 sm:p-8 shadow-lg mb-4 sm:mb-6">
           <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-accent-pink-tonal" />
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
@@ -442,96 +515,104 @@ function ProfileContent() {
                 />
               )}
 
-              <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                  <Users className="h-5 w-5 text-accent-pink-500" />
-                  Past Teams
-                </h2>
+              {/* Per-tournament history, so only on a tournament's own site. */}
+              {tournamentSlug && (
+                <>
+                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
+                      <Users className="h-5 w-5 text-accent-pink-500" />
+                      Past Teams In This Tournament
+                    </h2>
 
-                {pastTeams.length === 0 ? (
-                  <p className="text-text-muted">No past teams found yet.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
-                    {pastTeams.map((team) => (
-                      <article
-                        key={team.id}
-                        className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                      >
-                        <div className="flex items-start justify-between gap-2.5">
-                          <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
-                            {team.team_name}
-                          </p>
-                          {typeof team.rank === "number" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
-                              <Crown className="h-3.5 w-3.5" />
-                              Rank #{team.rank}
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
-                              Rank N/A
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                          <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
-                            Points: {team.total_points}
-                          </span>
-                          <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                            Created: {formatDate(team.created_at)}
-                          </span>
-                        </div>
-                      </article>
-                    ))}
+                    {pastTeams.length === 0 ? (
+                      <p className="text-text-muted">
+                        No past teams found yet.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                        {pastTeams.map((team) => (
+                          <article
+                            key={team.id}
+                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                          >
+                            <div className="flex items-start justify-between gap-2.5">
+                              <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
+                                {team.team_name}
+                              </p>
+                              {typeof team.rank === "number" ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
+                                  <Crown className="h-3.5 w-3.5" />
+                                  Rank #{team.rank}
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
+                                  Rank N/A
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
+                              <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
+                                Points: {team.total_points}
+                              </span>
+                              <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                Created: {formatDate(team.created_at)}
+                              </span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                  <Trophy className="h-5 w-5 text-warning" />
-                  Past Contests And Ranks
-                </h2>
+                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
+                      <Trophy className="h-5 w-5 text-warning" />
+                      Past Contests And Ranks In This Tournament
+                    </h2>
 
-                {pastContests.length === 0 ? (
-                  <p className="text-text-muted">
-                    No past contest records found yet.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 sm:space-y-3">
-                    {pastContests.map((contest) => (
-                      <article
-                        key={`${contest.contestId}-${contest.teamName}`}
-                        className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                          <div>
-                            <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
-                              {contest.contestName}
-                            </p>
-                            <p className="text-xs sm:text-sm text-text-muted">
-                              Team: {contest.teamName}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                            <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                              {contest.contestStatus}
-                            </span>
-                            <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                              Ended: {formatDate(contest.contestEndedAt)}
-                            </span>
-                            <span className="rounded-full bg-warning-tonal text-warning px-2 py-1 font-semibold">
-                              Rank: {contest.rank ? `#${contest.rank}` : "N/A"}
-                            </span>
-                            <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
-                              Points: {contest.points ?? "N/A"}
-                            </span>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+                    {pastContests.length === 0 ? (
+                      <p className="text-text-muted">
+                        No past contest records found yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5 sm:space-y-3">
+                        {pastContests.map((contest) => (
+                          <article
+                            key={`${contest.contestId}-${contest.teamName}`}
+                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                              <div>
+                                <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
+                                  {contest.contestName}
+                                </p>
+                                <p className="text-xs sm:text-sm text-text-muted">
+                                  Team: {contest.teamName}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
+                                <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                  {contest.contestStatus}
+                                </span>
+                                <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                  Ended: {formatDate(contest.contestEndedAt)}
+                                </span>
+                                <span className="rounded-full bg-warning-tonal text-warning px-2 py-1 font-semibold">
+                                  Rank:{" "}
+                                  {contest.rank ? `#${contest.rank}` : "N/A"}
+                                </span>
+                                <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
+                                  Points: {contest.points ?? "N/A"}
+                                </span>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
               <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
                 <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
@@ -625,4 +706,13 @@ function ProfileContent() {
       </main>
     </div>
   );
+}
+
+/** Totals for a backend that predates the `totals` field. */
+function sumPlayed({ played }: MyTournaments): MyTournamentsTotals {
+  return {
+    tournaments_played: played.length,
+    teams_count: played.reduce((sum, t) => sum + t.teams_count, 0),
+    contests_count: played.reduce((sum, t) => sum + t.contests_count, 0),
+  };
 }

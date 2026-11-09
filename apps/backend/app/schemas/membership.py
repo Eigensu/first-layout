@@ -29,7 +29,8 @@ class PlayedTournament(_DatesInIST):
     joined_at: datetime
     first_played_at: Optional[datetime] = None
     last_active_at: Optional[datetime] = None
-    # From the stats job, so up to a refresh behind while a tournament is live.
+    # Counted when asked. best_rank and total_points come from the stats job,
+    # so they can be a refresh behind while a tournament is live.
     teams_count: int
     contests_count: int
     best_rank: Optional[int] = None
@@ -46,8 +47,18 @@ class RegisteredTournament(_DatesInIST):
     joined_at: datetime
 
 
+class MyTournamentsTotals(BaseModel):
+    """The whole account's numbers, summed over `played`, so every client shows
+    the same totals rather than each adding them up its own way."""
+
+    tournaments_played: int = 0
+    teams_count: int = 0
+    contests_count: int = 0
+
+
 class MyTournamentsResponse(BaseModel):
     """GET /api/users/me/tournaments (spec §6.1), most recent first."""
 
     played: List[PlayedTournament]
     registered_only: List[RegisteredTournament]
+    totals: MyTournamentsTotals

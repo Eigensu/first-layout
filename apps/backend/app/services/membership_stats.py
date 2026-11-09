@@ -11,7 +11,7 @@ one now, and a member who has played is marked as having played.
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Set
+from typing import Dict, Iterable, List, Set, Tuple
 
 from beanie import PydanticObjectId
 from beanie.operators import In
@@ -230,3 +230,25 @@ def _writes(
             )
         )
     return writes
+
+
+async def live_play_counts(
+    user_id: UserId, tournament_ids: Iterable[PydanticObjectId]
+) -> Dict[PydanticObjectId, Tuple[int, int]]:
+    """(teams made, contests entered) for one person in each tournament, now.
+
+    The job also writes these, but only on its schedule, so a team made since
+    its last run would be missing from the profile while the tournament already
+    shows as played. Counting them takes two cheap queries per tournament (spec
+    §6.2's table); only best_rank and total_points need the job.
+    """
+    counts = {}
+    for tid in tournament_ids:
+        teams = await scoped(Team, tid).find(Team.user_id == user_id).count()
+        entries = await (
+            scoped(TeamContestEnrollment, tid)
+            .find({"user_id": user_id, "status": EnrollmentStatus.ACTIVE})
+            .to_list()
+        )
+        counts[tid] = (teams, len({e.contest_id for e in entries}))
+    return counts

@@ -1,10 +1,14 @@
 "use client";
 
 import { Crown, ExternalLink, Globe } from "lucide-react";
-import { getTournamentSlugFromHost } from "@/common/consts";
+import { currentTournamentSlug } from "@/common/consts";
 import { getImageUrl } from "@/lib/utils";
 import type { MyTournaments } from "@/lib/api/tournaments";
-import { type AnyTournament, formatPoints, tournamentLink } from "./myTournaments";
+import {
+  type AnyTournament,
+  formatPoints,
+  tournamentLink,
+} from "./myTournaments";
 
 const formatDate = (dateString?: string | null) => {
   if (!dateString) return "-";
@@ -14,12 +18,6 @@ const formatDate = (dateString?: string | null) => {
     day: "numeric",
   });
 };
-
-function currentSlug(): string | null {
-  return typeof window === "undefined"
-    ? null
-    : getTournamentSlugFromHost(window.location.host);
-}
 
 function Logo({ tournament }: Readonly<{ tournament: AnyTournament }>) {
   return (
@@ -71,7 +69,7 @@ export function MyTournamentsSection({
   if (played.length === 0 && registered_only.length === 0) {
     return null;
   }
-  const here = currentSlug();
+  const here = currentTournamentSlug();
 
   return (
     <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
@@ -134,7 +132,9 @@ export function MyTournamentsSection({
                 </span>
                 <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
                   Last played:{" "}
-                  {formatDate(tournament.last_active_at || tournament.joined_at)}
+                  {formatDate(
+                    tournament.last_active_at || tournament.joined_at,
+                  )}
                 </span>
               </div>
             </article>
