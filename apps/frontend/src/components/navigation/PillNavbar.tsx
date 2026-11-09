@@ -10,7 +10,7 @@ import {
   Menu,
   X,
   ChevronDown,
-  LayoutDashboard,
+  UserCircle,
   Settings,
   LogOut,
   Info,
@@ -231,12 +231,12 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
                       tabIndex={0}
                       onClick={() => {
                         setUserMenuOpen(false);
-                        router.push("/dashboard");
+                        router.push("/profile");
                       }}
                       className="cursor-pointer select-none flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main hover:bg-bg-card-soft"
                     >
-                      <LayoutDashboard className="h-4 w-4 text-accent-pink-500" />
-                      <span>Dashboard</span>
+                      <UserCircle className="h-4 w-4 text-accent-pink-500" />
+                      <span>Profile</span>
                     </div>
                     {user?.is_admin && (
                       <div

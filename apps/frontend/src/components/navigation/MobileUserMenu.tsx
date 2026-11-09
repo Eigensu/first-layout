@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, UserCircle } from "lucide-react";
 import { getImageUrl } from "@/lib/utils";
 
 interface MobileUserMenuProps {
@@ -52,6 +52,17 @@ function MobileUserMenu({ onClose }: MobileUserMenuProps = {}) {
             <p className="text-white/40 text-[11px] leading-tight mt-0.5">Logged in</p>
           </div>
         </div>
+      )}
+
+      {/* Profile Link */}
+      {user && (
+        <button
+          onClick={() => handleNavigation("/profile")}
+          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/55 hover:text-white/90 hover:bg-white/5 transition-all duration-200 active:scale-[0.97]"
+        >
+          <UserCircle className="w-4 h-4 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
+          <span className="text-[14px] font-medium">Profile</span>
+        </button>
       )}
 
       {/* Admin Link */}

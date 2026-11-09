@@ -78,6 +78,11 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    // The player page moved from /dashboard to /profile; keep old links and
+    // bookmarks working.
+    return [{ source: "/dashboard", destination: "/profile", permanent: true }];
+  },
   async rewrites() {
     return [
       {
