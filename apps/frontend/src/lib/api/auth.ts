@@ -79,4 +79,14 @@ export const authApi = {
     const response = await apiClient.patch<User>('/api/users/me', { mobile });
     return response.data;
   },
+  /**
+   * Change the signed-in user's password
+   */
+  changePassword: async (payload: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<void> => {
+    await apiClient.post('/api/auth/change-password', payload);
+  },
 };

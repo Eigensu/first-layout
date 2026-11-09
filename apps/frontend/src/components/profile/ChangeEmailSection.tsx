@@ -20,9 +20,9 @@ type ChangeEmailSectionProps = Readonly<{
 }>;
 
 const INPUT_CLASS =
-  "mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500";
+  "mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-elevated px-3 py-2.5 text-sm text-text-main placeholder:text-text-subtle focus:outline-none focus:ring-2 focus:ring-accent-pink-500";
 const BUTTON_CLASS =
-  "w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed";
+  "w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-brand px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed";
 
 export function ChangeEmailSection({
   currentEmail,
@@ -77,16 +77,16 @@ export function ChangeEmailSection({
   const hint = passwordHint(authProvider);
 
   return (
-    <div className="rounded-2xl sm:rounded-3xl border border-white/70 bg-white/85 shadow-lg p-4 sm:p-7">
-      <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 mb-3 sm:mb-4">
-        <Mail className="h-5 w-5 text-cyan-700" />
+    <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+      <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
+        <Mail className="h-5 w-5 text-accent-pink-500" />
         Security: Change Email
       </h2>
 
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs sm:text-sm text-rose-700"
+          className="mb-4 rounded-xl border border-danger-edge bg-danger-tonal px-3 py-2 text-xs sm:text-sm text-danger"
         >
           {error}
         </div>
@@ -94,13 +94,13 @@ export function ChangeEmailSection({
 
       {state.step === "form" && (
         <form onSubmit={onRequest} className="space-y-4">
-          <p className="text-xs sm:text-sm text-slate-600">
+          <p className="text-xs sm:text-sm text-text-muted">
             Your email signs you in and can reset your password. We&apos;ll
             send a code to the new address to make sure it&apos;s yours.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-slate-600">
+              <span className="text-xs uppercase tracking-wide text-text-muted">
                 New Email
               </span>
               <input
@@ -112,7 +112,7 @@ export function ChangeEmailSection({
               />
             </label>
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-slate-600">
+              <span className="text-xs uppercase tracking-wide text-text-muted">
                 Current Password
               </span>
               <input
@@ -125,7 +125,7 @@ export function ChangeEmailSection({
             </label>
           </div>
           {hint && (
-            <div className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] sm:text-xs text-slate-700 leading-relaxed">
+            <div className="rounded-xl bg-bg-elevated px-3 py-2 text-[11px] sm:text-xs text-text-muted leading-relaxed">
               {hint}
             </div>
           )}
@@ -138,12 +138,12 @@ export function ChangeEmailSection({
 
       {state.step === "code" && (
         <form onSubmit={onConfirm} className="space-y-4">
-          <p className="text-xs sm:text-sm text-slate-600">
+          <p className="text-xs sm:text-sm text-text-muted">
             We sent a code to <strong>{state.email}</strong>. It expires in{" "}
             {minutes(state.expiresInSec)}. Check spam if it isn&apos;t there.
           </p>
           <label className="block md:max-w-xs">
-            <span className="text-xs uppercase tracking-wide text-slate-600">
+            <span className="text-xs uppercase tracking-wide text-text-muted">
               Code
             </span>
             <input
@@ -164,7 +164,7 @@ export function ChangeEmailSection({
               type="button"
               onClick={restart}
               disabled={busy}
-              className="w-full sm:w-auto rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="w-full sm:w-auto rounded-xl border border-border-strong px-4 py-2.5 text-sm font-semibold text-text-main hover:bg-bg-card-soft"
             >
               Use a different email
             </button>
@@ -174,14 +174,14 @@ export function ChangeEmailSection({
 
       {state.step === "done" && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs sm:text-sm text-emerald-700">
+          <div className="rounded-xl border border-success-edge bg-success-tonal px-3 py-2 text-xs sm:text-sm text-success">
             Your email is now <strong>{state.email}</strong>. Use it to sign in
             and to reset your password.
           </div>
           <button
             type="button"
             onClick={restart}
-            className="w-full sm:w-auto rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="w-full sm:w-auto rounded-xl border border-border-strong px-4 py-2.5 text-sm font-semibold text-text-main hover:bg-bg-card-soft"
           >
             Change it again
           </button>

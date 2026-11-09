@@ -78,6 +78,12 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    // The player page moved from /dashboard to /profile; keep old links and
+    // bookmarks working. Temporary (307), so browsers do not cache it for
+    // good and /dashboard stays free to reuse.
+    return [{ source: "/dashboard", destination: "/profile", permanent: false }];
+  },
   async rewrites() {
     return [
       {
