@@ -15,6 +15,7 @@ import pytest
 from app.common.datetime_utils import IST, to_ist, to_utc_naive, utc_now
 from app.common.enums.contests import ContestStatus
 from app.models.contest import Contest
+from app.schemas.enrollment import EnrollmentResponse
 from app.services.contest_status import compute_contest_status
 
 BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -98,6 +99,27 @@ def test_to_ist_still_renders_for_display():
     rendered = to_ist(instant)
     assert rendered.utcoffset() == timedelta(hours=5, minutes=30)
     assert (rendered.hour, rendered.minute) == (12, 0)
+
+
+def test_enrollment_dates_carry_the_ist_offset():
+    """A naive UTC date (fresh or stored) leaves the API as the same instant
+    with +05:30 on, so a browser does not read it as local time."""
+    res = EnrollmentResponse(
+        id="e",
+        team_id="t",
+        user_id="u",
+        contest_id="c",
+        status="active",
+        enrolled_at=datetime(2026, 3, 1, 6, 30),
+        removed_at=datetime(2026, 3, 2, 6, 30),
+    )
+    dumped = res.model_dump(mode="json")
+    assert dumped["enrolled_at"] == "2026-03-01T12:00:00+05:30"
+    assert dumped["removed_at"] == "2026-03-02T12:00:00+05:30"
+    assert (
+        EnrollmentResponse(**{**res.model_dump(), "removed_at": None}).removed_at
+        is None
+    )
 
 
 async def test_partial_schedule_update_compares_with_the_stored_value(client, db):

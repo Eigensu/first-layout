@@ -39,14 +39,6 @@ def to_utc_naive(dt: datetime) -> datetime:
     return dt
 
 
-def now_ist() -> datetime:
-    """Return current datetime in IST timezone.
-
-    Prefer utc_now() for storage and comparison; this is for display.
-    """
-    return datetime.now(IST)
-
-
 def to_ist(dt: datetime) -> datetime:
     """Convert any datetime to IST timezone.
 
@@ -59,15 +51,3 @@ def to_ist(dt: datetime) -> datetime:
         dt = dt.replace(tzinfo=timezone.utc)
     # If already IST, astimezone returns the same instant
     return dt.astimezone(IST)
-
-
-def parse_ist(date_str: str) -> datetime:
-    """Parse ISO string as IST datetime.
-
-    Handles:
-    - Naive ISO strings (assumes UTC then converts to IST): "2025-11-02T00:00:00"
-    - ISO with offset: "2025-11-02T00:00:00+05:30"
-    - ISO with Z: "2025-11-01T18:30:00Z" (converts to IST)
-    """
-    dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    return to_ist(dt)
