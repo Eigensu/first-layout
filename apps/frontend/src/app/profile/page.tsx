@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { LS_KEYS } from "@/common/consts";
+import { LS_KEYS, getTournamentSlugFromHost } from "@/common/consts";
 import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/utils/errors";
 import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
@@ -56,6 +56,9 @@ function ProfileContent() {
   const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
     null,
   );
+  // The tournament whose subdomain this is, or null on the main site. Read
+  // after mount: the server render has no host to read it from.
+  const [tournamentSlug, setTournamentSlug] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -95,6 +98,18 @@ function ProfileContent() {
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
+
+    // Teams and enrollments belong to one tournament, and the backend reads
+    // which from the subdomain. The main site names none, so there is nothing
+    // to load there: the account-wide numbers come from /me/tournaments.
+    const slug = getTournamentSlugFromHost(window.location.host);
+    setTournamentSlug(slug);
+    if (!slug) {
+      setTeams([]);
+      setPastContests([]);
+      setIsLoadingData(false);
+      return;
+    }
 
     const loadProfileData = async () => {
       setIsLoadingData(true);
@@ -287,22 +302,28 @@ function ProfileContent() {
     }
   };
 
+  // The header counts every tournament this account has played, from the same
+  // source as the tournament cards. Teams and enrollments above are only the
+  // current subdomain's, so counting those showed 0 on the main site. Until
+  // /me/tournaments answers, a dash rather than a misleading 0.
+  const played = myTournaments?.played ?? [];
+  const accountStat = (value: number) => (myTournaments ? value : "–");
   const statTiles = [
     {
       label: "Total Teams",
-      value: teams.length,
+      value: accountStat(played.reduce((sum, t) => sum + t.teams_count, 0)),
       className: "border border-border-subtle bg-bg-elevated text-text-main",
       labelClassName: "text-text-muted",
     },
     {
-      label: "Past Teams",
-      value: pastTeams.length,
+      label: "Tournaments",
+      value: accountStat(played.length),
       className: "bg-bg-chip text-text-main",
       labelClassName: "text-text-muted",
     },
     {
-      label: "Past Contests",
-      value: pastContests.length,
+      label: "Contests",
+      value: accountStat(played.reduce((sum, t) => sum + t.contests_count, 0)),
       className: "bg-gradient-brand text-white",
       labelClassName: "text-white/80",
     },
@@ -328,7 +349,6 @@ function ProfileContent() {
       <div className="h-20 md:h-24" />
 
       <main className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-12 sm:pb-16">
-
         <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card p-4 sm:p-8 shadow-lg mb-4 sm:mb-6">
           <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-accent-pink-tonal" />
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
@@ -442,96 +462,104 @@ function ProfileContent() {
                 />
               )}
 
-              <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                  <Users className="h-5 w-5 text-accent-pink-500" />
-                  Past Teams
-                </h2>
+              {/* Per-tournament history, so only on a tournament's own site. */}
+              {tournamentSlug && (
+                <>
+                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
+                      <Users className="h-5 w-5 text-accent-pink-500" />
+                      Past Teams In This Tournament
+                    </h2>
 
-                {pastTeams.length === 0 ? (
-                  <p className="text-text-muted">No past teams found yet.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
-                    {pastTeams.map((team) => (
-                      <article
-                        key={team.id}
-                        className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                      >
-                        <div className="flex items-start justify-between gap-2.5">
-                          <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
-                            {team.team_name}
-                          </p>
-                          {typeof team.rank === "number" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
-                              <Crown className="h-3.5 w-3.5" />
-                              Rank #{team.rank}
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
-                              Rank N/A
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                          <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
-                            Points: {team.total_points}
-                          </span>
-                          <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                            Created: {formatDate(team.created_at)}
-                          </span>
-                        </div>
-                      </article>
-                    ))}
+                    {pastTeams.length === 0 ? (
+                      <p className="text-text-muted">
+                        No past teams found yet.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                        {pastTeams.map((team) => (
+                          <article
+                            key={team.id}
+                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                          >
+                            <div className="flex items-start justify-between gap-2.5">
+                              <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
+                                {team.team_name}
+                              </p>
+                              {typeof team.rank === "number" ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
+                                  <Crown className="h-3.5 w-3.5" />
+                                  Rank #{team.rank}
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
+                                  Rank N/A
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
+                              <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
+                                Points: {team.total_points}
+                              </span>
+                              <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                Created: {formatDate(team.created_at)}
+                              </span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                  <Trophy className="h-5 w-5 text-warning" />
-                  Past Contests And Ranks
-                </h2>
+                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
+                      <Trophy className="h-5 w-5 text-warning" />
+                      Past Contests And Ranks In This Tournament
+                    </h2>
 
-                {pastContests.length === 0 ? (
-                  <p className="text-text-muted">
-                    No past contest records found yet.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 sm:space-y-3">
-                    {pastContests.map((contest) => (
-                      <article
-                        key={`${contest.contestId}-${contest.teamName}`}
-                        className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                          <div>
-                            <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
-                              {contest.contestName}
-                            </p>
-                            <p className="text-xs sm:text-sm text-text-muted">
-                              Team: {contest.teamName}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                            <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                              {contest.contestStatus}
-                            </span>
-                            <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                              Ended: {formatDate(contest.contestEndedAt)}
-                            </span>
-                            <span className="rounded-full bg-warning-tonal text-warning px-2 py-1 font-semibold">
-                              Rank: {contest.rank ? `#${contest.rank}` : "N/A"}
-                            </span>
-                            <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
-                              Points: {contest.points ?? "N/A"}
-                            </span>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+                    {pastContests.length === 0 ? (
+                      <p className="text-text-muted">
+                        No past contest records found yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5 sm:space-y-3">
+                        {pastContests.map((contest) => (
+                          <article
+                            key={`${contest.contestId}-${contest.teamName}`}
+                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                              <div>
+                                <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
+                                  {contest.contestName}
+                                </p>
+                                <p className="text-xs sm:text-sm text-text-muted">
+                                  Team: {contest.teamName}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
+                                <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                  {contest.contestStatus}
+                                </span>
+                                <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                                  Ended: {formatDate(contest.contestEndedAt)}
+                                </span>
+                                <span className="rounded-full bg-warning-tonal text-warning px-2 py-1 font-semibold">
+                                  Rank:{" "}
+                                  {contest.rank ? `#${contest.rank}` : "N/A"}
+                                </span>
+                                <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
+                                  Points: {contest.points ?? "N/A"}
+                                </span>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
               <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
                 <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
