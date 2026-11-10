@@ -11,6 +11,10 @@
     {
       "path": "apps/backend",
       "name": "backend"
+    },
+    {
+      "path": "apps/mobile",
+      "name": "mobile"
     }
   ],
   "settings": {

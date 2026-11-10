@@ -14,6 +14,14 @@ dist/
 .next/
 out/
 
+# Expo / React Native (apps/mobile)
+.expo/
+*.expo-shared/
+web-build/
+expo-env.d.ts
+apps/mobile/ios/
+apps/mobile/android/
+
 # Misc
 .DS_Store
 *.pem

@@ -18,6 +18,9 @@ export default [
       "**/coverage/**",
       // Linted by apps/frontend/eslint.config.mjs instead.
       "apps/frontend/**",
+      // Carried over from walle-app, where it was never linted. Its `lint`
+      // script type-checks instead until it gets an Expo-aware config.
+      "apps/mobile/**",
       // Python.
       "apps/backend/**",
     ],
