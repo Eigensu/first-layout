@@ -64,7 +64,7 @@ async def archive_duplicates(enrollments, rows):
             {
                 "$set": {
                     "status": "removed",
-                    "removed_at": datetime.now(timezone.utc),
+                    "removed_at": datetime.now(timezone.utc).replace(tzinfo=None),
                 }
             },
         )

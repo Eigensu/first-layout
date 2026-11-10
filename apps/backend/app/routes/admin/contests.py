@@ -221,7 +221,11 @@ async def update_contest(
     if "code" in update_fields:
         update_fields.pop("code")  # immutable
 
-    # Validate dates if provided
+    # Both ends are required on the model, so an explicit null cannot clear one.
+    for field in ("start_at", "end_at"):
+        if field in update_fields and update_fields[field] is None:
+            raise HTTPException(status_code=400, detail=f"{field} cannot be empty")
+
     # The schema hands back aware IST values and the stored ones are naive UTC,
     # so a partial update (only start_at or only end_at) mixes the two.
     new_start = to_utc_naive(update_fields.get("start_at", contest.start_at))

@@ -3,7 +3,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.common.datetime_utils import IST, to_ist
+from app.common.datetime_utils import IST
+from app.schemas.dates import DatesInIST
 
 
 class ContestCreate(BaseModel):
@@ -95,7 +96,7 @@ class ContestUpdate(BaseModel):
         return v
 
 
-class ContestResponse(BaseModel):
+class ContestResponse(DatesInIST):
     id: str
     code: str
     name: str
@@ -119,14 +120,6 @@ class ContestResponse(BaseModel):
     effective_max_players_per_team: int
     created_at: datetime
     updated_at: datetime
-
-    @field_validator("start_at", "end_at", "created_at", "updated_at", mode="before")
-    @classmethod
-    def ensure_ist(cls, v):
-        """Ensure all datetime fields are in IST timezone"""
-        if isinstance(v, datetime):
-            return to_ist(v)
-        return v
 
     class Config:
         from_attributes = True

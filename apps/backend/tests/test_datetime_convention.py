@@ -131,23 +131,45 @@ async def test_partial_schedule_update_compares_with_the_stored_value(client, db
         json={
             "code": "partial-1",
             "name": "Partial",
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         },
     )
     assert created.status_code == 201, created.text
     url = f"/api/admin/contests/{created.json()['id']}"
 
     res = await client.put(
-        url, json={"end_at": (start + timedelta(days=3)).isoformat()}
+        url, json={"end_at": (start + timedelta(days=3)).isoformat() + "Z"}
     )
     assert res.status_code == 200, res.text
 
     res = await client.put(
-        url, json={"start_at": (start + timedelta(days=5)).isoformat()}
+        url, json={"start_at": (start + timedelta(days=5)).isoformat() + "Z"}
     )
     assert res.status_code == 400
     assert "start_at must be before end_at" in res.json()["detail"]
+
+    # Both ends are required, so an explicit null is refused, not a 500.
+    for field in ("start_at", "end_at"):
+        res = await client.put(url, json={field: None})
+        assert res.status_code == 400, res.text
+        assert f"{field} cannot be empty" in res.json()["detail"]
+
+
+def _offenders(subdirs, needle):
+    offenders = []
+    for sub in subdirs:
+        for dirpath, _, filenames in os.walk(os.path.join(BACKEND_ROOT, sub)):
+            for name in filenames:
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, name)
+                # datetime_utils is the one place allowed to make "now".
+                if path.endswith("datetime_utils.py"):
+                    continue
+                if re.search(needle, open(path).read()):
+                    offenders.append(os.path.relpath(path, BACKEND_ROOT))
+    return offenders
 
 
 def test_no_utcnow_calls_remain():
@@ -159,17 +181,14 @@ def test_no_utcnow_calls_remain():
     match its own check.
     """
     needle = r"\b" + "utc" + "now" + r"\s*\("
-    offenders = []
-    for sub in ("app", "scripts", "tests"):
-        for dirpath, _, filenames in os.walk(os.path.join(BACKEND_ROOT, sub)):
-            for name in filenames:
-                if not name.endswith(".py"):
-                    continue
-                path = os.path.join(dirpath, name)
-                source = open(path).read()
-                # datetime_utils names it deliberately in its docstring.
-                if path.endswith("datetime_utils.py"):
-                    continue
-                if re.search(needle, source):
-                    offenders.append(os.path.relpath(path, BACKEND_ROOT))
+    offenders = _offenders(("app", "scripts", "tests"), needle)
+    assert offenders == [], f"use utc_now() instead: {offenders}"
+
+
+def test_app_makes_now_only_through_utc_now():
+    """An aware "now" in app code is how the naive/aware split crept back in
+    before. Tests may build aware values on purpose, and the standalone scripts
+    avoid importing app, so only app/ is checked."""
+    needle = r"datetime\.now\(\s*(?:datetime\.)?(?:timezone\.utc|IST)\s*\)"
+    offenders = _offenders(("app",), needle)
     assert offenders == [], f"use utc_now() instead: {offenders}"

@@ -43,8 +43,8 @@ def _payload(**overrides):
     body = {
         "code": "auction-rules",
         "name": "Auction Rules",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=7)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         "contest_format": "auction_purse",
         "purse": 1_000_000,
         "squad_size": 4,
@@ -270,8 +270,8 @@ async def test_an_unrelated_edit_survives_an_already_broken_squad(
     res = await client.put(
         f"/api/admin/contests/{contest_id}",
         json={
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         },
     )
 

@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from app.common.datetime_utils import to_ist
+from app.schemas.dates import DatesInIST
 
 
 class EnrollmentBulkRequest(BaseModel):
@@ -15,7 +15,7 @@ class UnenrollBulkRequest(BaseModel):
     enrollment_ids: Optional[List[str]] = None
 
 
-class EnrollmentResponse(BaseModel):
+class EnrollmentResponse(DatesInIST):
     id: str
     team_id: str
     user_id: str
@@ -23,15 +23,6 @@ class EnrollmentResponse(BaseModel):
     status: str
     enrolled_at: datetime
     removed_at: Optional[datetime] = None
-
-    # Stored and freshly made dates are both naive UTC, which a browser reads
-    # as local time. With the IST offset on, they mean one instant everywhere.
-    @field_validator("enrolled_at", "removed_at", mode="before")
-    @classmethod
-    def ensure_ist(cls, v):
-        if isinstance(v, datetime):
-            return to_ist(v)
-        return v
 
     class Config:
         from_attributes = True

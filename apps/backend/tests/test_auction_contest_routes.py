@@ -15,8 +15,8 @@ def _payload(**overrides):
     body = {
         "code": "auction-1",
         "name": "Auction Contest",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=7)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         "contest_format": "auction_purse",
         "purse": 1_000_000,
         "squad_size": 6,
@@ -119,8 +119,8 @@ async def test_existing_contests_default_to_slot_based(client, db):
         json={
             "code": "legacy-1",
             "name": "Legacy Contest",
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         },
     )
 

@@ -221,8 +221,8 @@ async def test_a_refused_admin_changed_nothing(shared, people, http):
     contest = {
         "code": "FINAL",
         "name": "Final",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=1)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=1)).isoformat() + "Z",
     }
 
     as_user(people["organiser"])

@@ -57,8 +57,8 @@ async def test_auction_flow_from_admin_config_to_submitted_squad(
         json={
             "code": "auction-e2e",
             "name": "Auction E2E",
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
             "contest_format": "auction_purse",
             "purse": 500_000,
             "squad_size": 4,
@@ -116,8 +116,8 @@ async def test_third_player_from_one_team_is_refused(client, user_client, db):
         json={
             "code": "auction-cap",
             "name": "Auction Cap",
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
             "contest_format": "auction_purse",
             "purse": 1_000_000,
             "squad_size": 4,

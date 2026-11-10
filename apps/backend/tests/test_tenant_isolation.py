@@ -542,8 +542,8 @@ async def test_contest_codes_are_per_tournament(world, client):
     body = {
         "code": "QF",
         "name": "quarter final",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=1)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=1)).isoformat() + "Z",
     }
 
     in_alpha = await client.post("/api/admin/contests", headers=ALPHA, json=body)
