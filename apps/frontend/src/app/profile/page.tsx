@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ChevronRight,
   Crown,
   KeyRound,
   Loader2,
@@ -33,6 +35,7 @@ import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { ChangeEmailSection } from "@/components/profile/ChangeEmailSection";
 import { getResetChannels } from "@/lib/api/emailCodes";
+import { TeamDialog } from "@/components/leaderboard/TeamDialog";
 
 type PastContestSummary = {
   contestId: string;
@@ -43,6 +46,23 @@ type PastContestSummary = {
   rank: number | null;
   points: number | null;
 };
+
+// Enough of a contest to label a team card with it, for every contest the
+// user has a team enrolled in (past and current alike).
+type EnrolledContest = {
+  name: string;
+  status: Contest["status"];
+  isPast: boolean;
+};
+
+type ContestTeam = {
+  team: TeamResponse;
+  contestId: string;
+  contest: EnrolledContest;
+};
+
+// The team a card was tapped on, opened in the team popup.
+type OpenTeam = { contestId: string; teamId: string };
 
 export default function ProfilePage() {
   return (
@@ -58,6 +78,16 @@ function ProfileContent() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamResponse[]>([]);
   const [pastContests, setPastContests] = useState<PastContestSummary[]>([]);
+  const [enrolledContests, setEnrolledContests] = useState<
+    Record<string, EnrolledContest>
+  >({});
+  // Which contest each team is entered in, from the enrollments: the popup
+  // and the leaderboard both need it, and a team's own contest_id can be
+  // missing on older teams.
+  const [teamContestIds, setTeamContestIds] = useState<Record<string, string>>(
+    {},
+  );
+  const [openTeam, setOpenTeam] = useState<OpenTeam | null>(null);
   const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
     null,
   );
@@ -174,6 +204,8 @@ function ProfileContent() {
           return;
         }
 
+        const enrolled: Record<string, EnrolledContest> = {};
+
         const teamById = new Map(
           (teamsRes.teams || []).map((team) => [team.id, team]),
         );
@@ -201,7 +233,16 @@ function ProfileContent() {
               }
             }
 
-            if (!contest || !isPastContest(contest)) {
+            if (!contest) {
+              return null;
+            }
+            const past = isPastContest(contest);
+            enrolled[contestId] = {
+              name: contest.name,
+              status: contest.status,
+              isPast: past,
+            };
+            if (!past) {
               return null;
             }
 
@@ -249,6 +290,12 @@ function ProfileContent() {
           );
 
         setPastContests(normalizedRows);
+        setEnrolledContests(enrolled);
+        setTeamContestIds(
+          Object.fromEntries(
+            enrollmentsRes.map((e) => [e.team_id, e.contest_id]),
+          ),
+        );
       } catch (error: any) {
         setLoadError(error?.message || "Failed to load profile data");
       } finally {
@@ -277,18 +324,20 @@ function ProfileContent() {
     };
   }, [isAuthenticated, userId]);
 
-  const pastContestIdSet = useMemo(
-    () => new Set(pastContests.map((item) => item.contestId)),
-    [pastContests],
-  );
-
-  const pastTeams = useMemo(
-    () =>
-      teams.filter(
-        (team) => team.contest_id && pastContestIdSet.has(team.contest_id),
-      ),
-    [teams, pastContestIdSet],
-  );
+  // Every team entered in a contest, split into ones whose contest has ended
+  // and ones still upcoming or live. A team in no contest has no leaderboard,
+  // so it is left out of both.
+  const { pastTeams, currentTeams } = useMemo(() => {
+    const past: ContestTeam[] = [];
+    const current: ContestTeam[] = [];
+    for (const team of teams) {
+      const contestId = teamContestIds[team.id] ?? team.contest_id;
+      const contest = contestId ? enrolledContests[contestId] : undefined;
+      if (!contestId || !contest) continue;
+      (contest.isPast ? past : current).push({ team, contestId, contest });
+    }
+    return { pastTeams: past, currentTeams: current };
+  }, [teams, teamContestIds, enrolledContests]);
 
   const validatePassword = (password: string): string[] => {
     const errors: string[] = [];
@@ -518,51 +567,21 @@ function ProfileContent() {
               {/* Per-tournament history, so only on a tournament's own site. */}
               {tournamentSlug && (
                 <>
-                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                      <Users className="h-5 w-5 text-accent-pink-500" />
-                      Past Teams In This Tournament
-                    </h2>
+                  <TeamsSection
+                    title="Current Teams In This Tournament"
+                    emptyText="No teams in upcoming or live contests."
+                    teams={currentTeams}
+                    formatDate={formatDate}
+                    onOpen={setOpenTeam}
+                  />
 
-                    {pastTeams.length === 0 ? (
-                      <p className="text-text-muted">
-                        No past teams found yet.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
-                        {pastTeams.map((team) => (
-                          <article
-                            key={team.id}
-                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                          >
-                            <div className="flex items-start justify-between gap-2.5">
-                              <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
-                                {team.team_name}
-                              </p>
-                              {typeof team.rank === "number" ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
-                                  <Crown className="h-3.5 w-3.5" />
-                                  Rank #{team.rank}
-                                </span>
-                              ) : (
-                                <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
-                                  Rank N/A
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                              <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
-                                Points: {team.total_points}
-                              </span>
-                              <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                                Created: {formatDate(team.created_at)}
-                              </span>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <TeamsSection
+                    title="Past Teams In This Tournament"
+                    emptyText="No past teams found yet."
+                    teams={pastTeams}
+                    formatDate={formatDate}
+                    onOpen={setOpenTeam}
+                  />
 
                   <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
                     <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
@@ -577,9 +596,10 @@ function ProfileContent() {
                     ) : (
                       <div className="space-y-2.5 sm:space-y-3">
                         {pastContests.map((contest) => (
-                          <article
+                          <Link
                             key={`${contest.contestId}-${contest.teamName}`}
-                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                            href={myLeaderboardHref(contest.contestId)}
+                            className="block rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                               <div>
@@ -604,9 +624,13 @@ function ProfileContent() {
                                 <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
                                   Points: {contest.points ?? "N/A"}
                                 </span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-bg-chip text-text-main px-2 py-1 font-semibold">
+                                  Leaderboard
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                </span>
                               </div>
                             </div>
-                          </article>
+                          </Link>
                         ))}
                       </div>
                     )}
@@ -704,6 +728,16 @@ function ProfileContent() {
           </div>
         )}
       </main>
+
+      {openTeam && (
+        <TeamDialog
+          open
+          contestId={openTeam.contestId}
+          teamId={openTeam.teamId}
+          leaderboardHref={myLeaderboardHref(openTeam.contestId)}
+          onClose={() => setOpenTeam(null)}
+        />
+      )}
     </div>
   );
 }
@@ -715,4 +749,91 @@ function sumPlayed({ played }: MyTournaments): MyTournamentsTotals {
     teams_count: played.reduce((sum, t) => sum + t.teams_count, 0),
     contests_count: played.reduce((sum, t) => sum + t.contests_count, 0),
   };
+}
+
+/**
+ * A contest's leaderboard, asked to scroll to and highlight the signed-in
+ * user's row: the profile links here to show where the user finished.
+ */
+function myLeaderboardHref(contestId: string): string {
+  return `/contests/${contestId}/leaderboard?me=1`;
+}
+
+function TeamsSection({
+  title,
+  emptyText,
+  teams,
+  formatDate,
+  onOpen,
+}: Readonly<{
+  title: string;
+  emptyText: string;
+  teams: ContestTeam[];
+  formatDate: (dateString?: string | null) => string;
+  onOpen: (team: OpenTeam) => void;
+}>) {
+  return (
+    <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+      <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-1">
+        <Users className="h-5 w-5 text-accent-pink-500" />
+        {title}
+      </h2>
+      <p className="text-xs sm:text-sm text-text-muted mb-3 sm:mb-4">
+        Tap a team to see its players and the contest leaderboard.
+      </p>
+
+      {teams.length === 0 ? (
+        <p className="text-text-muted">{emptyText}</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+          {teams.map(({ team, contestId, contest }) => (
+            <button
+              key={team.id}
+              type="button"
+              onClick={() => onOpen({ contestId, teamId: team.id })}
+              className="text-left rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
+            >
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="min-w-0 pr-1">
+                  <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
+                    {team.team_name}
+                  </p>
+                  <p className="text-xs text-text-muted truncate">
+                    {contest.name}
+                  </p>
+                </div>
+                {typeof team.rank === "number" ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
+                    <Crown className="h-3.5 w-3.5" />
+                    Rank #{team.rank}
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
+                    Rank N/A
+                  </span>
+                )}
+              </div>
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
+                {!contest.isPast && (
+                  <span className="rounded-full bg-success-tonal text-success px-2 py-1 font-semibold">
+                    {contest.status}
+                  </span>
+                )}
+                <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
+                  Points: {team.total_points}
+                </span>
+                <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                  Created: {formatDate(team.created_at)}
+                </span>
+                <span className="ml-auto inline-flex items-center gap-0.5 font-semibold text-accent-pink-soft">
+                  View team
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
