@@ -69,6 +69,39 @@ api.interceptors.request.use(
     }
 );
 
+// One refresh at a time. The backend rotates refresh tokens: each is good for
+// a single use and is revoked the moment it is spent. A screen that fires
+// several queries with an expired access token gets several 401s together, and
+// if each refreshed on its own the first would win, the rest would be refused
+// with a revoked token, and the user would be signed out mid-session. Every
+// 401 waits on this one promise instead.
+let refreshInFlight: Promise<string> | null = null;
+
+const refreshAccessToken = (): Promise<string> => {
+    if (!refreshInFlight) {
+        refreshInFlight = (async () => {
+            const { refreshToken } = useAuthStore.getState();
+            if (!refreshToken) {
+                throw new Error('No refresh token');
+            }
+            const { authService } = await import('../services/authService');
+            const response = await authService.refreshToken(refreshToken);
+            if (!response?.access_token) {
+                throw new Error('Invalid refresh response');
+            }
+            // The new refresh token replaces the spent one. Keeping the old
+            // one would leave the next refresh with a revoked token.
+            useAuthStore
+                .getState()
+                .updateTokens(response.access_token, response.refresh_token);
+            return response.access_token;
+        })().finally(() => {
+            refreshInFlight = null;
+        });
+    }
+    return refreshInFlight;
+};
+
 // Response Interceptor: Handle Global Errors and Token Refresh
 api.interceptors.response.use(
     (response) => response,
@@ -87,29 +120,31 @@ api.interceptors.response.use(
             originalRequest._retry = true;
 
             const authStore = useAuthStore.getState();
-            const refreshToken = authStore.refreshToken;
 
-            if (refreshToken) {
+            // The token this request went out with. If another request has
+            // already refreshed since, the store holds a newer one and this
+            // request just needs resending -- refreshing again would spend
+            // the new refresh token for nothing.
+            const sentAuth = originalRequest.headers?.Authorization;
+            const currentToken = authStore.token;
+            if (currentToken && sentAuth !== `Bearer ${currentToken}`) {
+                originalRequest.headers.Authorization = `Bearer ${currentToken}`;
+                return api(originalRequest);
+            }
+
+            if (authStore.refreshToken) {
                 try {
-                    // Try to refresh the token
-                    const { authService } = await import('../services/authService');
-                    const response = await authService.refreshToken(refreshToken);
-
-                    if (!response?.access_token) {
-                        throw new Error('Invalid refresh response');
-                    }
-
-                    // Update the token in the store
-                    authStore.updateToken(response.access_token);
-
-                    // Retry the original request with the new token
-                    if (originalRequest.headers) {
-                        originalRequest.headers.Authorization = `Bearer ${response.access_token}`;
-                    }
+                    const accessToken = await refreshAccessToken();
+                    originalRequest.headers.Authorization = `Bearer ${accessToken}`;
                     return api(originalRequest);
                 } catch (refreshError) {
-                    // Refresh failed, logout user
-                    authStore.logout();
+                    // Only a rejected refresh token ends the session. Being
+                    // offline or a server hiccup says nothing about it, and
+                    // signing the user out for either would throw away a
+                    // session that is still good.
+                    if ((refreshError as { status?: number })?.status === 401) {
+                        useAuthStore.getState().logout();
+                    }
                     return Promise.reject(refreshError);
                 }
             } else {

@@ -15,6 +15,7 @@ interface AuthState {
     login: (token: string, refreshToken?: string) => void;
     logout: () => void;
     updateToken: (token: string) => void;
+    updateTokens: (token: string, refreshToken?: string) => void;
     deleteAccount: (password: string, reason?: string) => Promise<void>;
 }
 
@@ -68,6 +69,17 @@ export const useAuthStore = create<AuthState>()(
                 set((state) => ({
                     ...state,
                     token,
+                }));
+            },
+
+            // Update both tokens after a refresh. The backend rotates refresh
+            // tokens, so the one that was just spent must be replaced. When
+            // the response carries no new one, the stored one is kept.
+            updateTokens: (token: string, refreshToken?: string) => {
+                set((state) => ({
+                    ...state,
+                    token,
+                    refreshToken: refreshToken ?? state.refreshToken,
                 }));
             },
 
