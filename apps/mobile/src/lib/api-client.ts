@@ -77,6 +77,16 @@ api.interceptors.request.use(
 // 401 waits on this one promise instead.
 let refreshInFlight: Promise<string> | null = null;
 
+// Thrown when the session a refresh was started for is gone by the time it
+// finishes: the user logged out, or signed in as someone else. The result
+// belongs to that old session and must not be written over the new state.
+class SessionChangedError extends Error {
+    constructor() {
+        super('Session changed during token refresh');
+        this.name = 'SessionChangedError';
+    }
+}
+
 const refreshAccessToken = (): Promise<string> => {
     if (!refreshInFlight) {
         refreshInFlight = (async () => {
@@ -88,6 +98,13 @@ const refreshAccessToken = (): Promise<string> => {
             const response = await authService.refreshToken(refreshToken);
             if (!response?.access_token) {
                 throw new Error('Invalid refresh response');
+            }
+            // The refresh token is the identity of the session: logging out
+            // clears it and a new sign-in replaces it. If it is no longer the
+            // one this refresh spent, the session moved on while the request
+            // was in the air.
+            if (useAuthStore.getState().refreshToken !== refreshToken) {
+                throw new SessionChangedError();
             }
             // The new refresh token replaces the spent one. Keeping the old
             // one would leave the next refresh with a revoked token.
@@ -133,6 +150,7 @@ api.interceptors.response.use(
             }
 
             if (authStore.refreshToken) {
+                const refreshTokenUsed = authStore.refreshToken;
                 try {
                     const accessToken = await refreshAccessToken();
                     originalRequest.headers.Authorization = `Bearer ${accessToken}`;
@@ -142,7 +160,13 @@ api.interceptors.response.use(
                     // offline or a server hiccup says nothing about it, and
                     // signing the user out for either would throw away a
                     // session that is still good.
-                    if ((refreshError as { status?: number })?.status === 401) {
+                    // A refresh for a session that has since changed must not
+                    // sign out whoever is signed in now.
+                    if (
+                        !(refreshError instanceof SessionChangedError) &&
+                        (refreshError as { status?: number })?.status === 401 &&
+                        useAuthStore.getState().refreshToken === refreshTokenUsed
+                    ) {
                         useAuthStore.getState().logout();
                     }
                     return Promise.reject(refreshError);
