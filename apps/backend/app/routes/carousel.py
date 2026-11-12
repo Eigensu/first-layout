@@ -37,7 +37,11 @@ router = APIRouter(prefix="/api/v1/carousel", tags=["carousel"])
 def carousel_to_response(carousel: CarouselImage) -> dict:
     """Convert CarouselImage document to response dict"""
     carousel_dict = carousel.model_dump()
-    carousel_dict["_id"] = str(carousel.id)
+    # CarouselImageResponse reads `id` ("_id" is only its serialization alias).
+    # model_dump() hands it over as a str on beanie 1.26, which requirements.txt
+    # pins, but newer beanie (1.30) stringifies ObjectIds only in JSON mode, so
+    # without this the response fails validation and every read returns a 500.
+    carousel_dict["id"] = str(carousel.id)
     # Convert HttpUrl to string for JSON serialization
     if carousel_dict.get("link_url"):
         carousel_dict["link_url"] = str(carousel_dict["link_url"])
