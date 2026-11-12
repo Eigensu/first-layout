@@ -105,6 +105,9 @@ pnpm android    # expo run:android
 EAS builds run from `apps/mobile` (`eas build --profile <profile>`); see
 `apps/mobile/eas.json`. Planning docs live in `docs/mobile/`.
 
+The mobile app has no `dev` or `build` script on purpose: `pnpm dev` and
+`pnpm build` stay web and backend only, and the app is built by EAS.
+
 ## Available Scripts
 
 - `pnpm dev` - Start all applications in development mode (turbo run dev)

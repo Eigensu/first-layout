@@ -1,8 +1,0 @@
-../../node_modules
-../../.turbo
-../../apps/frontend
-../../apps/backend
-../../packages/*/node_modules
-../../packages/*/.turbo
-.turbo
-node_modules
