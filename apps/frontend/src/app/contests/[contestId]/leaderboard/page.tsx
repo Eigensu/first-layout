@@ -130,9 +130,15 @@ export default function ContestLeaderboardTabPage() {
 
               // Whether the user's row is in the list below, which decides
               // where the ?me=1 scroll and highlight land.
-              const meInList =
+              // Usernames are not unique on this platform, so a row is the
+              // user's by its team. A user has one team per contest; the
+              // username is only a fallback for a backend that sends no ids.
+              const isMine = (e: SharedLeaderboardEntry) =>
                 !!currentUserEntry &&
-                entries.some((e) => e.username === currentUserEntry.username);
+                (currentUserEntry.teamId
+                  ? e.teamId === currentUserEntry.teamId
+                  : e.username === currentUserEntry.username);
+              const meInList = entries.some(isMine);
 
               return (
                 <div className="space-y-4 sm:space-y-8">
@@ -174,8 +180,7 @@ export default function ContestLeaderboardTabPage() {
                     </h2>
                     <div className="space-y-2 sm:space-y-3">
                       {entries.map((entry) => {
-                        const isMe =
-                          currentUserEntry?.username === entry.username;
+                        const isMe = isMine(entry);
                         return (
                           <div
                             key={entry.rank}

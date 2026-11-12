@@ -46,6 +46,9 @@ type ContestEntry = {
   contestId: string;
   contestName: string;
   contestStatus: Contest["status"];
+  // Only a public contest has a leaderboard to link to: the backend serves
+  // neither the contest nor its leaderboard publicly when it is private.
+  isPublic: boolean;
   startAt: string;
   endAt: string;
   isPast: boolean;
@@ -60,7 +63,7 @@ type ContestEntry = {
 };
 
 // The team a card was tapped on, opened in the team popup.
-type OpenTeam = { contestId: string; teamId: string };
+type OpenTeam = { contestId: string; teamId: string; isPublic: boolean };
 
 export default function ProfilePage() {
   return (
@@ -242,6 +245,7 @@ function ProfileContent() {
             contestId: enrollment.contest_id,
             contestName: contest.name,
             contestStatus: contest.status,
+            isPublic: contest.visibility === "public",
             startAt: contest.start_at,
             endAt: contest.end_at,
             isPast: isPastContest(contest),
@@ -557,12 +561,8 @@ function ProfileContent() {
                       </p>
                     ) : (
                       <div className="space-y-2.5 sm:space-y-3">
-                        {pastEntries.map((contest) => (
-                          <Link
-                            key={contest.enrollmentId}
-                            href={myLeaderboardHref(contest.contestId)}
-                            className="block rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
-                          >
+                        {pastEntries.map((contest) => {
+                          const row = (
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                               <div>
                                 <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
@@ -586,14 +586,35 @@ function ProfileContent() {
                                 <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
                                   Points: {contest.points ?? "N/A"}
                                 </span>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-bg-chip text-text-main px-2 py-1 font-semibold">
-                                  Leaderboard
-                                  <ChevronRight className="h-3.5 w-3.5" />
-                                </span>
+                                {contest.isPublic && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-bg-chip text-text-main px-2 py-1 font-semibold">
+                                    Leaderboard
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
                               </div>
                             </div>
-                          </Link>
-                        ))}
+                          );
+                          // A private contest's leaderboard is not served to
+                          // anyone, its players included, so there is
+                          // nothing to link to.
+                          return contest.isPublic ? (
+                            <Link
+                              key={contest.enrollmentId}
+                              href={myLeaderboardHref(contest.contestId)}
+                              className="block rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
+                            >
+                              {row}
+                            </Link>
+                          ) : (
+                            <article
+                              key={contest.enrollmentId}
+                              className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                            >
+                              {row}
+                            </article>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -696,7 +717,11 @@ function ProfileContent() {
           open
           contestId={openTeam.contestId}
           teamId={openTeam.teamId}
-          leaderboardHref={myLeaderboardHref(openTeam.contestId)}
+          leaderboardHref={
+            openTeam.isPublic
+              ? myLeaderboardHref(openTeam.contestId)
+              : undefined
+          }
           onClose={() => setOpenTeam(null)}
         />
       )}
@@ -761,7 +786,11 @@ function TeamsSection({
               key={entry.enrollmentId}
               type="button"
               onClick={() =>
-                onOpen({ contestId: entry.contestId, teamId: entry.teamId })
+                onOpen({
+                  contestId: entry.contestId,
+                  teamId: entry.teamId,
+                  isPublic: entry.isPublic,
+                })
               }
               className="text-left rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
             >

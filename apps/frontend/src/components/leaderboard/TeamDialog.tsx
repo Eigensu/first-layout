@@ -88,7 +88,10 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({
       const last = focusable[focusable.length - 1];
       const current = document.activeElement;
       const inside = panelRef.current.contains(current);
-      if (event.shiftKey && (current === first || !inside)) {
+      // The panel itself holds focus right after opening; Shift+Tab from it
+      // would otherwise leave for the page behind.
+      const atStart = current === first || current === panelRef.current;
+      if (event.shiftKey && (atStart || !inside)) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && (current === last || !inside)) {
