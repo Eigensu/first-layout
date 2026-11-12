@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ChevronRight,
   Crown,
   KeyRound,
   Loader2,
@@ -16,7 +18,7 @@ import axios from "axios";
 import { LS_KEYS, currentTournamentSlug } from "@/common/consts";
 import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/utils/errors";
-import { getUserTeams, type TeamResponse } from "@/lib/api/teams";
+import { getUserTeams } from "@/lib/api/teams";
 import {
   getMyTournaments,
   type MyTournaments,
@@ -27,22 +29,41 @@ import { getImageUrl } from "@/lib/utils";
 import {
   publicContestsApi,
   type Contest,
-  type EnrollmentResponse,
+  type LeaderboardEntry,
 } from "@/lib/api/public/contests";
 import { PillNavbar } from "@/components/navigation/PillNavbar";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { ChangeEmailSection } from "@/components/profile/ChangeEmailSection";
 import { getResetChannels } from "@/lib/api/emailCodes";
+import { TeamDialog } from "@/components/leaderboard/TeamDialog";
 
-type PastContestSummary = {
+// One of the user's contest entries in this tournament: a team entered in a
+// contest. Keyed by the enrollment, not the team, because one team can be
+// entered in several contests (a full contest and a daily one, say), and each
+// entry has its own rank, points and leaderboard.
+type ContestEntry = {
+  enrollmentId: string;
   contestId: string;
   contestName: string;
   contestStatus: Contest["status"];
-  contestEndedAt: string;
+  // Only a public contest has a leaderboard to link to: the backend serves
+  // neither the contest nor its leaderboard publicly when it is private.
+  isPublic: boolean;
+  startAt: string;
+  endAt: string;
+  isPast: boolean;
+  teamId: string;
   teamName: string;
+  teamCreatedAt: string | null;
+  // The user's place in this contest. A user has one active team per contest
+  // (uniq_active_user_per_contest), so the leaderboard's entry for the user is
+  // this entry's team.
   rank: number | null;
   points: number | null;
 };
+
+// The team a card was tapped on, opened in the team popup.
+type OpenTeam = { contestId: string; teamId: string; isPublic: boolean };
 
 export default function ProfilePage() {
   return (
@@ -56,8 +77,8 @@ function ProfileContent() {
   const { user, isAuthenticated, updateUser } = useAuth();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [teams, setTeams] = useState<TeamResponse[]>([]);
-  const [pastContests, setPastContests] = useState<PastContestSummary[]>([]);
+  const [entries, setEntries] = useState<ContestEntry[]>([]);
+  const [openTeam, setOpenTeam] = useState<OpenTeam | null>(null);
   const [myTournaments, setMyTournaments] = useState<MyTournaments | null>(
     null,
   );
@@ -112,6 +133,15 @@ function ProfileContent() {
   // object, and none of this depends on the email.
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
+    let active = true;
+
+    // Start from nothing on every run: a run for another account must not
+    // inherit the previous one's tournament, entries or popup, whichever way
+    // it ends.
+    setTournamentSlug(null);
+    setEntries([]);
+    setLocalTotals(null);
+    setOpenTeam(null);
 
     // Teams and enrollments belong to one tournament, and the backend reads
     // which from the subdomain. The main site names none, so there is nothing
@@ -136,6 +166,7 @@ function ProfileContent() {
           getUserTeams(token),
           publicContestsApi.myEnrollments(),
         ]);
+        if (!active) return;
 
         // The backend refuses a slug it does not know (an archived tournament,
         // a mistyped subdomain) with a 400. There is no tournament here to show
@@ -152,111 +183,93 @@ function ProfileContent() {
         }
         setTournamentSlug(slug);
 
-        const teamsRes = teamsResult.value;
-        setTeams(teamsRes.teams || []);
-
+        const teams = teamsResult.value.teams || [];
         if (enrollmentsResult.status === "rejected") {
-          setPastContests([]);
           return;
         }
-        const enrollmentsRes = enrollmentsResult.value;
-        const teamsHere = teamsRes.teams?.length ?? 0;
-        const contestsHere = new Set(enrollmentsRes.map((e) => e.contest_id))
-          .size;
+        const enrollments = enrollmentsResult.value;
+        const contestIds = Array.from(
+          new Set(enrollments.map((e) => e.contest_id)),
+        );
         setLocalTotals({
-          tournaments_played: teamsHere || contestsHere ? 1 : 0,
-          teams_count: teamsHere,
-          contests_count: contestsHere,
+          tournaments_played: teams.length || contestIds.length ? 1 : 0,
+          teams_count: teams.length,
+          contests_count: contestIds.length,
         });
 
-        if (!enrollmentsRes.length) {
-          setPastContests([]);
-          return;
-        }
+        const teamById = new Map(teams.map((team) => [team.id, team]));
 
-        const teamById = new Map(
-          (teamsRes.teams || []).map((team) => [team.id, team]),
-        );
-        const enrollmentsByContest = enrollmentsRes.reduce<
-          Record<string, EnrollmentResponse[]>
-        >((acc, enrollment) => {
-          if (!acc[enrollment.contest_id]) {
-            acc[enrollment.contest_id] = [];
-          }
-          acc[enrollment.contest_id].push(enrollment);
-          return acc;
-        }, {});
-
-        const contestRows = await Promise.all(
-          Object.keys(enrollmentsByContest).map(async (contestId) => {
-            let contest: Contest | null = null;
-
-            try {
-              contest = await publicContestsApi.getMe(contestId);
-            } catch {
+        // Each contest once, however many of the user's teams are in it: its
+        // details and the user's place on its leaderboard.
+        const contestInfo = new Map(
+          await Promise.all(
+            contestIds.map(async (contestId) => {
+              let contest: Contest | null = null;
               try {
-                contest = await publicContestsApi.get(contestId);
+                contest = await publicContestsApi.getMe(contestId);
               } catch {
-                contest = null;
+                try {
+                  contest = await publicContestsApi.get(contestId);
+                } catch {
+                  contest = null;
+                }
               }
-            }
+              if (!contest) return [contestId, null] as const;
 
-            if (!contest || !isPastContest(contest)) {
-              return null;
-            }
-
-            const selectedEnrollment = enrollmentsByContest[contestId][0];
-            const selectedTeam = teamById.get(selectedEnrollment.team_id);
-
-            let rank: number | null = null;
-            let points: number | null = null;
-            let fallbackTeamName = selectedTeam?.team_name || "Your Team";
-
-            try {
-              const leaderboard = await publicContestsApi.leaderboard(
-                contestId,
-                {
-                  skip: 0,
-                  limit: 1,
-                },
-              );
-              rank = leaderboard.currentUserEntry?.rank ?? null;
-              points = leaderboard.currentUserEntry?.points ?? null;
-              fallbackTeamName =
-                leaderboard.currentUserEntry?.teamName || fallbackTeamName;
-            } catch {
-              // Continue rendering with available enrollment/team data.
-            }
-
-            return {
-              contestId,
-              contestName: contest.name,
-              contestStatus: contest.status,
-              contestEndedAt: contest.end_at,
-              teamName: fallbackTeamName,
-              rank,
-              points,
-            } satisfies PastContestSummary;
-          }),
+              let me: LeaderboardEntry | null = null;
+              try {
+                const leaderboard = await publicContestsApi.leaderboard(
+                  contestId,
+                  { skip: 0, limit: 1 },
+                );
+                me = leaderboard.currentUserEntry ?? null;
+              } catch {
+                // Show the entry without a rank rather than not at all.
+              }
+              return [contestId, { contest, me }] as const;
+            }),
+          ),
         );
+        if (!active) return;
 
-        const normalizedRows = contestRows
-          .filter((row): row is PastContestSummary => !!row)
-          .sort(
-            (a, b) =>
-              new Date(b.contestEndedAt).getTime() -
-              new Date(a.contestEndedAt).getTime(),
-          );
-
-        setPastContests(normalizedRows);
+        const found: ContestEntry[] = [];
+        for (const enrollment of enrollments) {
+          const info = contestInfo.get(enrollment.contest_id);
+          // A contest that could not be loaded has nothing to label the card
+          // with or link to.
+          if (!info) continue;
+          const { contest, me } = info;
+          const team = teamById.get(enrollment.team_id);
+          found.push({
+            enrollmentId: enrollment.id,
+            contestId: enrollment.contest_id,
+            contestName: contest.name,
+            contestStatus: contest.status,
+            isPublic: contest.visibility === "public",
+            startAt: contest.start_at,
+            endAt: contest.end_at,
+            isPast: isPastContest(contest),
+            teamId: enrollment.team_id,
+            teamName: team?.team_name || me?.teamName || "Your Team",
+            teamCreatedAt: team?.created_at ?? null,
+            rank: me?.rank ?? null,
+            points: me?.points ?? null,
+          });
+        }
+        setEntries(found);
       } catch (error: any) {
-        setLoadError(error?.message || "Failed to load profile data");
+        if (active) {
+          setLoadError(error?.message || "Failed to load profile data");
+        }
       } finally {
-        setIsLoadingData(false);
+        if (active) setIsLoadingData(false);
       }
     };
 
     loadProfileData();
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated, userId]);
 
   // Apart from the load above, so a slow /me/tournaments never holds the rest
@@ -277,18 +290,20 @@ function ProfileContent() {
     };
   }, [isAuthenticated, userId]);
 
-  const pastContestIdSet = useMemo(
-    () => new Set(pastContests.map((item) => item.contestId)),
-    [pastContests],
-  );
-
-  const pastTeams = useMemo(
-    () =>
-      teams.filter(
-        (team) => team.contest_id && pastContestIdSet.has(team.contest_id),
-      ),
-    [teams, pastContestIdSet],
-  );
+  // Entries still to come or running, soonest first; and finished ones, most
+  // recently ended first. The past ones also fill "Past Contests And Ranks".
+  const { currentEntries, pastEntries } = useMemo(() => {
+    const byTime =
+      (key: "startAt" | "endAt", dir: 1 | -1) =>
+      (a: ContestEntry, b: ContestEntry) =>
+        dir * (new Date(a[key]).getTime() - new Date(b[key]).getTime());
+    return {
+      currentEntries: entries
+        .filter((e) => !e.isPast)
+        .sort(byTime("startAt", 1)),
+      pastEntries: entries.filter((e) => e.isPast).sort(byTime("endAt", -1)),
+    };
+  }, [entries]);
 
   const validatePassword = (password: string): string[] => {
     const errors: string[] = [];
@@ -518,51 +533,21 @@ function ProfileContent() {
               {/* Per-tournament history, so only on a tournament's own site. */}
               {tournamentSlug && (
                 <>
-                  <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
-                    <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
-                      <Users className="h-5 w-5 text-accent-pink-500" />
-                      Past Teams In This Tournament
-                    </h2>
+                  <TeamsSection
+                    title="Current Teams In This Tournament"
+                    emptyText="No teams in upcoming or live contests."
+                    entries={currentEntries}
+                    formatDate={formatDate}
+                    onOpen={setOpenTeam}
+                  />
 
-                    {pastTeams.length === 0 ? (
-                      <p className="text-text-muted">
-                        No past teams found yet.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
-                        {pastTeams.map((team) => (
-                          <article
-                            key={team.id}
-                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                          >
-                            <div className="flex items-start justify-between gap-2.5">
-                              <p className="font-bold text-sm sm:text-base text-text-main leading-snug pr-1">
-                                {team.team_name}
-                              </p>
-                              {typeof team.rank === "number" ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
-                                  <Crown className="h-3.5 w-3.5" />
-                                  Rank #{team.rank}
-                                </span>
-                              ) : (
-                                <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
-                                  Rank N/A
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-                              <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
-                                Points: {team.total_points}
-                              </span>
-                              <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                                Created: {formatDate(team.created_at)}
-                              </span>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <TeamsSection
+                    title="Past Teams In This Tournament"
+                    emptyText="No past teams found yet."
+                    entries={pastEntries}
+                    formatDate={formatDate}
+                    onOpen={setOpenTeam}
+                  />
 
                   <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
                     <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-3 sm:mb-4">
@@ -570,17 +555,14 @@ function ProfileContent() {
                       Past Contests And Ranks In This Tournament
                     </h2>
 
-                    {pastContests.length === 0 ? (
+                    {pastEntries.length === 0 ? (
                       <p className="text-text-muted">
                         No past contest records found yet.
                       </p>
                     ) : (
                       <div className="space-y-2.5 sm:space-y-3">
-                        {pastContests.map((contest) => (
-                          <article
-                            key={`${contest.contestId}-${contest.teamName}`}
-                            className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
-                          >
+                        {pastEntries.map((contest) => {
+                          const row = (
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                               <div>
                                 <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
@@ -595,7 +577,7 @@ function ProfileContent() {
                                   {contest.contestStatus}
                                 </span>
                                 <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
-                                  Ended: {formatDate(contest.contestEndedAt)}
+                                  Ended: {formatDate(contest.endAt)}
                                 </span>
                                 <span className="rounded-full bg-warning-tonal text-warning px-2 py-1 font-semibold">
                                   Rank:{" "}
@@ -604,10 +586,35 @@ function ProfileContent() {
                                 <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1 font-semibold">
                                   Points: {contest.points ?? "N/A"}
                                 </span>
+                                {contest.isPublic && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-bg-chip text-text-main px-2 py-1 font-semibold">
+                                    Leaderboard
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
                               </div>
                             </div>
-                          </article>
-                        ))}
+                          );
+                          // A private contest's leaderboard is not served to
+                          // anyone, its players included, so there is
+                          // nothing to link to.
+                          return contest.isPublic ? (
+                            <Link
+                              key={contest.enrollmentId}
+                              href={myLeaderboardHref(contest.contestId)}
+                              className="block rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
+                            >
+                              {row}
+                            </Link>
+                          ) : (
+                            <article
+                              key={contest.enrollmentId}
+                              className="rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4"
+                            >
+                              {row}
+                            </article>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -704,6 +711,20 @@ function ProfileContent() {
           </div>
         )}
       </main>
+
+      {openTeam && (
+        <TeamDialog
+          open
+          contestId={openTeam.contestId}
+          teamId={openTeam.teamId}
+          leaderboardHref={
+            openTeam.isPublic
+              ? myLeaderboardHref(openTeam.contestId)
+              : undefined
+          }
+          onClose={() => setOpenTeam(null)}
+        />
+      )}
     </div>
   );
 }
@@ -715,4 +736,107 @@ function sumPlayed({ played }: MyTournaments): MyTournamentsTotals {
     teams_count: played.reduce((sum, t) => sum + t.teams_count, 0),
     contests_count: played.reduce((sum, t) => sum + t.contests_count, 0),
   };
+}
+
+/**
+ * A contest's leaderboard, asked to scroll to and highlight the signed-in
+ * user's row: the profile links here to show where the user finished.
+ */
+function myLeaderboardHref(contestId: string): string {
+  return `/contests/${contestId}/leaderboard?me=1`;
+}
+
+/**
+ * What a contest that has not ended is doing now, in words a player reads
+ * right: the backend's "live" status means open for entry, not running.
+ */
+function currentLabel(entry: ContestEntry): string {
+  return new Date(entry.startAt).getTime() > Date.now() ? "Upcoming" : "Live";
+}
+
+function TeamsSection({
+  title,
+  emptyText,
+  entries,
+  formatDate,
+  onOpen,
+}: Readonly<{
+  title: string;
+  emptyText: string;
+  entries: ContestEntry[];
+  formatDate: (dateString?: string | null) => string;
+  onOpen: (team: OpenTeam) => void;
+}>) {
+  return (
+    <div className="rounded-2xl sm:rounded-3xl border border-border-subtle bg-bg-card shadow-lg p-4 sm:p-7">
+      <h2 className="text-lg sm:text-xl font-black text-text-main flex items-center gap-2 mb-1">
+        <Users className="h-5 w-5 text-accent-pink-500" />
+        {title}
+      </h2>
+      <p className="text-xs sm:text-sm text-text-muted mb-3 sm:mb-4">
+        Tap a team to see its players and the contest leaderboard.
+      </p>
+
+      {entries.length === 0 ? (
+        <p className="text-text-muted">{emptyText}</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+          {entries.map((entry) => (
+            <button
+              key={entry.enrollmentId}
+              type="button"
+              onClick={() =>
+                onOpen({
+                  contestId: entry.contestId,
+                  teamId: entry.teamId,
+                  isPublic: entry.isPublic,
+                })
+              }
+              className="text-left rounded-xl sm:rounded-2xl border border-border-subtle bg-bg-card-soft p-3.5 sm:p-4 transition hover:border-accent-pink-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-pink-500"
+            >
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="min-w-0 pr-1">
+                  <p className="font-bold text-sm sm:text-base text-text-main leading-snug">
+                    {entry.teamName}
+                  </p>
+                  <p className="text-xs text-text-muted truncate">
+                    {entry.contestName}
+                  </p>
+                </div>
+                {entry.rank ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-warning-tonal text-warning px-2 py-1 text-[11px] sm:text-xs font-semibold whitespace-nowrap">
+                    <Crown className="h-3.5 w-3.5" />
+                    Rank #{entry.rank}
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-bg-chip text-text-main px-2 py-1 text-[11px] sm:text-xs font-medium whitespace-nowrap">
+                    Rank N/A
+                  </span>
+                )}
+              </div>
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
+                {!entry.isPast && (
+                  <span className="rounded-full bg-success-tonal text-success px-2 py-1 font-semibold">
+                    {currentLabel(entry)}
+                  </span>
+                )}
+                <span className="rounded-full bg-accent-pink-tonal text-accent-pink-soft px-2 py-1">
+                  Points: {entry.points ?? "N/A"}
+                </span>
+                {entry.teamCreatedAt && (
+                  <span className="rounded-full bg-bg-chip text-text-main px-2 py-1">
+                    Created: {formatDate(entry.teamCreatedAt)}
+                  </span>
+                )}
+                <span className="ml-auto inline-flex items-center gap-0.5 font-semibold text-accent-pink-soft">
+                  View team
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

@@ -12,6 +12,10 @@ import {
 import type { LeaderboardEntry as SharedLeaderboardEntry } from "@/types/leaderboard";
 import { Trophy } from "lucide-react";
 
+const MY_ENTRY_ID = "my-leaderboard-entry";
+const HIGHLIGHT_CLASS =
+  "rounded-xl sm:rounded-2xl ring-4 ring-accent-pink-500 ring-offset-2 ring-offset-bg-body transition-shadow";
+
 export default function ContestLeaderboardTabPage() {
   const params = useParams();
   const contestId = Array.isArray((params as any)?.contestId)
@@ -25,6 +29,32 @@ export default function ContestLeaderboardTabPage() {
   const [error, setError] = useState<string | null>(null);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  // Set when opened from the profile (?me=1): scroll to the signed-in user's
+  // row and highlight it. Read from the URL after mount rather than through
+  // useSearchParams, which would need a Suspense boundary around the page.
+  const [highlightMe, setHighlightMe] = useState(false);
+
+  useEffect(() => {
+    setHighlightMe(
+      new URLSearchParams(window.location.search).get("me") === "1",
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!highlightMe || isLoading || !leaderboard?.currentUserEntry) return;
+    // After paint, so the row exists to scroll to.
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(MY_ENTRY_ID)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    // The ring is a pointer, not a state: drop it once the user has seen it.
+    const timer = setTimeout(() => setHighlightMe(false), 4000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [highlightMe, isLoading, leaderboard]);
 
   useEffect(() => {
     if (!contestId) return;
@@ -77,7 +107,7 @@ export default function ContestLeaderboardTabPage() {
                   rankChange: e.rankChange ?? undefined,
                   avatarUrl: (e as any).avatarUrl ?? undefined,
                   teamId: (e as any).teamId ?? undefined,
-                })
+                }),
               );
               const currentUserEntry: SharedLeaderboardEntry | undefined =
                 leaderboard.currentUserEntry
@@ -97,6 +127,18 @@ export default function ContestLeaderboardTabPage() {
                         undefined,
                     }
                   : undefined;
+
+              // Whether the user's row is in the list below, which decides
+              // where the ?me=1 scroll and highlight land.
+              // Usernames are not unique on this platform, so a row is the
+              // user's by its team. A user has one team per contest; the
+              // username is only a fallback for a backend that sends no ids.
+              const isMine = (e: SharedLeaderboardEntry) =>
+                !!currentUserEntry &&
+                (currentUserEntry.teamId
+                  ? e.teamId === currentUserEntry.teamId
+                  : e.username === currentUserEntry.username);
+              const meInList = entries.some(isMine);
 
               return (
                 <div className="space-y-4 sm:space-y-8">
@@ -137,31 +179,39 @@ export default function ContestLeaderboardTabPage() {
                       Complete Rankings
                     </h2>
                     <div className="space-y-2 sm:space-y-3">
-                      {entries.map((entry) => (
-                        <LeaderboardCard
-                          key={entry.rank}
-                          entry={entry}
-                          isCurrentUser={
-                            currentUserEntry?.username === entry.username
-                          }
-                          action={
-                            entry.teamId &&
-                            (contest?.status === "ongoing" ||
-                              contest?.status === "completed") ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedTeamId(entry.teamId!);
-                                  setTeamDialogOpen(true);
-                                }}
-                                className="inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium border border-primary-200 text-primary-700 hover:bg-primary-50"
-                              >
-                                View Team
-                              </button>
-                            ) : null
-                          }
-                        />
-                      ))}
+                      {entries.map((entry) => {
+                        const isMe = isMine(entry);
+                        return (
+                          <div
+                            key={entry.rank}
+                            id={isMe ? MY_ENTRY_ID : undefined}
+                            className={
+                              isMe && highlightMe ? HIGHLIGHT_CLASS : undefined
+                            }
+                          >
+                            <LeaderboardCard
+                              entry={entry}
+                              isCurrentUser={isMe}
+                              action={
+                                entry.teamId &&
+                                (contest?.status === "ongoing" ||
+                                  contest?.status === "completed") ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTeamId(entry.teamId!);
+                                      setTeamDialogOpen(true);
+                                    }}
+                                    className="inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium border border-primary-200 text-primary-700 hover:bg-primary-50"
+                                  >
+                                    View Team
+                                  </button>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -171,7 +221,18 @@ export default function ContestLeaderboardTabPage() {
                       <h3 className="text-base sm:text-lg font-semibold text-text-main mb-3 sm:mb-4">
                         Your Team
                       </h3>
-                      <LeaderboardCard entry={currentUserEntry} isCurrentUser />
+                      {/* Only the scroll target when the list above lacks the row. */}
+                      <div
+                        id={meInList ? undefined : MY_ENTRY_ID}
+                        className={
+                          highlightMe && !meInList ? HIGHLIGHT_CLASS : undefined
+                        }
+                      >
+                        <LeaderboardCard
+                          entry={currentUserEntry}
+                          isCurrentUser
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
