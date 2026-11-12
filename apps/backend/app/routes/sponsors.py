@@ -35,6 +35,10 @@ router = APIRouter(prefix="/api/v1/sponsors", tags=["sponsors"])
 def sponsor_to_response(sponsor: Sponsor) -> dict:
     """Convert Sponsor document to response dict"""
     sponsor_dict = sponsor.model_dump()
+    # SponsorResponse reads "_id" (its alias). Drop model_dump()'s own `id`,
+    # which newer beanie (1.30) leaves an ObjectId, so the str is the only id
+    # here rather than relying on the alias winning over it.
+    sponsor_dict.pop("id", None)
     sponsor_dict["_id"] = str(sponsor.id)
     # Normalize legacy/default priority values so response schema (ge=1) doesn't fail
     try:

@@ -5,9 +5,10 @@ carousel_to_response passed model_dump()'s `id` straight to a schema that
 wants `id: str`. beanie 1.26, which requirements.txt pins, stringifies a
 PydanticObjectId in model_dump(); newer beanie (1.30) keeps the ObjectId
 outside JSON mode, so there every carousel read failed validation with a 500.
-The suite passed on the pinned version and could not see it. These tests
-force the newer behaviour, so they fail on either version if a converter
-leans on model_dump() for the id.
+The suite passed on the pinned version and could not see it. Sponsors built
+their response the same way and survived only because SponsorResponse's
+"_id" alias won over the ObjectId. These tests force the newer behaviour, so
+they fail on either version if a converter leans on model_dump() for the id.
 """
 
 import pytest
@@ -73,8 +74,15 @@ async def test_the_response_id_is_the_documents_id_as_a_str(
     _dump_ids_as_objectids(monkeypatch, model)
     assert not isinstance(doc.model_dump()["id"], str)
 
-    response = schema(**to_response(doc))
+    converted = to_response(doc)
+    response = schema(**converted)
 
+    # No ObjectId left for the schema to pick up, under either key: sponsors
+    # once passed only because their "_id" alias happened to win over it.
+    assert {k: v for k, v in converted.items() if k in ("id", "_id")} in (
+        {"id": str(doc.id)},
+        {"_id": str(doc.id)},
+    )
     assert response.id == str(doc.id)
     assert response.model_dump(mode="json", by_alias=True)["_id"] == str(doc.id)
 
