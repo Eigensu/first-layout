@@ -24,6 +24,8 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SurfaceCard } from '../../src/components/ui/SurfaceCard';
 import { GlassButton } from '../../src/components/ui/GlassButton';
 import { formatMobileForDisplay } from '../../src/utils/mobile';
+import { getFreshAppleIdentityToken, getFreshGoogleIdToken } from '../../src/lib/socialReauth';
+import type { DeleteAccountCredential } from '../../src/services/userService';
 
 const AVATAR_SIZE = 88;
 const AVATAR_RING = 4;
@@ -40,6 +42,15 @@ export default function ProfileScreen() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  // Accounts made with Google or Apple have no password, so they confirm with a
+  // fresh sign-in from that provider instead. One that later set a password
+  // through "forgot password" is asked for the password by the backend, so
+  // that choice is theirs to make.
+  const socialProvider =
+    user?.authProvider === 'google' || user?.authProvider === 'apple' ? user.authProvider : null;
+  const [usePasswordInstead, setUsePasswordInstead] = useState(false);
+  const needsPassword = !socialProvider || usePasswordInstead;
+  const providerName = socialProvider === 'apple' ? 'Apple' : 'Google';
   const [headerHeight, setHeaderHeight] = useState(96);
 
   const handleLogout = () => {
@@ -48,7 +59,7 @@ export default function ProfileScreen() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!deletePassword) {
+    if (needsPassword && !deletePassword) {
       Alert.alert('Error', 'Please enter your password');
       return;
     }
@@ -64,14 +75,30 @@ export default function ProfileScreen() {
           onPress: async () => {
             setIsDeleting(true);
             try {
-              await deleteAccount(deletePassword, deleteReason || undefined);
+              let credential: DeleteAccountCredential;
+              if (needsPassword) {
+                credential = { password: deletePassword };
+              } else {
+                // A fresh sign-in, so a session left unattended can't delete
+                // the account on its own. Dismissing the sheet cancels.
+                const token =
+                  socialProvider === 'apple'
+                    ? await getFreshAppleIdentityToken()
+                    : await getFreshGoogleIdToken();
+                if (!token) return;
+                credential =
+                  socialProvider === 'apple'
+                    ? { appleIdentityToken: token }
+                    : { googleIdToken: token };
+              }
+              await deleteAccount(credential, deleteReason || undefined);
               setShowDeleteModal(false);
               Alert.alert('Success', 'Your account has been deleted');
             } catch (error: any) {
               let errorMessage = 'Failed to delete account. Please try again.';
               const status = error?.response?.status || error?.status;
               if (status === 401) {
-                errorMessage = 'Incorrect password';
+                errorMessage = error?.message || 'Incorrect password';
               } else if (status === 403) {
                 errorMessage = 'Account is already deactivated';
               } else if (status === 404) {
@@ -335,9 +362,21 @@ export default function ProfileScreen() {
             value={user?.mobile ? formatMobileForDisplay(user.mobile) : 'Not added yet'}
           />
           <DetailRow
-            icon={user?.authProvider === 'google' ? 'logo-google' : 'key-outline'}
+            icon={
+              user?.authProvider === 'google'
+                ? 'logo-google'
+                : user?.authProvider === 'apple'
+                  ? 'logo-apple'
+                  : 'key-outline'
+            }
             label="Sign-in method"
-            value={user?.authProvider === 'google' ? 'Google' : 'Email & password'}
+            value={
+              user?.authProvider === 'google'
+                ? 'Google'
+                : user?.authProvider === 'apple'
+                  ? 'Apple'
+                  : 'Email & password'
+            }
           />
         </SurfaceCard>
 
@@ -394,15 +433,28 @@ export default function ProfileScreen() {
               This action cannot be undone. Your account will be deactivated and you will lose access to all your data.
             </Text>
 
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.bg.body, color: theme.text.main, borderColor: theme.border.subtle }]}
-              placeholder="Enter your password"
-              placeholderTextColor={theme.text.muted}
-              secureTextEntry
-              value={deletePassword}
-              onChangeText={setDeletePassword}
-              editable={!isDeleting}
-            />
+            {needsPassword ? (
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.bg.body, color: theme.text.main, borderColor: theme.border.subtle }]}
+                placeholder="Enter your password"
+                placeholderTextColor={theme.text.muted}
+                secureTextEntry
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                editable={!isDeleting}
+              />
+            ) : (
+              <>
+                <Text style={[styles.modalDescription, { color: theme.text.main }]}>
+                  {`You'll be asked to confirm with ${providerName} before your account is deleted.`}
+                </Text>
+                <TouchableOpacity onPress={() => setUsePasswordInstead(true)} disabled={isDeleting}>
+                  <Text style={{ color: theme.text.muted, textAlign: 'center', marginBottom: 12 }}>
+                    I set a password. Use it instead
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <TextInput
               style={[styles.input, styles.textArea, { backgroundColor: theme.bg.body, color: theme.text.main, borderColor: theme.border.subtle }]}
@@ -423,6 +475,7 @@ export default function ProfileScreen() {
                   setShowDeleteModal(false);
                   setDeletePassword('');
                   setDeleteReason('');
+                  setUsePasswordInstead(false);
                 }}
                 disabled={isDeleting}
                 fullWidth
@@ -434,7 +487,7 @@ export default function ProfileScreen() {
                 variant="danger"
                 loading={isDeleting}
                 onPress={handleDeleteAccount}
-                disabled={isDeleting || !deletePassword}
+                disabled={isDeleting || (needsPassword && !deletePassword)}
                 fullWidth
                 style={{ flex: 1 }}
               />

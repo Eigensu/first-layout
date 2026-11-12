@@ -58,6 +58,12 @@ const toUserProfile = (userData: any): UserProfile => {
     });
 };
 
+/** How the person deleting their account proves it is them. */
+export type DeleteAccountCredential =
+    | { password: string }
+    | { googleIdToken: string }
+    | { appleIdentityToken: string };
+
 export const userService = {
     /**
      * Fetch current user profile
@@ -154,17 +160,37 @@ export const userService = {
 
     /**
      * Delete user account (soft delete)
+     *
+     * What proves the owner is present depends on the account: a password, or
+     * for accounts made with Google or Apple (which have none) a fresh token
+     * from that provider.
      */
-    deleteAccount: async (password: string, reason?: string): Promise<void> => {
+    deleteAccount: async (credential: DeleteAccountCredential, reason?: string): Promise<void> => {
         try {
             await api.delete('/api/users/me', {
-                data: { password, reason }
+                data: {
+                    password: 'password' in credential ? credential.password : undefined,
+                    google_id_token: 'googleIdToken' in credential ? credential.googleIdToken : undefined,
+                    apple_identity_token:
+                        'appleIdentityToken' in credential ? credential.appleIdentityToken : undefined,
+                    reason,
+                },
             });
         } catch (error: any) {
             // Handle specific error codes with user-friendly messages
             const status = error.response?.status;
             if (status === 401) {
-                const authError = new Error('Incorrect password');
+                // The backend says which check failed ("Google account does not
+                // match this user", "Re-authenticate with Apple to ..."), which
+                // beats guessing it was a password.
+                const detail = error.response?.data?.detail;
+                const authError = new Error(
+                    typeof detail === 'string' && detail
+                        ? detail
+                        : 'password' in credential
+                          ? 'Incorrect password'
+                          : 'Could not confirm your identity. Please try again.'
+                );
                 (authError as any).status = 401;
                 throw authError;
             }
@@ -179,7 +205,7 @@ export const userService = {
                 throw notFoundError;
             }
             if (status === 422) {
-                const validationError = new Error('Invalid request. Please check your password.');
+                const validationError = new Error('Invalid request. Please check your details.');
                 (validationError as any).status = 422;
                 throw validationError;
             }

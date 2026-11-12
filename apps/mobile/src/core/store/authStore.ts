@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageKeys } from '../../lib/storage';
 import { queryClient } from '../../lib/queryClient';
-import { userService } from '../../services/userService';
+import { userService, DeleteAccountCredential } from '../../services/userService';
 
 interface AuthState {
     // State
@@ -16,7 +16,7 @@ interface AuthState {
     logout: () => void;
     updateToken: (token: string) => void;
     updateTokens: (token: string, refreshToken?: string) => void;
-    deleteAccount: (password: string, reason?: string) => Promise<void>;
+    deleteAccount: (credential: DeleteAccountCredential, reason?: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -84,9 +84,9 @@ export const useAuthStore = create<AuthState>()(
             },
 
             // Delete account: Soft delete and logout only on success
-            deleteAccount: async (password: string, reason?: string) => {
-                // Call the API - this will throw if password is wrong
-                await userService.deleteAccount(password, reason);
+            deleteAccount: async (credential: DeleteAccountCredential, reason?: string) => {
+                // Call the API - this will throw if the credential is wrong
+                await userService.deleteAccount(credential, reason);
 
                 // Only clear auth state if deletion was successful (no error thrown)
                 set({
