@@ -46,6 +46,7 @@ def to_response(t: Tournament) -> TournamentResponse:
         primary_color=t.primary_color,
         secondary_color=t.secondary_color,
         api_base_url=t.api_base_url,
+        cricheroes_tournament_id=t.cricheroes_tournament_id,
         created_at=t.created_at,
         updated_at=t.updated_at,
     )
@@ -102,6 +103,7 @@ async def create_tournament(
         primary_color=data.primary_color,
         secondary_color=data.secondary_color,
         api_base_url=data.api_base_url,
+        cricheroes_tournament_id=data.cricheroes_tournament_id,
         created_at=now,
         updated_at=now,
     )

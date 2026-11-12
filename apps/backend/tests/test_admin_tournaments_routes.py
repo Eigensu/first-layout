@@ -263,3 +263,89 @@ class TestDeleteTournament:
 
         get_resp = await client.get(f"/api/admin/tournaments/{created['id']}")
         assert get_resp.status_code == 404
+
+
+class TestCricHeroesLink:
+    """cricheroes_tournament_id: which CricHeroes tournament a tournament's
+    public stats page reads from the cache (CRICHEROES_INTEGRATION_TECH_SPEC.md
+    §13.1)."""
+
+    async def _create(self, client, **overrides):
+        payload = {"slug": "tpl", "name": "TPL", **overrides}
+        resp = await client.post("/api/admin/tournaments", json=payload)
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    async def test_unlinked_by_default(self, client):
+        created = await self._create(client)
+        assert created["cricheroes_tournament_id"] is None
+
+    async def test_linked_at_creation(self, client):
+        created = await self._create(client, cricheroes_tournament_id=2242502)
+        assert created["cricheroes_tournament_id"] == 2242502
+
+        fetched = await client.get(f"/api/admin/tournaments/{created['id']}")
+        assert fetched.json()["cricheroes_tournament_id"] == 2242502
+        listed = await client.get("/api/admin/tournaments")
+        assert listed.json()["tournaments"][0]["cricheroes_tournament_id"] == 2242502
+
+    async def test_linked_relinked_and_unlinked_by_edit(self, client):
+        created = await self._create(client)
+        url = f"/api/admin/tournaments/{created['id']}"
+
+        resp = await client.put(url, json={"cricheroes_tournament_id": 2242502})
+        assert resp.json()["cricheroes_tournament_id"] == 2242502
+
+        # An edit that does not mention it leaves it alone.
+        resp = await client.put(url, json={"name": "Tyrant Premier League"})
+        assert resp.json()["cricheroes_tournament_id"] == 2242502
+
+        resp = await client.put(url, json={"cricheroes_tournament_id": 2251924})
+        assert resp.json()["cricheroes_tournament_id"] == 2251924
+
+        resp = await client.put(url, json={"cricheroes_tournament_id": None})
+        assert resp.status_code == 200
+        assert resp.json()["cricheroes_tournament_id"] is None
+
+    @pytest.mark.parametrize(
+        "value",
+        [0, -2242502, 1.5, 2242502.0, "2242502", "abc", True, 2**53],
+        ids=[
+            "zero",
+            "negative",
+            "fraction",
+            "float",
+            "numeric-string",
+            "text",
+            "bool",
+            "beyond-js-safe-integer",
+        ],
+    )
+    async def test_only_a_positive_whole_number_is_accepted(self, client, value):
+        resp = await client.post(
+            "/api/admin/tournaments",
+            json={"slug": "tpl", "name": "TPL", "cricheroes_tournament_id": value},
+        )
+        assert resp.status_code == 422, resp.text
+        assert resp.json()["detail"][0]["loc"][-1] == "cricheroes_tournament_id"
+
+        created = await self._create(client, slug="tpl-two")
+        resp = await client.put(
+            f"/api/admin/tournaments/{created['id']}",
+            json={"cricheroes_tournament_id": value},
+        )
+        assert resp.status_code == 422, resp.text
+        fetched = await client.get(f"/api/admin/tournaments/{created['id']}")
+        assert fetched.json()["cricheroes_tournament_id"] is None
+
+    async def test_not_on_the_public_tournament(self, client, anon_client):
+        await self._create(client, cricheroes_tournament_id=2242502)
+        resp = await anon_client.get("/api/tournaments/by-slug/tpl")
+        assert "cricheroes_tournament_id" not in resp.json()
+
+    async def test_platform_admins_only(self, anon_client, db):
+        resp = await anon_client.post(
+            "/api/admin/tournaments",
+            json={"slug": "tpl", "name": "TPL", "cricheroes_tournament_id": 2242502},
+        )
+        assert resp.status_code == 401

@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,6 +10,12 @@ from app.common.enums.tournaments import TournamentStatus
 from app.schemas.dates import DatesInIST
 
 SLUG_RE = re.compile(TOURNAMENT_SLUG_PATTERN)
+
+# A CricHeroes tournament id (CRICHEROES_INTEGRATION_TECH_SPEC.md §13.1): a
+# positive whole number. Strict, so a JSON `true`, `2242502.0` or "2242502" is
+# refused rather than coerced; capped at the largest integer a browser holds
+# exactly, since the admin form reads it back as a JavaScript number.
+CricHeroesTournamentId = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]
 
 
 def validate_slug(value: str) -> str:
@@ -58,6 +64,7 @@ class TournamentCreate(BaseModel):
     primary_color: Optional[str] = Field(default=None, max_length=32)
     secondary_color: Optional[str] = Field(default=None, max_length=32)
     api_base_url: Optional[str] = Field(default=None, max_length=300)
+    cricheroes_tournament_id: Optional[CricHeroesTournamentId] = None
 
     @field_validator("slug")
     @classmethod
@@ -81,6 +88,8 @@ class TournamentUpdate(BaseModel):
     primary_color: Optional[str] = Field(default=None, max_length=32)
     secondary_color: Optional[str] = Field(default=None, max_length=32)
     api_base_url: Optional[str] = Field(default=None, max_length=300)
+    # null unlinks the tournament: its stats page goes back to empty.
+    cricheroes_tournament_id: Optional[CricHeroesTournamentId] = None
 
     @field_validator("slug")
     @classmethod
@@ -107,6 +116,7 @@ class TournamentResponse(DatesInIST):
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
     api_base_url: Optional[str] = None
+    cricheroes_tournament_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

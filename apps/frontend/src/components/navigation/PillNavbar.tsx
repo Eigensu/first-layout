@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   Info,
+  BarChart3,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -61,6 +62,13 @@ const DEFAULT_ITEMS: PillNavItem[] = [
     icon: <Trophy className="w-4 h-4" />,
   },
   {
+    // CricHeroes standings and leaderboards, read from the backend's cache.
+    id: "stats",
+    label: "Stats",
+    href: "/stats",
+    icon: <BarChart3 className="w-4 h-4" />,
+  },
+  {
     id: "sponsors",
     label: "Sponsors",
     href: "/sponsors",
@@ -92,7 +100,7 @@ const PillNavbar: React.FC<PillNavbarProps> = ({
     if (isAuthenticated) {
       return items;
     }
-    const allow = new Set(["home", "leaderboard", "about"]);
+    const allow = new Set(["home", "leaderboard", "stats", "about"]);
     return items.filter((it) => allow.has(it.id));
   }, [isAuthenticated, items]);
 

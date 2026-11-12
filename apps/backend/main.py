@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routes import (
     auth_router,
     contests_router,
+    cricheroes_router,
     leaderboard_router,
     settings_router,
     sponsors_router,
@@ -92,6 +93,8 @@ app.include_router(admin_settings_router)
 app.include_router(admin_tournaments_router)
 app.include_router(admin_cricheroes_router)
 app.include_router(tournaments_router)
+# Public, cache-only (CRICHEROES_INTEGRATION_TECH_SPEC.md §9.2).
+app.include_router(cricheroes_router)
 app.include_router(players_router)
 app.include_router(players_hot_router)
 app.include_router(slots_router)

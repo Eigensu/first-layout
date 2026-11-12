@@ -19,6 +19,7 @@ import {
   XCircle,
   ShieldCheck,
   LayoutDashboard,
+  BarChart3,
 } from "lucide-react";
 import { TournamentAdminsDialog } from "./TournamentAdminsDialog";
 import {
@@ -28,6 +29,7 @@ import {
   TournamentUpdate,
 } from "@/lib/api/admin/tournaments";
 import { getErrorMessage } from "@/lib/api/client";
+import { parseCricHeroesTournamentId } from "@/utils/cricheroes";
 import {
   ROOT_DOMAIN,
   TournamentStatus,
@@ -62,6 +64,8 @@ interface FormState {
   primary_color: string;
   secondary_color: string;
   api_base_url: string;
+  // The CricHeroes tournament id, or a link carrying it, as typed.
+  cricheroes: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -75,6 +79,7 @@ const EMPTY_FORM: FormState = {
   primary_color: "",
   secondary_color: "",
   api_base_url: "",
+  cricheroes: "",
 };
 
 /** "2026-08-01T10:00:00+05:30" -> "2026-08-01T10:00" for datetime-local inputs. */
@@ -99,6 +104,8 @@ function formToPayload(form: FormState, isEdit: boolean): TournamentUpdate {
     primary_color: form.primary_color || empty,
     secondary_color: form.secondary_color || empty,
     api_base_url: form.api_base_url.trim() || empty,
+    // handleSubmit refuses text that holds no id, so empty means unlinked.
+    cricheroes_tournament_id: parseCricHeroesTournamentId(form.cricheroes) ?? empty,
   };
 }
 
@@ -125,6 +132,9 @@ function TournamentForm({
           primary_color: initial.primary_color || "",
           secondary_color: initial.secondary_color || "",
           api_base_url: initial.api_base_url || "",
+          cricheroes: initial.cricheroes_tournament_id
+            ? String(initial.cricheroes_tournament_id)
+            : "",
         }
       : EMPTY_FORM
   );
@@ -141,6 +151,8 @@ function TournamentForm({
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const cricheroesId = parseCricHeroesTournamentId(form.cricheroes);
 
   // Availability check (debounced). Local format errors short-circuit the call.
   const scheduleSlugCheck = useCallback(
@@ -205,6 +217,12 @@ function TournamentForm({
     }
     if (form.start_at && form.end_at && form.start_at >= form.end_at) {
       setError("Start date must be before end date");
+      return;
+    }
+    if (form.cricheroes.trim() && cricheroesId === null) {
+      setError(
+        "CricHeroes tournament: enter its id or a cricheroes.com tournament link"
+      );
       return;
     }
 
@@ -393,6 +411,40 @@ function TournamentForm({
                   )}
                 </div>
               </div>
+            </div>
+
+            <div>
+              <label className={labelClass} htmlFor="tournament-cricheroes">
+                CricHeroes Tournament
+              </label>
+              <input
+                id="tournament-cricheroes"
+                type="text"
+                inputMode="url"
+                value={form.cricheroes}
+                onChange={(e) => set("cricheroes", e.target.value)}
+                placeholder="2242502, or its cricheroes.com link"
+                className={`${inputClass} font-mono`}
+                aria-describedby="tournament-cricheroes-help"
+              />
+              <p id="tournament-cricheroes-help" className="mt-1 text-xs text-text-muted">
+                {form.cricheroes.trim() && cricheroesId === null ? (
+                  <span className="text-danger">
+                    No tournament id in that. Paste the id or a
+                    cricheroes.com/tournament/… link.
+                  </span>
+                ) : cricheroesId !== null &&
+                  String(cricheroesId) !== form.cricheroes.trim() ? (
+                  <>Links CricHeroes tournament <span className="font-mono">{cricheroesId}</span>.</>
+                ) : (
+                  <>
+                    Shows its points table, MVP and leaderboards on{" "}
+                    <span className="font-mono">/stats</span>, from the hourly
+                    CricHeroes sync (only for ids in CRICHEROES_SYNC_TOURNAMENT_IDS).
+                    Leave empty for none.
+                  </>
+                )}
+              </p>
             </div>
 
             <details className="rounded-lg border border-border-subtle p-3">
@@ -587,6 +639,16 @@ export function TournamentsSection() {
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
+
+              {t.cricheroes_tournament_id && (
+                <div className="flex items-center gap-2 text-sm text-text-muted mb-2">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>
+                    CricHeroes{" "}
+                    <span className="font-mono">{t.cricheroes_tournament_id}</span>
+                  </span>
+                </div>
+              )}
 
               {(t.start_at || t.end_at) && (
                 <div className="flex items-center gap-2 text-sm text-text-muted mb-4">
