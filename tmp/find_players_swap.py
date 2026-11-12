@@ -1,7 +1,8 @@
+import os
 import pymongo
 from bson import ObjectId
 
-MONGODB_URL = "mongodb+srv://walleeigensu_db_user:fNJrnkHMUrQNglWx@walle-fantasy.3rv66oh.mongodb.net/?retryWrites=true&w=majority&appName=Walle-Fantasy"
+MONGODB_URL = os.environ["MONGODB_URL"]
 DB_NAME = "tyrant"
 
 def find_players():
