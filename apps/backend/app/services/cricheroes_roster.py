@@ -41,6 +41,7 @@ from app.models.admin.player import Player
 from app.schemas.cricheroes import SquadTeam, TournamentMatch
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
+    ACCESS_DENIED_CODE,
     MATCH_NOT_FOUND_CODE,
     SQUAD_NOT_FOUND_CODE,
     CricHeroesAPIError,
@@ -70,6 +71,15 @@ NO_SQUAD_CODES = frozenset({SQUAD_NOT_FOUND_CODE, MATCH_NOT_FOUND_CODE})
 # the Teams page that is simply no matches to read; without them it stays an
 # error, as before, since then there is nothing to import at all.
 NO_MATCH_LIST_CODE = "170011"
+
+# The match list's refusals that an uploaded Teams page can stand in for.
+# 170001 is a tournament outside our agreement: CricHeroes will not show us
+# its matches, but the Teams page is public and lists its registered players.
+# The import goes ahead with those alone and says the squads were refused
+# (`Roster.squads_refused`). Without a Teams page it stays the 422 it was.
+# Only the match list: a squad refused with 170001 from a listed match is
+# still a failure, as a partial roster would be imported without a word.
+TEAMS_PAGE_ONLY_CODES = frozenset({NO_MATCH_LIST_CODE, ACCESS_DENIED_CODE})
 
 # Squads are read a few at a time, with a pause between starts: at most 20
 # calls a second, well under CricHeroes' 50 -- a 429 is charged like a
@@ -105,6 +115,9 @@ class Roster:
     # out), and the teams they are registered to.
     registered_players: int = 0
     registered_teams: int = 0
+    # True when CricHeroes refused the match list (170001) and the roster is
+    # the uploaded Teams page alone: no squad was read, and none could be.
+    squads_refused: bool = False
 
     @property
     def teams(self) -> List[str]:
@@ -164,12 +177,14 @@ async def _fetch_roster(
     registered: Sequence[RosterPlayer],
     sleep: Callable[[float], Awaitable[None]],
 ) -> Roster:
+    squads_refused = False
     try:
         matches = await client.get_tournament_match_list(tournament_id)
     except CricHeroesAPIError as exc:
-        if not (registered and str(exc.code) == NO_MATCH_LIST_CODE):
+        if not (registered and str(exc.code) in TEAMS_PAGE_ONLY_CODES):
             raise
         matches = []
+        squads_refused = str(exc.code) == ACCESS_DENIED_CODE
     played = [
         match
         for match in matches
@@ -206,6 +221,7 @@ async def _fetch_roster(
         calls=1 + len(played),
         registered_players=len(registered),
         registered_teams=len({member.team for member in registered}),
+        squads_refused=squads_refused,
     )
 
 
