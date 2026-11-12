@@ -19,7 +19,7 @@ account involved is left exactly as it was.
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Sequence, Set, Tuple
 
 from bson import ObjectId
@@ -350,7 +350,7 @@ async def _write_review_item(dest, group_id: str, plan: AccountPlan) -> None:
                 }
                 for w in plan.withheld
             ],
-            "updated_at": datetime.utcnow(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
         },
     }
     # One or the other: Mongo refuses a field in both $set and $setOnInsert.

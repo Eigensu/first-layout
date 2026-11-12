@@ -1,5 +1,5 @@
-# app.utils.dependencies is not re-exported here. It imports the models, and the
-# models import app.utils.timezone, so loading it with this package is a cycle.
+# app.utils.dependencies is not re-exported here. It imports the models, so
+# loading it with this package risks a cycle whenever a model imports app.utils.
 from .security import (
     create_access_token,
     create_refresh_token,

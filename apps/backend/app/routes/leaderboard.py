@@ -1,9 +1,9 @@
-from datetime import datetime
 from typing import List, Optional, Tuple
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.common.datetime_utils import utc_now
 from app.models.player import Player as PublicPlayer
 from app.models.team import Team
 from app.models.user import User
@@ -91,7 +91,7 @@ async def get_leaderboard(
             try:
                 if float(team.total_points or 0.0) != float(computed_points):
                     team.total_points = float(computed_points)
-                    team.updated_at = datetime.utcnow()
+                    team.updated_at = utc_now()
                     await team.save()
             except Exception:
                 pass

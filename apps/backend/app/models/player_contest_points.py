@@ -4,6 +4,8 @@ from typing import Optional
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field
 
+from app.common.datetime_utils import utc_now
+
 
 class PlayerContestPoints(Document):
     """Per-contest points for a given player.
@@ -16,7 +18,7 @@ class PlayerContestPoints(Document):
     contest_id: PydanticObjectId
     points: float = 0.0
 
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     # Tenant scope -- see app/utils/tenant.py. Optional only until the
     # backfill fills it in; None means "written before the migration".

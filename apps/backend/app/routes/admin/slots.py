@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import List, Optional
 
 from beanie import PydanticObjectId
@@ -6,6 +5,7 @@ from beanie.operators import And, Or, RegEx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
 from app.models.user import User
@@ -142,8 +142,8 @@ async def migrate_slots_from_players(
                             name=name,
                             min_select=4,
                             max_select=4,
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow(),
+                            created_at=utc_now(),
+                            updated_at=utc_now(),
                         )
                         await slot_doc.insert()
                     created.append({"legacy": val, "code": code, "name": name})
@@ -217,7 +217,7 @@ async def create_slot(
     if await scoped_one(Slot, tournament_id, Slot.name == data.name):
         raise HTTPException(status_code=400, detail="Slot name already exists")
 
-    now = datetime.utcnow()
+    now = utc_now()
     slot = Slot(
         tournament_id=tournament_id,
         code=data.code,
@@ -270,7 +270,7 @@ async def update_slot(
         update_fields.pop("code")  # code is immutable
     for k, v in update_fields.items():
         setattr(slot, k, v)
-    slot.updated_at = datetime.utcnow()
+    slot.updated_at = utc_now()
     await slot.save()
     return await build_slot_response(slot)
 

@@ -4,6 +4,8 @@ from typing import List, Optional
 from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, Field
 
+from app.common.datetime_utils import utc_now
+
 
 class PlayerSelection(BaseModel):
     """Player selection within a team"""
@@ -32,8 +34,8 @@ class Team(Document):
     tournament_id: Optional[PydanticObjectId] = None
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
         name = "teams"

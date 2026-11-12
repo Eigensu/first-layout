@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, Optional, Tuple
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player
 from app.models.admin.slot import Slot
 from app.utils.tenant import TenantId, scoped_one
@@ -157,16 +158,14 @@ async def resolve_slot(
 
         if not slot_doc and strategy == "create":
             # Create new slot from code
-            from datetime import datetime
-
             slot_doc = Slot(
                 tournament_id=tournament_id,
                 code=slugify_code(slot_code),
                 name=slot_code.strip(),
                 min_select=4,
                 max_select=4,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=utc_now(),
+                updated_at=utc_now(),
             )
             await slot_doc.insert()
 
@@ -181,7 +180,6 @@ async def resolve_slot(
 
         if not slot_doc and strategy == "create":
             # Create new slot from name
-            from datetime import datetime
 
             slot_doc = Slot(
                 tournament_id=tournament_id,
@@ -189,8 +187,8 @@ async def resolve_slot(
                 name=slot_name.strip(),
                 min_select=4,
                 max_select=4,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=utc_now(),
+                updated_at=utc_now(),
             )
             await slot_doc.insert()
 

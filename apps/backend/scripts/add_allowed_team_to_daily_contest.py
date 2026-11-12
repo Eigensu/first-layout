@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import os
 import sys
-from datetime import datetime
 from typing import Optional
 
 from beanie import PydanticObjectId
@@ -13,6 +12,7 @@ BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+from app.common.datetime_utils import utc_now
 from app.models.contest import Contest
 from config.database import close_mongo_connection, connect_to_mongo
 
@@ -54,7 +54,7 @@ async def add_allowed_team(
         return True
 
     contest.allowed_teams.append(team_code)
-    contest.updated_at = datetime.utcnow()
+    contest.updated_at = utc_now()
     await contest.save()
     print(f"[OK] Added team '{team_code}' to contest {contest.code} ({contest.id})")
     return True

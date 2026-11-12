@@ -13,6 +13,7 @@ from openpyxl import Workbook
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_ist, to_utc_naive, utc_now
 from app.common.enums.contests import ContestFormat, ContestStatus, ContestVisibility
 from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
@@ -49,7 +50,6 @@ from app.utils.gridfs import (
     upload_contest_logo_to_gridfs,
 )
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
-from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
 
@@ -115,7 +115,7 @@ async def create_contest(
             tournament_id=tournament_id,
         )
 
-    now = now_ist()
+    now = utc_now()
     contest = Contest(
         tournament_id=tournament_id,
         code=data.code,
@@ -221,9 +221,15 @@ async def update_contest(
     if "code" in update_fields:
         update_fields.pop("code")  # immutable
 
-    # Validate dates if provided
-    new_start = update_fields.get("start_at", contest.start_at)
-    new_end = update_fields.get("end_at", contest.end_at)
+    # Both ends are required on the model, so an explicit null cannot clear one.
+    for field in ("start_at", "end_at"):
+        if field in update_fields and update_fields[field] is None:
+            raise HTTPException(status_code=400, detail=f"{field} cannot be empty")
+
+    # The schema hands back aware IST values and the stored ones are naive UTC,
+    # so a partial update (only start_at or only end_at) mixes the two.
+    new_start = to_utc_naive(update_fields.get("start_at", contest.start_at))
+    new_end = to_utc_naive(update_fields.get("end_at", contest.end_at))
     if new_start >= new_end:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
@@ -314,7 +320,7 @@ async def update_contest(
 
     for k, v in update_fields.items():
         setattr(contest, k, v)
-    contest.updated_at = now_ist()
+    contest.updated_at = utc_now()
     await contest.save()
     return await to_response(contest)
 
@@ -351,7 +357,7 @@ async def delete_contest(
                 }
             ):
                 enr.status = EnrollmentStatus.REMOVED
-                enr.removed_at = now_ist()
+                enr.removed_at = utc_now()
                 await enr.save()
         else:
             raise HTTPException(
@@ -420,7 +426,7 @@ async def enroll_teams(
             user_id=team.user_id,
             contest_id=contest.id,
             status=EnrollmentStatus.ACTIVE,
-            enrolled_at=now_ist(),
+            enrolled_at=utc_now(),
         )
         try:
             await enr.insert()
@@ -431,7 +437,7 @@ async def enroll_teams(
         # Persist contest_id on the team for convenience
         try:
             team.contest_id = str(contest.id)
-            team.updated_at = now_ist()
+            team.updated_at = utc_now()
             await team.save()
         except Exception:
             # Do not fail enrollment if team update fails
@@ -473,7 +479,7 @@ async def unenroll(
             enr = await get_scoped(TeamContestEnrollment, tournament_id, eid)
             if enr and enr.contest_id == contest.id and enr.status == "active":
                 enr.status = "removed"
-                enr.removed_at = now_ist()
+                enr.removed_at = utc_now()
                 await enr.save()
                 count += 1
                 affected_team_ids.add(enr.team_id)
@@ -493,7 +499,7 @@ async def unenroll(
             )
             if enr:
                 enr.status = EnrollmentStatus.REMOVED
-                enr.removed_at = now_ist()
+                enr.removed_at = utc_now()
                 await enr.save()
                 count += 1
                 affected_team_ids.add(toid)
@@ -520,7 +526,7 @@ async def unenroll(
                 team = await get_scoped(Team, tournament_id, tid)
                 if team and team.contest_id is not None:
                     team.contest_id = None
-                    team.updated_at = now_ist()
+                    team.updated_at = utc_now()
                     await team.save()
         except Exception:
             # Best-effort cleanup; ignore errors
@@ -624,7 +630,7 @@ async def upsert_player_points(
 
     # Upsert
     updated_docs: list[PlayerContestPoints] = []
-    now = now_ist()
+    now = utc_now()
     for poid, pts in valid_items:
         existing = await scoped_one(
             PlayerContestPoints,
@@ -682,7 +688,7 @@ async def upsert_player_points(
                     player = await get_scoped(Player, tournament_id, doc.player_id)
                     if player:
                         player.points = float(doc.points or 0.0)
-                        player.updated_at = now_ist()
+                        player.updated_at = utc_now()
                         await player.save()
                 except Exception:
                     # continue best-effort for each player, do not fail the response
@@ -725,7 +731,7 @@ async def upload_contest_logo(
         # Update contest with API URL and file id
         contest.logo_file_id = file_id
         contest.logo_url = f"/api/contests/{contest_id}/logo"
-        contest.updated_at = now_ist()
+        contest.updated_at = utc_now()
         await contest.save()
         return UploadResponse(
             url=contest.logo_url, message="Logo uploaded successfully"

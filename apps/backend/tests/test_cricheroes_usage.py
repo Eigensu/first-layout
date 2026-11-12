@@ -14,6 +14,7 @@ import pytest_asyncio
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.cricheroes import CricHeroesCallCount
 from app.routes.admin.cricheroes import get_cricheroes_client
 from app.services import cricheroes_usage
@@ -393,7 +394,7 @@ async def test_past_the_warning_share_is_flagged_and_logged(db, settings, caplog
 
 
 async def test_the_usage_route(client, settings):
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = utc_now().date().isoformat()
     await count(today, "get-tournament-match-list", 12)
 
     response = await client.get("/api/admin/cricheroes/usage", params={"days": 7})

@@ -8,12 +8,12 @@ be corrected before.
 Shares its sessions with password reset (purpose "email_change").
 """
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from beanie.operators import In
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.password_reset import (
     CHANNEL_EMAIL,
     PURPOSE_EMAIL_CHANGE,
@@ -80,7 +80,7 @@ async def confirm_email_change(user: User, otp: str) -> str:
     # The first time this flag means anything on a password account: the
     # person has just shown they receive mail at this address.
     user.is_verified = True
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = utc_now()
     try:
         # Only the fields changed, not the whole document, so a sign-in or a
         # password change landing meanwhile is not overwritten.

@@ -5,8 +5,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.common.consts.index import RESERVED_SUBDOMAINS, TOURNAMENT_SLUG_PATTERN
+from app.common.datetime_utils import IST
 from app.common.enums.tournaments import TournamentStatus
-from app.utils.timezone import IST, to_ist
+from app.schemas.dates import DatesInIST
 
 SLUG_RE = re.compile(TOURNAMENT_SLUG_PATTERN)
 
@@ -94,7 +95,7 @@ class TournamentUpdate(BaseModel):
         return _parse_ist(v)
 
 
-class TournamentResponse(BaseModel):
+class TournamentResponse(DatesInIST):
     id: str
     slug: str
     name: str
@@ -108,13 +109,6 @@ class TournamentResponse(BaseModel):
     api_base_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    @field_validator("start_at", "end_at", "created_at", "updated_at", mode="before")
-    @classmethod
-    def ensure_ist(cls, v):
-        if isinstance(v, datetime):
-            return to_ist(v)
-        return v
 
     class Config:
         from_attributes = True
@@ -133,7 +127,7 @@ class SlugAvailabilityResponse(BaseModel):
     reason: Optional[str] = None
 
 
-class PublicTournamentResponse(BaseModel):
+class PublicTournamentResponse(DatesInIST):
     """Shape returned to unauthenticated subdomain visitors."""
 
     slug: str
@@ -146,13 +140,6 @@ class PublicTournamentResponse(BaseModel):
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
     api_base_url: Optional[str] = None
-
-    @field_validator("start_at", "end_at", mode="before")
-    @classmethod
-    def ensure_ist(cls, v):
-        if isinstance(v, datetime):
-            return to_ist(v)
-        return v
 
 
 class TournamentAdminAppoint(BaseModel):

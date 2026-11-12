@@ -1,11 +1,11 @@
 import logging
-from datetime import datetime, timezone
 from typing import Annotated
 
 from beanie.operators import In
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_utc_naive, utc_now
 from app.models.tournament import Tournament
 from app.models.tournament_membership import STATUS_PLAYED, TournamentMembership
 from app.models.user import RefreshToken, User
@@ -40,7 +40,6 @@ from app.utils.gridfs import open_avatar_stream
 from app.utils.rate_limit import rate_limit
 from app.utils.security import verify_password
 from app.utils.tenant import TenantId, get_optional_tenant, tournament_name
-from app.utils.timezone import to_ist
 from config.settings import get_settings
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
@@ -150,7 +149,7 @@ async def get_my_tournaments(
     played, registered_only = [], []
     for m in sorted(
         memberships,
-        key=lambda m: to_ist(m.last_active_at or m.joined_at),
+        key=lambda m: to_utc_naive(m.last_active_at or m.joined_at),
         reverse=True,
     ):
         tournament = tournaments.get(m.tournament_id)
@@ -225,7 +224,7 @@ async def update_current_user(
         current_user.avatar_url = avatar_url
         changes[User.avatar_url] = avatar_url
 
-    changes[User.updated_at] = datetime.now(timezone.utc)
+    changes[User.updated_at] = utc_now()
     try:
         # The fields this request changed, not the whole document; see
         # patch_current_user.
@@ -270,7 +269,7 @@ async def patch_current_user(
         changes[User.mobile] = current_user.mobile
         changes[User.mobiles] = current_user.mobiles
 
-    changes[User.updated_at] = datetime.now(timezone.utc)
+    changes[User.updated_at] = utc_now()
     try:
         # Only what this request changed. The user was read when the request
         # began, and a whole-document save would put back any field changed
@@ -478,7 +477,7 @@ async def delete_current_user(
 
     # Soft delete by deactivating and recording timestamp, writing those fields
     # only, as patch_current_user does.
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     await current_user.set(
         {
             User.is_active: False,

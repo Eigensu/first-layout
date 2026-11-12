@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import (
@@ -15,6 +15,7 @@ from fastapi import (
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.models.password_reset import CHANNEL_EMAIL, CHANNEL_SMS
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
@@ -142,8 +143,8 @@ async def register(
         hashed_password=hashed_password,
         full_name=user_data.full_name,
         mobile=user_data.mobile,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now(),
+        updated_at=utc_now(),
     )
 
     # Save to MongoDB
@@ -177,7 +178,7 @@ async def register(
     refresh_token_doc = RefreshToken(
         user_id=new_user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
     await record_sign_in(new_user, tournament_id)
@@ -254,7 +255,7 @@ async def login(
     # Only the field this writes: a whole-document save would put back any
     # field changed since the account was read, such as an email change
     # confirmed on another device a moment ago.
-    await user.set({User.last_login: datetime.now(timezone.utc)})
+    await user.set({User.last_login: utc_now()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -263,7 +264,7 @@ async def login(
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
     await record_sign_in(user, tournament_id)
@@ -295,7 +296,7 @@ async def google_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    await user.set({User.last_login: datetime.now(timezone.utc)})
+    await user.set({User.last_login: utc_now()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -303,7 +304,7 @@ async def google_auth(
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
     await record_sign_in(user, tournament_id)
@@ -335,7 +336,7 @@ async def apple_auth(
             status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled"
         )
 
-    await user.set({User.last_login: datetime.now(timezone.utc)})
+    await user.set({User.last_login: utc_now()})
 
     access_token = create_access_token(data=subject_claims(user))
     refresh_token = create_refresh_token(data=subject_claims(user))
@@ -343,7 +344,7 @@ async def apple_auth(
     refresh_token_doc = RefreshToken(
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await refresh_token_doc.insert()
     await record_sign_in(user, tournament_id)
@@ -379,7 +380,7 @@ async def refresh_token(request: Request, refresh_token: str):
         )
 
     # Check if token is expired
-    if token_doc.expires_at < datetime.utcnow():
+    if token_doc.expires_at < utc_now():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
         )
@@ -407,7 +408,7 @@ async def refresh_token(request: Request, refresh_token: str):
     new_token_doc = RefreshToken(
         user_id=user.id,
         token=new_refresh_token,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     )
     await new_token_doc.insert()
 
@@ -595,7 +596,7 @@ async def change_password(
         {
             User.hashed_password: current_user.hashed_password,
             User.legacy_hashes: current_user.legacy_hashes,
-            User.updated_at: datetime.now(timezone.utc),
+            User.updated_at: utc_now(),
         }
     )
 

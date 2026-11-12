@@ -1,9 +1,9 @@
-from datetime import datetime
 from typing import Dict, List, Optional
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.contests import ContestStatus
 from app.common.enums.enrollments import EnrollmentStatus
 from app.models.admin.slot import Slot
@@ -24,7 +24,6 @@ from app.services.membership import record_play
 from app.services.team_composition import validate_team_composition
 from app.utils.dependencies import get_current_active_user
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
-from app.utils.timezone import now_ist
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -480,7 +479,7 @@ async def update_team(
     )
     if active_enrs:
         contest_ids = [enr.contest_id for enr in active_enrs]
-        now = now_ist()
+        now = utc_now()
         active_contest_count = (
             await scoped(Contest, tournament_id)
             .find(
@@ -601,7 +600,7 @@ async def update_team(
                         players, tournament_id=tournament_id
                     )
 
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = utc_now()
 
         for key, value in update_data.items():
             setattr(team, key, value)
@@ -672,10 +671,8 @@ async def rename_team(
         .to_list()
     )
     if active_enrs:
-        from datetime import datetime as _dt
-
         contest_ids = [enr.contest_id for enr in active_enrs]
-        now = _dt.utcnow()
+        now = utc_now()
         active_contest_count = (
             await scoped(Contest, tournament_id)
             .find(
@@ -696,7 +693,7 @@ async def rename_team(
 
     # Update team name
     team.team_name = team_name.strip()
-    team.updated_at = datetime.utcnow()
+    team.updated_at = utc_now()
     await team.save()  # type: ignore[misc]
 
     return TeamResponse(
@@ -752,7 +749,7 @@ async def delete_team(
     )
 
     if active_enrollments:
-        now = datetime.utcnow()
+        now = utc_now()
         for enr in active_enrollments:
             enr.status = EnrollmentStatus.REMOVED
             enr.removed_at = now

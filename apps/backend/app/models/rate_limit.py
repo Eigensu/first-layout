@@ -24,5 +24,7 @@ class RateLimitCounter(Document):
         name = "rate_limit_counters"
         indexes = [
             IndexModel([("key", 1)], name="uniq_key", unique=True),
-            IndexModel([("expires_at", 1)], name="ttl_expires_at", expireAfterSeconds=0),
+            IndexModel(
+                [("expires_at", 1)], name="ttl_expires_at", expireAfterSeconds=0
+            ),
         ]

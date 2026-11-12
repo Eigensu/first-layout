@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Annotated, Dict, List, Optional
 
 from beanie import PydanticObjectId
@@ -8,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_ist, utc_now
 from app.common.enums.contests import ContestStatus, ContestVisibility
 from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
@@ -31,7 +31,6 @@ from app.services.standings import contest_standings
 from app.utils.dependencies import get_current_active_user, get_optional_current_user
 from app.utils.gridfs import open_contest_logo_stream
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
-from app.utils.timezone import now_ist, to_ist
 
 router = APIRouter(prefix="/api/contests", tags=["contests"])
 
@@ -377,7 +376,7 @@ async def enroll_in_contest(
         contest_id=contest.id,
         user_id=current_user.id,
         status=EnrollmentStatus.ACTIVE,
-        enrolled_at=now_ist(),
+        enrolled_at=utc_now(),
     )
     try:
         await enr.insert()  # type: ignore

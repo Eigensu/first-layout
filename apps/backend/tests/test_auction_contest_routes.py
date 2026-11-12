@@ -6,17 +6,17 @@ discovered by a user who cannot finish a squad.
 
 from datetime import timedelta
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.player import Player as AdminPlayer
-from app.utils.timezone import now_ist
 
 
 def _payload(**overrides):
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     body = {
         "code": "auction-1",
         "name": "Auction Contest",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=7)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         "contest_format": "auction_purse",
         "purse": 1_000_000,
         "squad_size": 6,
@@ -113,14 +113,14 @@ async def test_update_cannot_make_a_contest_unsatisfiable(client, db):
 
 async def test_existing_contests_default_to_slot_based(client, db):
     """Contests created without the new fields keep the old behaviour."""
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     res = await client.post(
         "/api/admin/contests",
         json={
             "code": "legacy-1",
             "name": "Legacy Contest",
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         },
     )
 

@@ -18,6 +18,7 @@ from beanie.operators import In
 from pymongo import UpdateOne
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import to_utc_naive, utc_now
 from app.common.enums.enrollments import EnrollmentStatus
 from app.models.contest import Contest
 from app.models.team import Team
@@ -27,7 +28,6 @@ from app.models.tournament_membership import STATUS_PLAYED, TournamentMembership
 from app.models.user import User
 from app.services.standings import contest_standings
 from app.utils.tenant import TenantId, scoped
-from app.utils.timezone import now_ist, to_ist
 
 UserId = PydanticObjectId
 
@@ -58,7 +58,7 @@ class _Activity:
 
     def saw(self, user_id: UserId, when) -> None:
         if when is not None:
-            when = to_ist(when)
+            when = to_utc_naive(when)
             self.last_active[user_id] = max(self.last_active.get(user_id, when), when)
 
 
@@ -70,7 +70,7 @@ async def refresh_tournament(tournament: Tournament) -> RefreshReport:
     contest, and total_points sums their entry's points across contests: one
     active entry per person per contest, so nothing is counted twice.
     """
-    now = now_ist()
+    now = utc_now()
     activity = await _activity(tournament.id)
 
     members = {

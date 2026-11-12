@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+from app.common.datetime_utils import IST
 from app.schemas.tournament import (
     TournamentCreate,
     TournamentResponse,
     TournamentUpdate,
     validate_slug,
 )
-from app.utils.timezone import IST
 
 
 class TestValidateSlug:

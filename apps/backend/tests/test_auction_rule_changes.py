@@ -7,12 +7,12 @@ from datetime import timedelta
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.common.datetime_utils import utc_now
 from app.models.admin.audit_log import AdminActionLog
 from app.models.admin.player import Player as AdminPlayer
 from app.models.team import Team
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
-from app.utils.timezone import now_ist
 
 
 @pytest_asyncio.fixture
@@ -39,12 +39,12 @@ async def user_client(db):
 
 
 def _payload(**overrides):
-    start = now_ist() + timedelta(days=1)
+    start = utc_now() + timedelta(days=1)
     body = {
         "code": "auction-rules",
         "name": "Auction Rules",
-        "start_at": start.isoformat(),
-        "end_at": (start + timedelta(days=7)).isoformat(),
+        "start_at": start.isoformat() + "Z",
+        "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         "contest_format": "auction_purse",
         "purse": 1_000_000,
         "squad_size": 4,
@@ -266,12 +266,12 @@ async def test_an_unrelated_edit_survives_an_already_broken_squad(
 
     # A schedule move cannot affect squad validity, so it must go through even
     # though the squad now breaks the rules.
-    start = now_ist() + timedelta(days=3)
+    start = utc_now() + timedelta(days=3)
     res = await client.put(
         f"/api/admin/contests/{contest_id}",
         json={
-            "start_at": start.isoformat(),
-            "end_at": (start + timedelta(days=7)).isoformat(),
+            "start_at": start.isoformat() + "Z",
+            "end_at": (start + timedelta(days=7)).isoformat() + "Z",
         },
     )
 

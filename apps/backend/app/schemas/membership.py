@@ -1,23 +1,12 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
-from app.utils.timezone import to_ist
-
-
-class _DatesInIST(BaseModel):
-    # Mongo hands dates back without a zone, which a browser reads as local
-    # time. With the offset on, they mean one instant everywhere.
-    @field_validator("*", mode="before")
-    @classmethod
-    def ensure_ist(cls, v):
-        if isinstance(v, datetime):
-            return to_ist(v)
-        return v
+from app.schemas.dates import DatesInIST
 
 
-class PlayedTournament(_DatesInIST):
+class PlayedTournament(DatesInIST):
     """A tournament this account made a team or entered a contest in."""
 
     slug: str
@@ -37,7 +26,7 @@ class PlayedTournament(_DatesInIST):
     total_points: float
 
 
-class RegisteredTournament(_DatesInIST):
+class RegisteredTournament(DatesInIST):
     """A tournament this account joined without ever playing."""
 
     slug: str

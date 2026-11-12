@@ -130,7 +130,9 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:32]
 
 
-async def _hit(rule: str, axis: str, value: str, limit: Limit, now: float) -> Optional[int]:
+async def _hit(
+    rule: str, axis: str, value: str, limit: Limit, now: float
+) -> Optional[int]:
     """Count one request. Seconds until its window resets if that went over."""
     start = int(now // limit.seconds) * limit.seconds
     end = start + limit.seconds
@@ -235,7 +237,9 @@ async def rate_limit(
             "rate_limit would_block rule=%s axis=%s ip=%s forwarded_for=%r", *context
         )
         return
-    logger.warning("rate_limit blocked rule=%s axis=%s ip=%s forwarded_for=%r", *context)
+    logger.warning(
+        "rate_limit blocked rule=%s axis=%s ip=%s forwarded_for=%r", *context
+    )
     raise HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail={

@@ -149,7 +149,9 @@ async def process_database(db, name, apply_changes, backup):
                     {
                         "$set": {
                             "mobile": None,
-                            "updated_at": datetime.now(timezone.utc),
+                            "updated_at": datetime.now(timezone.utc).replace(
+                                tzinfo=None
+                            ),
                         }
                     },
                 )

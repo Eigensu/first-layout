@@ -5,6 +5,7 @@ from beanie import Document, PydanticObjectId
 from pydantic import Field
 from pymongo import IndexModel
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.enrollments import EnrollmentStatus
 
 
@@ -20,7 +21,7 @@ class TeamContestEnrollment(Document):
     tournament_id: Optional[PydanticObjectId] = None
 
     status: EnrollmentStatus = EnrollmentStatus.ACTIVE
-    enrolled_at: datetime = Field(default_factory=datetime.utcnow)
+    enrolled_at: datetime = Field(default_factory=utc_now)
     removed_at: Optional[datetime] = None
 
     class Settings:

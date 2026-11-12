@@ -7,7 +7,7 @@ sender itself is tested against httpx's mock transport.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -16,6 +16,7 @@ from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 from pymongo.errors import DuplicateKeyError
 
+from app.common.datetime_utils import utc_now
 from app.common.enums.tournaments import TournamentStatus
 from app.models.password_reset import (
     CHANNEL_EMAIL,
@@ -274,7 +275,7 @@ async def test_a_reset_by_email_end_to_end(anon_client, rahul, mailbox):
     await RefreshToken(
         user_id=rahul.id,
         token="old-refresh-token",
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=utc_now() + timedelta(days=7),
     ).insert()
 
     resp = await anon_client.post(
@@ -411,7 +412,7 @@ async def test_an_expired_code_is_refused(rahul, mailbox):
     await password_reset.start_email_session("rahul@example.com")
     session = await _only_session()
     await session.set(
-        {PasswordResetSession.expires_at: datetime.utcnow() - timedelta(seconds=1)}
+        {PasswordResetSession.expires_at: utc_now() - timedelta(seconds=1)}
     )
 
     with pytest.raises(ValueError):
@@ -497,7 +498,7 @@ async def _token_for(user, status, purpose=PURPOSE_PASSWORD_RESET) -> str:
         user_id=user.id,
         session_id=session.id,
         token_hash=password_reset._hash_token(raw),
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
+        expires_at=utc_now() + timedelta(minutes=10),
     ).insert()
     return raw
 
@@ -539,7 +540,7 @@ async def test_a_token_spent_by_a_racing_reset_changes_nothing(rahul, monkeypatc
         doc = await real_find_one(*args, **kwargs)
         # The other request spends the token after this one has read it.
         await PasswordResetToken.get_motor_collection().update_one(
-            {"_id": doc.id}, {"$set": {"used_at": datetime.utcnow()}}
+            {"_id": doc.id}, {"$set": {"used_at": utc_now()}}
         )
         return doc
 
