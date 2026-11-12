@@ -128,6 +128,12 @@ export default function ContestLeaderboardTabPage() {
                     }
                   : undefined;
 
+              // Whether the user's row is in the list below, which decides
+              // where the ?me=1 scroll and highlight land.
+              const meInList =
+                !!currentUserEntry &&
+                entries.some((e) => e.username === currentUserEntry.username);
+
               return (
                 <div className="space-y-4 sm:space-y-8">
                   {/* Top 3 - Compact 2x2 layout on mobile */}
@@ -212,20 +218,9 @@ export default function ContestLeaderboardTabPage() {
                       </h3>
                       {/* Only the scroll target when the list above lacks the row. */}
                       <div
-                        id={
-                          entries.some(
-                            (e) => e.username === currentUserEntry.username,
-                          )
-                            ? undefined
-                            : MY_ENTRY_ID
-                        }
+                        id={meInList ? undefined : MY_ENTRY_ID}
                         className={
-                          highlightMe &&
-                          !entries.some(
-                            (e) => e.username === currentUserEntry.username,
-                          )
-                            ? HIGHLIGHT_CLASS
-                            : undefined
+                          highlightMe && !meInList ? HIGHLIGHT_CLASS : undefined
                         }
                       >
                         <LeaderboardCard
