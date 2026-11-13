@@ -35,6 +35,9 @@ class RosterImportResponse(BaseModel):
     # teams. Read before the squads, at no cost to the API allowance.
     registered_players: int = 0
     registered_teams: int = 0
+    # CricHeroes refused this tournament's matches (170001, outside our
+    # agreement), so the players are the uploaded Teams page's alone.
+    squads_refused: bool = False
     # Upstream calls this request spent against the annual quota: none when
     # an import reuses the roster its preview read.
     cricheroes_calls: int

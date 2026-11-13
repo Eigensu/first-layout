@@ -13,6 +13,7 @@ from test_cricheroes_player_import import (  # noqa: F401  (fixtures)
     IMPORT,
     MATCHES,
     NO_MATCHES,
+    NOT_OURS,
     SQUADS,
     CricHeroes,
     _forget_previews,
@@ -271,6 +272,52 @@ async def test_a_tournament_without_fixtures_imports_its_registered_players(
     assert response.status_code == 200, response.text
     body = response.json()
     assert (body["matches_listed"], body["created"]) == (0, 3)
+
+
+async def test_a_tournament_outside_our_agreement_imports_its_registered_players(
+    client, serve
+):
+    """CricHeroes refuse the matches of a tournament outside our agreement
+    (170001), but its Teams page is public. With one uploaded, its registered
+    players are imported and the response says the squads were refused."""
+    upstream = serve(matches=NOT_OURS, squads={})
+
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(page())
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["squads_refused"] is True
+    assert (body["matches_listed"], body["matches_read"]) == (0, 0)
+    assert (body["registered_players"], body["created"]) == (3, 3)
+    assert upstream.squads_read == []
+    assert await Player.find_all().count() == 3
+    log = await AdminActionLog.find_one()
+    assert log.details["squads_refused"] is True
+
+
+async def test_a_readable_tournament_does_not_report_refused_squads(client, serve):
+    serve()
+
+    body = (await client.post(IMPORT, files=upload(page()))).json()
+
+    assert body["squads_refused"] is False
+
+
+async def test_a_squad_refused_from_a_listed_match_still_fails_with_a_teams_page(
+    client, serve
+):
+    """Only a refused match list falls back to the Teams page. A squad refused
+    from a match CricHeroes did list would leave a partial roster."""
+    serve(squads={**SQUADS, 1: NOT_OURS})
+
+    response = await client.post(
+        IMPORT, params={"dry_run": "false"}, files=upload(page())
+    )
+
+    assert response.status_code == 422
+    assert await Player.find_all().count() == 0
 
 
 async def test_without_registered_players_a_missing_match_list_is_still_a_404(
