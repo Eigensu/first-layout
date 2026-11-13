@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import pytest_asyncio
 
 import scripts.sync_cricheroes as script
 from app.models.cricheroes import CricHeroesCallCount
+from app.schemas.admin.cricheroes_ops import SyncReport
 from app.services import cricheroes_usage
 from app.services.cricheroes_client import CricHeroesClient
 from config.settings import get_settings
@@ -65,6 +67,49 @@ async def test_a_failure_exits_1(upstream, capsys):
     assert await script.run(script.parse_args([])) == 1
 
     assert "FAILED mvp: CricHeroes returned HTTP 500" in capsys.readouterr().out
+
+
+def reports(monkeypatch, **contest_points):
+    """Have the sync return one tournament's report with these §9.3 fields."""
+
+    async def sync(client, ids, force=False):
+        return [
+            SyncReport(tournament_id=2242502, unchanged=["matches"], **contest_points)
+        ]
+
+    monkeypatch.setattr(script.cricheroes_cache, "sync", sync)
+
+
+async def test_contest_points_are_reported(upstream, capsys, monkeypatch):
+    reports(monkeypatch, mvp_tables_read=[11, 12], contests_scored=1)
+
+    assert await script.run(script.parse_args([])) == 0
+
+    out = capsys.readouterr().out
+    assert "  contest points: read 2 match MVP table(s); scored 1 contest(s)" in out
+
+
+@pytest.mark.parametrize(
+    "contest_points, line",
+    [
+        (
+            {"mvp_tables_failed": {"12": "CricHeroes returned HTTP 500"}},
+            "  FAILED MVP table of match 12: CricHeroes returned HTTP 500",
+        ),
+        (
+            {"contests_scored": 1, "contests_failed": {"FULL/abc": "boom"}},
+            "  FAILED scoring contest FULL/abc: boom",
+        ),
+    ],
+)
+async def test_a_contest_points_failure_exits_1(
+    upstream, capsys, monkeypatch, contest_points, line
+):
+    reports(monkeypatch, **contest_points)
+
+    assert await script.run(script.parse_args([])) == 1
+
+    assert line in capsys.readouterr().out
 
 
 async def test_missing_credentials_exit_1_without_a_call(upstream, capsys):

@@ -960,7 +960,10 @@ the last good table and is retried after 3 hours, not every run.
 A run reads at most 10 tables, oldest match first. That keeps a run inside the
 10-minute claim (§6.7), and spreads the catch-up when a contest is switched on
 partway through a tournament. Every opted-in contest is then rescored from
-what is stored.
+what is stored. Each contest is read again just before it is scored, so one
+that an admin switched off, unlinked or moved while the tables were being
+read is scored as it now stands, or not at all if the switch is off, rather
+than from the copy the run started with.
 
 Turning the switch on, or changing a scored contest's window, type or allowed
 teams, rescores it at once from what is stored, with no CricHeroes call.
@@ -972,7 +975,8 @@ said whether the MVP table fills in while a match is live.
 **Cost.** About two calls per completed match: roughly 60 for a 30-match
 tournament, well under 0.1% of the annual quota. The sync report counts them
 (`mvp_tables_read`, `mvp_tables_failed`, both included in `calls`), along with
-`contests_scored` and `contests_failed`.
+`contests_scored` and `contests_failed`. The scheduled job prints them and
+exits 1 when a table or a contest failed, as it does for a cached resource.
 
 **Seeing it.** `GET /api/admin/contests/{id}/cricheroes-points` is for
 tournament admins, like the rest of the contest routes. It returns the matches

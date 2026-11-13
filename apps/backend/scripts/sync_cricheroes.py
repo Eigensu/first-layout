@@ -12,11 +12,15 @@ CRICHEROES_SNAPSHOT_MAX_AGE_HOURS. --force reads them all. Every call is
 counted (§6.6), and the run ends by logging a warning if this quota term's
 calls are past CRICHEROES_USAGE_WARN_PERCENT.
 
+For a tournament some contest takes its points from (§9.3), the run also
+reads the due match MVP tables and rescores those contests, and prints how
+many of each.
+
 Needs MONGODB_URL and the three CRICHEROES_* credentials. Exits 0 when every
-tournament refreshed or was current, 1 when anything failed or the
-credentials are missing, and 0 with a message when no tournament is
-configured, so a scheduled service set up ahead of the configuration does not
-report failures.
+tournament refreshed or was current, 1 when anything failed (a resource, a
+match's MVP table or a contest's scoring) or the credentials are missing, and
+0 with a message when no tournament is configured, so a scheduled service set
+up ahead of the configuration does not report failures.
 """
 
 import argparse
@@ -81,6 +85,23 @@ async def run(args: argparse.Namespace) -> int:
         for resource, error in sorted(report.failed.items()):
             failed = True
             print(f"  FAILED {resource}: {error}")
+        # Contest points (spec §9.3); silent for a tournament no contest uses.
+        if (
+            report.mvp_tables_read
+            or report.mvp_tables_failed
+            or report.contests_scored
+            or report.contests_failed
+        ):
+            print(
+                f"  contest points: read {len(report.mvp_tables_read)} match MVP "
+                f"table(s); scored {report.contests_scored} contest(s)"
+            )
+        for match_id, error in sorted(report.mvp_tables_failed.items()):
+            failed = True
+            print(f"  FAILED MVP table of match {match_id}: {error}")
+        for contest, error in sorted(report.contests_failed.items()):
+            failed = True
+            print(f"  FAILED scoring contest {contest}: {error}")
 
     usage = await cricheroes_usage.usage(days=1)
     print(

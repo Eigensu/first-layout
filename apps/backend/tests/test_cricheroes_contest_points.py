@@ -368,6 +368,83 @@ async def test_another_tournament_linked_elsewhere_is_not_scored(upstream, alpha
     assert await points(theirs) == {}
 
 
+def while_reading(monkeypatch, edit):
+    """Run `edit` -- what an admin does -- while the sync reads MVP tables,
+    after it has listed the contests and before it scores them."""
+    read = cricheroes_points.read_mvp_tables
+
+    async def read_then_edit(*args, **kwargs):
+        reads = await read(*args, **kwargs)
+        await edit()
+        return reads
+
+    monkeypatch.setattr(cricheroes_points, "read_mvp_tables", read_then_edit)
+
+
+async def test_a_switch_turned_off_during_the_reads_keeps_the_hand_points(
+    upstream, alpha, monkeypatch
+):
+    full = await contest(alpha)
+    upstream.match_list = [match(1, 10)]
+    upstream.tables[1] = [mvp(ASH, "8.719")]
+    ash = await player("Ash")
+
+    async def switch_off_and_enter_points():
+        doc = await Contest.get(full.id)
+        doc.points_from_cricheroes = False
+        await doc.save()
+        await PlayerContestPoints(
+            tournament_id=alpha.id, contest_id=full.id, player_id=ash.id, points=50.0
+        ).insert()
+
+    while_reading(monkeypatch, switch_off_and_enter_points)
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert await points(full) == {"Ash": 50.0}
+    assert (await player("Ash")).points == 0.0
+    # Passed over, not failed: the switch being off is not an error.
+    assert (report.contests_scored, report.contests_failed) == (0, {})
+
+
+async def test_a_window_moved_during_the_reads_is_scored_as_moved(
+    upstream, alpha, monkeypatch
+):
+    full = await contest(alpha)
+    upstream.match_list = [match(1, 10), match(2, 11)]
+    upstream.tables[1] = [mvp(ASH, "8.000")]
+    upstream.tables[2] = [mvp(BEN, "3.000")]
+
+    async def move_start_past_match_1():
+        doc = await Contest.get(full.id)
+        doc.start_at = datetime(2026, 11, 11)
+        await doc.save()
+
+    while_reading(monkeypatch, move_start_past_match_1)
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert report.contests_scored == 1
+    assert await points(full) == {"Ben": 3.0}
+
+
+async def test_a_tournament_unlinked_during_the_reads_is_not_scored(
+    upstream, alpha, monkeypatch
+):
+    full = await contest(alpha)
+    upstream.match_list = [match(1, 10)]
+    upstream.tables[1] = [mvp(ASH, "8.000")]
+
+    async def unlink():
+        doc = await Tournament.get(alpha.id)
+        doc.cricheroes_tournament_id = None
+        await doc.save()
+
+    while_reading(monkeypatch, unlink)
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert await points(full) == {}
+    assert (report.contests_scored, report.contests_failed) == (0, {})
+
+
 # -- the admin routes ------------------------------------------------------------
 
 

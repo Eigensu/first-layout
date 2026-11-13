@@ -50,7 +50,7 @@ from app.schemas.admin.cricheroes_points import ContestPointsSummary, CountedMat
 from app.schemas.cricheroes import PlayerMvp, TournamentMatch
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import CricHeroesConfigError, CricHeroesError
-from app.utils.tenant import scoped
+from app.utils.tenant import get_scoped, scoped
 
 logger = logging.getLogger("app.cricheroes")
 
@@ -412,13 +412,29 @@ async def score_contests(
     matches: List[TournamentMatch],
 ) -> Dict[str, Optional[str]]:
     """Score each contest; "<code>/<id>" -> None when scored, else why not.
-    One contest failing does not stop the others."""
+    One contest failing does not stop the others.
+
+    Each contest is read again just before it is scored. The sync lists them
+    before its MVP reads, which can take minutes, and in that time an admin may
+    turn the switch off and enter points by hand, move the window, or unlink
+    the tournament. Scoring the listed copy would overwrite those points, and
+    with the switch off no later sync would put them right. A contest that has
+    since been switched off, deleted or moved to another CricHeroes tournament
+    is left out of the outcome: it is neither scored nor failed."""
     outcome: Dict[str, Optional[str]] = {}
-    for contest in contests:
+    for listed in contests:
+        label = _label(listed)
         try:
+            contest = await get_scoped(Contest, listed.tournament_id, listed.id)
+            if (
+                contest is None
+                or not contest.points_from_cricheroes
+                or await linked_tournament_id(contest) != cricheroes_tournament_id
+            ):
+                continue
             await score_contest(contest, cricheroes_tournament_id, matches)
-            outcome[_label(contest)] = None
+            outcome[label] = None
         except Exception as exc:  # noqa: BLE001 -- reported, never fatal
-            logger.exception("Scoring contest %s from CricHeroes failed", contest.id)
-            outcome[_label(contest)] = str(exc)[:500]
+            logger.exception("Scoring contest %s from CricHeroes failed", listed.id)
+            outcome[label] = str(exc)[:500]
     return outcome
