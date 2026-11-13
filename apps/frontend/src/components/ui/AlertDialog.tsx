@@ -23,7 +23,9 @@ export function AlertDialog({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      // Above the z-50 sheets and modals: an alert raised from inside one
+      // (a refused save in Edit Squad) was rendered underneath it, unseen.
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
     >
       <div
         className="absolute inset-0 bg-black/50"
