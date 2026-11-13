@@ -1,9 +1,10 @@
+import os
 import pymongo
 import json
 from bson import ObjectId
 
-# Using the URL from .env
-MONGODB_URL = "mongodb+srv://walleeigensu_db_user:fNJrnkHMUrQNglWx@walle-fantasy.3rv66oh.mongodb.net/?retryWrites=true&w=majority&appName=Walle-Fantasy"
+# The connection string comes from the environment, never from this file.
+MONGODB_URL = os.environ["MONGODB_URL"]
 DB_NAME = "tyrant"
 
 from datetime import datetime
