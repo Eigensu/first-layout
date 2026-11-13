@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PillNavbar, Card, Button, Footer } from "@/components";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AlertDialog } from "@/components/ui/AlertDialog";
+import { showToast } from "@/components/ui/Toast";
 import { MobileUserMenu } from "@/components/navigation/MobileUserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -319,30 +320,35 @@ export default function TeamsPage() {
 
   // Fetch public contests (open ones). Re-polled while the page stays open so
   // a contest going live doesn't leave the pre-match note stuck until reload.
-  useEffect(() => {
-    let mounted = true;
-    const loadContests = async () => {
-      try {
-        setLoadingContests(true);
-        const res = await publicContestsApi.list({ page_size: 100 });
-        if (!mounted) return;
-        const open = res.contests.filter(
+  // Also re-run after a refused edit: the usual cause is a contest that
+  // started since the last poll, and the Edit button should then show the lock.
+  const mountedRef = useRef(true);
+  const refreshContests = useCallback(async () => {
+    try {
+      setLoadingContests(true);
+      const res = await publicContestsApi.list({ page_size: 100 });
+      if (!mountedRef.current) return;
+      setContests(
+        res.contests.filter(
           (c) => c.status !== "completed" && c.status !== "archived",
-        );
-        setContests(open);
-      } catch (e) {
-        // ignore silently
-      } finally {
-        if (mounted) setLoadingContests(false);
-      }
-    };
-    loadContests();
-    const intervalId = setInterval(loadContests, 60_000);
+        ),
+      );
+    } catch (e) {
+      // ignore silently
+    } finally {
+      if (mountedRef.current) setLoadingContests(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    refreshContests();
+    const intervalId = setInterval(refreshContests, 60_000);
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       clearInterval(intervalId);
     };
-  }, []);
+  }, [refreshContests]);
 
   // Detect a joined contest for the current user
   useEffect(() => {
@@ -486,6 +492,7 @@ export default function TeamsPage() {
       setTeams((prev) => prev.map((t) => (t.id === teamId ? updatedTeam : t)));
       setEditingTeamId(null);
       setEditingTeamName("");
+      showToast({ message: "Team renamed", variant: "success" });
     } catch (err: any) {
       showAlert(
         `Error: ${err.message || "Failed to rename team"}`,
@@ -525,8 +532,10 @@ export default function TeamsPage() {
         token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      showToast({ message: "Captain updated", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to set captain", "Update failed");
+      refreshContests();
     } finally {
       setUpdatingTeamId(null);
       setShowActionModal(false);
@@ -544,8 +553,10 @@ export default function TeamsPage() {
         token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      showToast({ message: "Vice-captain updated", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to set vice-captain", "Update failed");
+      refreshContests();
     } finally {
       setUpdatingTeamId(null);
       setShowActionModal(false);
@@ -577,8 +588,10 @@ export default function TeamsPage() {
       const updated = await updateTeam(editPlayersTeamId, payload, token);
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setEditPlayersTeamId(null);
+      showToast({ message: "Squad changes saved", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to save squad changes", "Save failed");
+      refreshContests();
     } finally {
       setSavingPlayers(false);
     }
@@ -609,8 +622,10 @@ export default function TeamsPage() {
       setShowReplaceModal(false);
       setActionPlayerId(null);
       setActionTeamId(null);
+      showToast({ message: "Player replaced", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to replace player", "Update failed");
+      refreshContests();
     } finally {
       setUpdatingTeamId(null);
     }

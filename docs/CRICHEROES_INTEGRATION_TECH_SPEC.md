@@ -1,11 +1,14 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
-**Status:** Phases 1–3 and 5–7 implemented (§12), all 19 endpoints fully
-modelled from the API doc (§8), including the two MVP endpoints CricHeroes
-added. Our tournaments link to theirs (§13.1), each tournament's site shows
-its cached points table, MVP and leaderboards (§9.2), and a contest can take
-its fantasy points from CricHeroes' match MVP tables (§9.3). Not yet run
-against real credentials. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
+**Status:** Phases 1–3, 5, 5b, 6 and 7 implemented (§12), all 19 endpoints
+fully modelled from the API doc (§8), including the two MVP endpoints
+CricHeroes added. Our tournaments link to theirs (§13.1), each tournament's
+site shows its cached points table, MVP and leaderboards (§9.2), and a contest
+can take its fantasy points from CricHeroes' match MVP tables (§9.3). One
+request with our real credentials got `status: true` on 6 Nov 2026 (§5.1); the
+check script against the deployed keys (Phase 4) and the cron service
+(Phase 5b) are still open, and the public pages and contest points work only
+once both are. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
 which changed every path, the `device-type` header and every error code, and
 serves us two tournaments only. CricHeroes have closed the scope beyond that
 (§13.11).
@@ -743,8 +746,10 @@ admin page the button is pressed on. Platform admins only, like the rest of the
 router. The admin panel shows it as **Import from CricHeroes** in the Import
 Players dialog, to platform admins only; it takes the id or a CricHeroes
 tournament link (`/tournament/<id>/...`), previews, then imports. Only the two
-tournaments CricHeroes serve us can be imported from (§13.12); any other id is
-refused with a 422 that says so, before anything is written.
+tournaments CricHeroes serve us have their matches read (§13.12). Any other id
+is refused with a 422 that says so, before anything is written, unless an
+uploaded Teams page lists registered players: those are then imported alone
+(below).
 
 **Where the players come from.** There is no roster endpoint and there will not
 be one (§13.11), so the import reads two sources and merges them by player id.
@@ -805,6 +810,16 @@ answers the match list with 170011 ("Tournament match list is not found!");
 when the uploaded Teams page has registered players that counts as no matches, and
 the import goes ahead with them. Without registered players it is still the
 404 it was.
+
+**A tournament outside our agreement can still import its registered teams.**
+CricHeroes answer the match list of any tournament but the two we are served
+(§13.12) with 170001. The Teams page is public whatever our agreement says, so
+when an uploaded one has registered players the import goes ahead with them
+alone, and the response's `squads_refused` is true (recorded in the audit log
+too). The panel then says the matches were refused and that anyone who played
+without registering is missing. Without registered players it is still the
+422 of §7. Only the match list falls back: a squad refused with 170001 from a
+match CricHeroes did list still fails the request, as below.
 
 **What it decides, per CricHeroes player** (`plan_import`, which writes
 nothing):
