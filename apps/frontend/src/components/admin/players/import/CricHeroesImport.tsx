@@ -235,12 +235,20 @@ function RosterResult({
       <p className="text-sm text-text-main">
         {result.registered_players > 0 &&
           `${result.registered_players} players registered in ${result.registered_teams} teams. `}
-        Read the squads of {result.matches_read} of {result.matches_listed}{" "}
-        matches
-        {result.upcoming_matches > 0 &&
-          `, ${result.upcoming_matches} not played yet`}
-        {result.matches_without_squad > 0 &&
-          `, ${result.matches_without_squad} with no squad on CricHeroes`}
+        {result.squads_refused ? (
+          "CricHeroes do not give us access to this tournament's matches, " +
+          "so only the registered players from the saved Teams page are " +
+          "here: anyone who played without registering is missing"
+        ) : (
+          <>
+            Read the squads of {result.matches_read} of {result.matches_listed}{" "}
+            matches
+            {result.upcoming_matches > 0 &&
+              `, ${result.upcoming_matches} not played yet`}
+            {result.matches_without_squad > 0 &&
+              `, ${result.matches_without_squad} with no squad on CricHeroes`}
+          </>
+        )}
         . Found {result.players.length} players in {result.teams.length} teams
         {result.reused_preview
           ? ", from the preview: no new CricHeroes calls."
@@ -311,6 +319,12 @@ function noPlayersReason(
   result: RosterImportResponse,
   usedTeamsPage: boolean,
 ): string {
+  if (result.squads_refused) {
+    return (
+      "No players found: the saved Teams page lists nobody yet, and " +
+      "CricHeroes do not give us access to this tournament's matches."
+    );
+  }
   const missing = result.matches_without_squad;
   if (missing > 0) {
     const which =
