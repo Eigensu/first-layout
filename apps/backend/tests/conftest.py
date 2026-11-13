@@ -36,7 +36,11 @@ from app.models.admin.player import Player as AdminPlayer
 from app.models.admin.slot import Slot
 from app.models.carousel import CarouselImage
 from app.models.contest import Contest
-from app.models.cricheroes import CricHeroesCallCount, CricHeroesSnapshot
+from app.models.cricheroes import (
+    CricHeroesCallCount,
+    CricHeroesMatchMvp,
+    CricHeroesSnapshot,
+)
 from app.models.password_reset import PasswordResetSession, PasswordResetToken
 from app.models.player import Player as PublicPlayer
 from app.models.player_contest_points import PlayerContestPoints
@@ -73,6 +77,7 @@ DOCUMENT_MODELS = [
     RateLimitCounter,
     CricHeroesCallCount,
     CricHeroesSnapshot,
+    CricHeroesMatchMvp,
 ]
 
 

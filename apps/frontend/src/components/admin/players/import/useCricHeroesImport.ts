@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { API_BASE_URL, AUTH, LS_KEYS, tenantHeaders } from "@/common/consts";
+import { parseCricHeroesTournamentId } from "@/utils/cricheroes";
 
 // The backend's RosterImportResponse (app/schemas/admin/cricheroes_import.py).
 export interface RosterImportPlayer {
@@ -38,19 +39,8 @@ export interface RosterImportResponse {
   players: RosterImportPlayer[];
 }
 
-/**
- * The tournament id from what the admin typed: the id itself, or a CricHeroes
- * tournament link, which carries it as `/tournament/<id>/...`.
- */
-export function parseCricHeroesTournamentId(input: string): number | null {
-  const text = input.trim();
-  const match = /^\d+$/.test(text)
-    ? [text, text]
-    : text.match(/\/tournament\/(\d+)/i);
-  if (!match) return null;
-  const id = Number(match[1]);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
+// Shared with the tournament form, which links a tournament to CricHeroes.
+export { parseCricHeroesTournamentId };
 
 /** Where the admin saves the registered teams from (the slug is ignored). */
 export function cricHeroesTeamsPageUrl(tournamentId: number): string {

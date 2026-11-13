@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 from io import BytesIO
@@ -22,8 +23,10 @@ from app.models.player_contest_points import PlayerContestPoints
 from app.models.settings import GlobalSettings, default_logo_path
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
+from app.models.tournament import Tournament
 from app.models.user import User
 from app.routes.teams import find_teams_breaking_slot_rules
+from app.schemas.admin.cricheroes_points import ContestPointsSummary
 from app.schemas.contest import (
     ContestCreate,
     ContestListResponse,
@@ -35,6 +38,7 @@ from app.schemas.enrollment import (
     EnrollmentResponse,
     UnenrollBulkRequest,
 )
+from app.services import cricheroes_cache, cricheroes_points
 from app.services.auction import (
     assert_auction_config_feasible,
     find_teams_breaking_auction_rules,
@@ -50,8 +54,70 @@ from app.utils.gridfs import (
     upload_contest_logo_to_gridfs,
 )
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_one
+from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/contests", tags=["Admin - Contests"])
+
+# What a contest scored from CricHeroes covers: changing any of these while it
+# is on rescores it straight away (spec §9.3).
+_CRICHEROES_SCOPE_FIELDS = ("start_at", "end_at", "contest_type", "allowed_teams")
+
+
+async def _cricheroes_tournament_for_scoring(tournament_id: TenantId) -> int:
+    """The CricHeroes tournament this tournament's contests can be scored
+    from, or a 422 saying why there is none."""
+    tournament = await Tournament.get(tournament_id) if tournament_id else None
+    linked = tournament.cricheroes_tournament_id if tournament else None
+    if linked is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This tournament is not linked to a CricHeroes tournament, so "
+                "there are no points to take. A platform admin links it in "
+                "Admin > Tournaments."
+            ),
+        )
+    if linked not in get_settings().cricheroes_sync_tournaments:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"CricHeroes tournament {linked} is not among the tournaments "
+                "the scheduled sync reads (CRICHEROES_SYNC_TOURNAMENT_IDS), so "
+                "no MVP table of it would ever be read."
+            ),
+        )
+    return linked
+
+
+def _changed(new, old) -> bool:
+    # The schema hands back aware IST datetimes and the stored ones are naive
+    # UTC: the same moment must not read as a change.
+    if isinstance(new, datetime) and isinstance(old, datetime):
+        return to_utc_naive(new) != to_utc_naive(old)
+    return new != old
+
+
+async def _cached_matches(cricheroes_tournament_id: Optional[int]) -> list:
+    if cricheroes_tournament_id is None:
+        return []
+    cached = await cricheroes_cache.read("matches", cricheroes_tournament_id)
+    return cached.data if cached else []
+
+
+async def _score_from_cricheroes(contest: Contest, cricheroes_tournament_id: int):
+    """Score a contest from the MVP tables already stored: no request to
+    CricHeroes. A failure is logged, not raised -- the contest is saved, and
+    the next scheduled sync scores it."""
+    try:
+        await cricheroes_points.score_contest(
+            contest,
+            cricheroes_tournament_id,
+            await _cached_matches(cricheroes_tournament_id),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Scoring contest %s from CricHeroes failed", contest.id)
 
 
 async def to_response(contest: Contest) -> ContestResponse:
@@ -82,6 +148,7 @@ async def to_response(contest: Contest) -> ContestResponse:
         squad_size=contest.squad_size,
         max_players_per_team=contest.max_players_per_team,
         effective_max_players_per_team=resolve_max_players_per_team(contest, settings),
+        points_from_cricheroes=contest.points_from_cricheroes,
         created_at=to_ist(contest.created_at),
         updated_at=to_ist(contest.updated_at),
     )
@@ -99,6 +166,12 @@ async def create_contest(
     existing = await scoped_one(Contest, tournament_id, Contest.code == data.code)
     if existing:
         raise HTTPException(status_code=400, detail="Contest code already exists")
+
+    cricheroes_tournament_id = (
+        await _cricheroes_tournament_for_scoring(tournament_id)
+        if data.points_from_cricheroes
+        else None
+    )
 
     # Reject an auction setup no participant could satisfy, before it is saved.
     if data.contest_format == ContestFormat.AUCTION_PURSE:
@@ -132,10 +205,13 @@ async def create_contest(
         purse=data.purse,
         squad_size=data.squad_size,
         max_players_per_team=data.max_players_per_team,
+        points_from_cricheroes=data.points_from_cricheroes,
         created_at=now,
         updated_at=now,
     )
     await contest.insert()
+    if cricheroes_tournament_id is not None:
+        await _score_from_cricheroes(contest, cricheroes_tournament_id)
     return await to_response(contest)
 
 
@@ -318,10 +394,36 @@ async def update_contest(
                 },
             )
 
+    if update_fields.get("points_from_cricheroes") is None:
+        # An explicit null leaves the switch as it is.
+        update_fields.pop("points_from_cricheroes", None)
+    turning_on = (
+        update_fields.get("points_from_cricheroes") is True
+        and not contest.points_from_cricheroes
+    )
+    scope_moved = update_fields.get(
+        "points_from_cricheroes", contest.points_from_cricheroes
+    ) and any(
+        f in update_fields and _changed(update_fields[f], getattr(contest, f))
+        for f in _CRICHEROES_SCOPE_FIELDS
+    )
+    if turning_on:
+        cricheroes_tournament_id = await _cricheroes_tournament_for_scoring(
+            tournament_id
+        )
+    elif scope_moved:
+        # Already on: rescore if it still can be, but never refuse a date edit
+        # over the link -- the contest's summary shows what is missing.
+        cricheroes_tournament_id = await cricheroes_points.linked_tournament_id(contest)
+    else:
+        cricheroes_tournament_id = None
+
     for k, v in update_fields.items():
         setattr(contest, k, v)
     contest.updated_at = utc_now()
     await contest.save()
+    if cricheroes_tournament_id is not None:
+        await _score_from_cricheroes(contest, cricheroes_tournament_id)
     return await to_response(contest)
 
 
@@ -613,6 +715,16 @@ async def upsert_player_points(
     contest = await get_scoped(Contest, tournament_id, contest_id)
     if not contest:
         raise HTTPException(status_code=404, detail="Contest not found")
+    if contest.points_from_cricheroes:
+        # The next sync would overwrite them without a word (spec §9.3).
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This contest takes its points from CricHeroes, and the next "
+                'sync would overwrite any entered here. Turn off "Points from '
+                'CricHeroes" on the contest to enter them by hand.'
+            ),
+        )
 
     if not body.updates:
         return []
@@ -698,6 +810,25 @@ async def upsert_player_points(
         pass
 
     return resp
+
+
+@router.get("/{contest_id}/cricheroes-points", response_model=ContestPointsSummary)
+async def get_cricheroes_points(
+    contest_id: str,
+    current_user: User = Depends(get_tournament_admin),
+    tournament_id: TenantId = Depends(get_tenant),
+):
+    """Which CricHeroes matches count towards the contest, how many players
+    score, and who is not linked -- from what is stored, with no request to
+    CricHeroes (spec §9.3)."""
+    contest = await get_scoped(Contest, tournament_id, contest_id)
+    if not contest:
+        raise HTTPException(status_code=404, detail="Contest not found")
+    linked = await cricheroes_points.linked_tournament_id(contest)
+    plan = await cricheroes_points.plan_contest(
+        contest, linked, await _cached_matches(linked)
+    )
+    return plan.summary
 
 
 # -------- Per-Contest Logo Management --------

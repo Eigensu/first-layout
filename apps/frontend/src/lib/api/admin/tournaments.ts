@@ -15,6 +15,9 @@ export interface Tournament {
   primary_color?: string | null;
   secondary_color?: string | null;
   api_base_url?: string | null;
+  /** The same tournament on CricHeroes, whose cached stats its /stats page
+   *  shows. Null: not linked. */
+  cricheroes_tournament_id?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +40,8 @@ export interface TournamentCreate {
   primary_color?: string;
   secondary_color?: string;
   api_base_url?: string;
+  /** A positive whole number; the backend refuses anything else. */
+  cricheroes_tournament_id?: number;
 }
 
 // Optional fields may be null to explicitly clear a previously set value.

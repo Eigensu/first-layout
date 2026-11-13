@@ -1,11 +1,14 @@
 # CricHeroes Tournament API (v1) — Integration Plan & Tech Spec
 
-**Status:** Phases 1–3, 5 and 5b implemented (§12), all 19 endpoints fully
-modelled from the API doc (§8), including the two MVP endpoints CricHeroes
-added. One request with our real credentials got `status: true` on 6 Nov 2026
-(§5.1); the check script against the deployed keys (Phase 4), the cron service
-(Phase 5b) and the public pages (Phase 6) are still open. Moved to the
-MediaHubble doc of 4 Nov 2026 (§13.12),
+**Status:** Phases 1–3, 5, 5b, 6 and 7 implemented (§12), all 19 endpoints
+fully modelled from the API doc (§8), including the two MVP endpoints
+CricHeroes added. Our tournaments link to theirs (§13.1), each tournament's
+site shows its cached points table, MVP and leaderboards (§9.2), and a contest
+can take its fantasy points from CricHeroes' match MVP tables (§9.3). One
+request with our real credentials got `status: true` on 6 Nov 2026 (§5.1); the
+check script against the deployed keys (Phase 4) and the cron service
+(Phase 5b) are still open, and the public pages and contest points work only
+once both are. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
 which changed every path, the `device-type` header and every error code, and
 serves us two tournaments only. CricHeroes have closed the scope beyond that
 (§13.11).
@@ -67,11 +70,14 @@ it out.
 - No webhook ingestion, and no live polling during play. The cache (§6.7) is
   refreshed on a schedule and driven by completed results, so standings,
   MVP and leaderboards are a match behind while one is in play.
-- No fantasy points computation. CricHeroes' MVP points are served as they are
-  (§13.5); whether they can stand in for our fantasy points is a product
-  decision, and `Player.points` has no per-tournament dimension today.
-- No frontend work beyond the import button (§9.1).
-- No public (unauthenticated) exposure of any CricHeroes data.
+- No fantasy points formula of our own. A contest can opt in to CricHeroes'
+  MVP points as its fantasy points (§9.3); any other contest is scored by hand,
+  as before.
+- No frontend work beyond the import button (§9.1), the CricHeroes link on a
+  tournament (§13.1), the public stats page (§9.2), and a contest's "Points
+  from CricHeroes" switch and summary (§9.3).
+- No public (unauthenticated) route that can reach CricHeroes. The public stats
+  routes (§9.2) read the cache (§6.7) and nothing else.
 
 ---
 
@@ -85,8 +91,11 @@ apps/backend/
 │   ├── services/
 │   │   ├── cricheroes_client.py              (new)  CricHeroesClient, 19 methods
 │   │   ├── cricheroes_errors.py              (new)  exception taxonomy
-│   │   └── cricheroes_roster.py              (new)  player import (§9.1)
-│   └── routes/admin/cricheroes.py            (new)  9 read routes + player import
+│   │   ├── cricheroes_roster.py              (new)  player import (§9.1)
+│   │   └── cricheroes_points.py              (new)  contest points from MVP tables (§9.3)
+│   ├── routes/admin/cricheroes.py            (new)  9 read routes + player import
+│   ├── routes/cricheroes.py                  (new)  public, cache-only stats (§9.2)
+│   └── schemas/cricheroes_public.py          (new)  their response envelope
 ├── scripts/check_cricheroes_credentials.py   (new)  live smoke check
 └── tests/
     ├── test_cricheroes_client.py             (new)
@@ -374,7 +383,8 @@ one document per resource and CricHeroes tournament, holding the last good
 answer (stored under CricHeroes' field names, so it reads back through the
 same models as a live call), when it was fetched, and the last refresh error
 if there was one. `cricheroes_cache.read(resource, tournament_id)` is the read
-side; nothing a visitor triggers calls CricHeroes.
+side; nothing a visitor triggers calls CricHeroes. The public stats routes
+(§9.2) are its first visitor-facing reader.
 
 **Cached, per tournament in `CRICHEROES_SYNC_TOURNAMENT_IDS`:** the match list,
 the points table (exact duplicate rows dropped, §8.2), the MVP table, and the
@@ -412,7 +422,9 @@ retries once if it loses the race to insert the document.
 completed match per tournament, plus at most 8 a day for the age check — about
 60 a day, a fifth of the ~274 the quota allows (§6.2). During play the
 standings, MVP and leaderboards are a match behind; reading them every hour
-during matches would cost four times as much.
+during matches would cost four times as much. Contest points add about two
+calls per completed match, and only for a tournament that an opted-in contest
+uses (§9.3).
 
 **Running it.** `scripts/sync_cricheroes.py` is the scheduled job, meant for
 its own Railway cron service (start command
@@ -706,7 +718,8 @@ which is also the seam tests override.
 **Why admin-only.** Every call spends upstream quota against credentials we do
 not control the rate limits of, and this data feeds tournament setup and imports
 rather than public browsing. Public exposure would put our quota on the open
-internet with no caching in front of it.
+internet with no caching in front of it. What visitors see comes from the cache
+instead, through separate routes that hold no client (§9.2).
 
 **Why platform admins, not tournament admins.** Since this spec was first
 written, `main` split admin into platform admins (who run the registry) and
@@ -720,9 +733,9 @@ guarded by `get_tournament_admin`. These routes are deliberately the exception:
 
 `tests/test_tournament_admin.py` asserts every admin route has exactly one,
 correct guard; `/api/admin/cricheroes` is listed there alongside the registry
-as platform-admin territory. Once §13.1 links CricHeroes ids to our
-`Tournament` documents, a tournament-scoped variant keyed on our own slug can be
-opened to tournament admins.
+as platform-admin territory. Now that §13.1 links CricHeroes ids to our
+`Tournament` documents, a tournament-scoped variant keyed on our own slug could
+be opened to tournament admins; nothing needs one yet.
 
 ### 9.1 Importing a tournament's players
 
@@ -843,17 +856,165 @@ hotlinking their images is a question for CricHeroes first.
 Running it again is safe: everyone it added or linked is `linked` the second
 time. It is not a sync — players dropped from CricHeroes stay here.
 
-**Not surfaced:** the 6 match-detail endpoints (match MVP included) and the 4
-player-stats endpoints. Available on the client for server-side use; they get
-routes when a screen needs them.
+**Not surfaced:** the 6 match-detail endpoints and the 4 player-stats
+endpoints. Available on the client for server-side use; they get routes when a
+screen needs them. The match MVP table is read server-side for contest points
+(§9.3), and has no route of its own.
+
+### 9.2 Public stats routes (Phase 6)
+
+`/api/cricheroes`, tagged `CricHeroes`, in `app/routes/cricheroes.py`.
+**Unauthenticated, and unable to reach CricHeroes.** Each route reads one
+cached table with `cricheroes_cache.read` (§6.7) and nothing else; no route
+takes or builds a `CricHeroesClient`, so no number of visitors spends a single
+call of the quota (§6.2, §6.3). Fresh data comes from the scheduled sync, never
+from a visitor.
+
+| Route | Cached resource | Rows |
+|---|---|---|
+| `GET /point-table` | `point-table` | `PointTableRow` |
+| `GET /mvp` | `mvp` | `PlayerMvp` (CricHeroes' points, not ours, §13.5) |
+| `GET /batting-leaderboard` | `batting-leaderboard` | `BattingLeaderboardEntry`, default order |
+| `GET /bowling-leaderboard` | `bowling-leaderboard` | `BowlingLeaderboardEntry`, default order |
+
+**Scoped to the requesting tournament.** The tournament comes from
+`X-Tournament-Slug` (`get_tenant`); the CricHeroes id is the one a platform
+admin linked to it (§13.1). No route takes an id from the caller, so a visitor
+reads only their own tournament's tables. A missing header, or an unknown or
+archived slug, is the usual 400 from `get_tenant`.
+
+**What they expose.** Every route answers the same envelope:
+
+```json
+{ "linked": true, "fetched_at": "2026-11-05T15:30:00+05:30", "rows": [ ... ] }
+```
+
+- `linked` — whether the tournament has a CricHeroes link. `false` means
+  nothing to show and nothing coming; so does a legacy single-tournament
+  service (`TENANCY=single`), which has no registry row to link.
+- `fetched_at` — when the sync last read this table, in IST. `null` with
+  `linked: true` means linked but not fetched yet: the id is not in
+  `CRICHEROES_SYNC_TOURNAMENT_IDS`, the sync has not run, or every read of it
+  has failed. A later failed refresh keeps the last good rows (§6.7), so this
+  is how a page says how old they are.
+- `rows` — the cached rows in CricHeroes' order, under our attribute names
+  (`response_model_by_alias=False`, §8.3); unmodelled extras still come
+  through under their upstream names.
+
+Never exposed: the snapshot's `last_error` (admins read it at
+`GET /api/admin/cricheroes/cache`), the CricHeroes tournament id, the cached
+match list, and anything uncached. No link, or nothing cached, is that empty
+envelope with a 200, never an error.
+
+**The page.** `/stats` on a tournament's site (the Stats item in the top
+navigation, shown signed in or not) loads all four tables at once and shows
+them as tabs — Points Table (split by round and group when there is more than
+one), MVP, Batting, Bowling — each with a "Last updated … IST · N hours ago"
+note. It shows initials instead of `profile_photo` and `team_logo`: hotlinking
+CricHeroes' images is still their call (§9.1). The frontend calls are
+`publicCricHeroesApi` in `apps/frontend/src/lib/api/public/cricheroes.ts`.
+
+**Tests.** `tests/test_cricheroes_public_routes.py` proves the routes cannot
+spend quota three ways: each route's only dependency, at any depth, is
+`get_tenant`; the module imports and names nothing that reaches CricHeroes and
+uses only `read` from the cache; and with `CricHeroesClient` and
+`counted_client` made to fail, every table is served with no call counted and
+the snapshots untouched. It also proves two tournaments linked to the two
+served CricHeroes ids each see only their own rows, whatever query parameters
+are sent, and covers every empty state.
+
+### 9.3 Contest points from CricHeroes (Phase 7)
+
+A contest can take its players' points from CricHeroes' match MVP tables
+instead of the admin points form: `app/services/cricheroes_points.py`.
+Decided 13 Nov 2026 (§13.5): for a contest that opts in, CricHeroes' MVP points
+are its fantasy points.
+
+**Opt in, per contest.** `Contest.points_from_cricheroes` is off by default,
+and for every existing contest. Tournament admins turn it on on the contest's
+page. It can only be turned on when the contest's tournament is linked to a
+CricHeroes tournament (§13.1) that `CRICHEROES_SYNC_TOURNAMENT_IDS` lists.
+Otherwise the answer is a 422 saying which is missing, since no MVP table
+would ever be read. While it is on, the admin points form is refused with a
+409, because the next sync would overwrite whatever was entered, and the team
+points editor shows the points read-only. Turning it off leaves the points as
+they are, editable again. Moving a contest's dates never fails over the link:
+only turning the switch on checks it.
+
+**What counts.** Every completed match (as §6.7 defines it) of the linked
+CricHeroes tournament that starts inside the contest's window, both ends
+included. For a daily contest with allowed teams, only matches between two
+allowed teams count, with names compared ignoring case and spacing, as the
+player import compares them. A match with no start time never counts.
+
+**What a player scores.** The sum of their MVP `total` over those matches,
+rounded to three decimals. It is written to `PlayerContestPoints` exactly as
+the admin form writes it, so standings and the captain (×2) and vice-captain
+(×1.5) multipliers apply unchanged. A row repeated within one table counts
+once.
+
+CricHeroes players are matched to ours by `cricheroes_player_id` within the
+tournament (§9.1, §13.2). A CricHeroes player with points but no player here
+scores nothing, and is listed for the admin.
+
+The contest's points become exactly CricHeroes'. Anyone holding points in it
+who scores nothing on CricHeroes is set to 0, so hand-entered points from
+before the switch do not linger. A full contest's points are copied into
+`Player.points`, as the admin form copies them; a daily contest's are not.
+
+**When it updates.** In the hourly sync (§6.7), after the cached resources,
+and only for a CricHeroes tournament that some opted-in contest uses. With
+none, no MVP table is read.
+
+Each match's table is stored in `CricHeroesMatchMvp` (collection
+`cricheroes_match_mvps`, one document per match). It is read when the match is
+completed, once more 24 hours later in case the scorer corrected the
+scorecard, and again only if the match's result changes. A failed read keeps
+the last good table and is retried after 3 hours, not every run.
+
+A run reads at most 10 tables, oldest match first. That keeps a run inside the
+10-minute claim (§6.7), and spreads the catch-up when a contest is switched on
+partway through a tournament. Every opted-in contest is then rescored from
+what is stored. Each contest is read again just before it is scored, so one
+that an admin switched off, unlinked or moved while the tables were being
+read is scored as it now stands, or not at all if the switch is off, rather
+than from the copy the run started with.
+
+Turning the switch on, or changing a scored contest's window, type or allowed
+teams, rescores it at once from what is stored, with no CricHeroes call.
+
+Points move after each match, not ball by ball (decided 13 Nov 2026). Reading
+tables during play would cost about 40 calls a match, and CricHeroes have not
+said whether the MVP table fills in while a match is live.
+
+**Cost.** About two calls per completed match: roughly 60 for a 30-match
+tournament, well under 0.1% of the annual quota. The sync report counts them
+(`mvp_tables_read`, `mvp_tables_failed`, both included in `calls`), along with
+`contests_scored` and `contests_failed`. The scheduled job prints them and
+exits 1 when a table or a contest failed, as it does for a cached resource.
+
+**Seeing it.** `GET /api/admin/contests/{id}/cricheroes-points` is for
+tournament admins, like the rest of the contest routes. It returns the matches
+counted, the completed matches in the window whose table has not been read
+yet, how many players score, and the unlinked CricHeroes players. It is worked
+out from what is stored, with no CricHeroes call. The contest page shows it
+under the switch.
+
+**Caveats.** The formula is CricHeroes' MVP 2.0 (a pressure index and an
+impact score). It is fixed, not configurable, and is not a conventional
+fantasy formula. The MVP samples were marked provisional (§13.3), so the live
+table may differ in shape. A mismatch shows up as a `CricHeroesSchemaError` on
+the read, recorded in the sync report, not as wrong points.
 
 ---
 
 ## 10. Testing
 
-Seven files — the client, the routes, the player import (§9.1), the
+Nine files — the client, the routes, the player import (§9.1), the
 credential check (§11), the call counter (§6.6), the cache (§6.7) and its
-scheduled script — no network, `httpx.MockTransport` throughout. Response
+scheduled script, the public stats routes (§9.2), and contest points (§9.3,
+`test_cricheroes_contest_points.py`) — no network,
+`httpx.MockTransport` throughout. Response
 bodies come from the API doc's examples
 (`tests/fixtures/cricheroes_doc_examples.json`); hand-made bodies are used only
 for what the doc does not show — errors, and drift from the documented types.
@@ -915,6 +1076,18 @@ dropping the insert-race retry, sorting the digest as tuples, not counting a
 cancelled request, counting a failed connection as sent, keeping a term start
 still to come, and refusing a blank one.
 
+For contest points (§9.3), each of these turns the tests red:
+- ignoring the contest's window, or a daily contest's allowed teams;
+- accepting hand-entered points on an opted-in contest;
+- reading MVP tables with no opted-in contest;
+- settling a table after one read;
+- ignoring a corrected result;
+- retrying a failed read every run;
+- dropping the per-run cap;
+- counting a repeated row twice;
+- leaving hand-entered points in place;
+- copying a daily contest's points into `Player.points`.
+
 ---
 
 ## 11. Credential sanity check
@@ -959,7 +1132,8 @@ not connect to the database, so that call is not in the counter (§6.6).
 | 4 | Obtain real credentials (the secret above all, §13.12), set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable (§6.6) | ✅ done |
 | 5b | Cache with a results-driven scheduled sync (§6.7) | ✅ done; the Railway cron service is still to be created |
-| 6 | Public pages read the cache: MVP, leaderboards, points table | separate change; reads `cricheroes_cache.read`, never CricHeroes |
+| 6 | Public pages read the cache: MVP, leaderboards, points table (§9.2), with tournaments linked to CricHeroes (§13.1) | ✅ done — reads `cricheroes_cache.read`, never CricHeroes; shows data once the cron service (5b) and credentials (4) are live |
+| 7 | Contest points from CricHeroes' match MVP tables, opt-in per contest (§9.3) | ✅ done — scores once the cron service (5b) and credentials (4) are live and the tournament is linked |
 
 Phases 1–3 are safe to merge with no credentials at all: nothing calls the API
 until someone hits a route, and without credentials that route returns a 503
@@ -974,11 +1148,17 @@ allowance — far too late to change a polling interval cheaply.
 
 ## 13. Open questions
 
-1. **Linking CricHeroes ids to our tournaments.** Callers must supply a raw
-   CricHeroes tournament id today. Adding `cricheroes_tournament_id` to the
-   `Tournament` document would let routes key off our own slug instead. Worth
-   doing — but it is a schema change and a separate PR. CricHeroes now serve us
-   two tournaments only (§13.12), so for now the link is small.
+1. **Linking CricHeroes ids to our tournaments — done.** `Tournament` has an
+   optional `cricheroes_tournament_id`, set by platform admins in Admin →
+   Tournaments (create or edit), where the field takes the id or a
+   cricheroes.com tournament link. The API accepts only a positive whole
+   number up to 2^53 − 1 (strictly: no `true`, `"2242502"` or `2242502.0`),
+   and `null` unlinks. It is not shown on the public tournament
+   (`/api/tournaments`). Nothing checks it against the ids CricHeroes serve us
+   or against `CRICHEROES_SYNC_TOURNAMENT_IDS`: an id outside the sync list
+   simply has no cached data, and its stats page says so. Two of our
+   tournaments may share an id. The public stats routes (§9.2) key off it;
+   the admin routes (§9) still take a raw CricHeroes id.
 2. **Player identity — decided: an explicit id, set at import.** `Player` has a
    `cricheroes_player_id`, filled from a "CricHeroes Player ID" column in the
    player import template (a `CricHeroes ID` header is accepted too). Name
@@ -1092,6 +1272,11 @@ allowance — far too late to change a polling interval cheaply.
    (`/mvp`), the match table is on the client only. The samples are marked
    provisional (§13.3). Fielding being its own figure answers half of §13.6.
    The formula itself is still only that article, still unreadable from here.
+
+   **Decided 13 Nov 2026: MVP points can be a contest's fantasy points.** Opt
+   in per contest; the contest covers the completed matches in its window, and
+   updates after each match (§9.3). Contests that do not opt in are scored by
+   hand, as before.
 
 6. **Fielding data — points only.** The MVP rows (§13.5) break fielding
    out, but as points, not as catches, stumpings and run-outs. Fielding
@@ -1222,6 +1407,8 @@ allowance — far too late to change a polling interval cheaply.
 | Live API disagrees with its own doc | Models are built from the doc's examples, never called live yet. Statistics are optional, so only a wrong type or a missing id fails a response — with a schema error that says exactly what to fix |
 | API doc lost again | Its example bodies are checked in as a test fixture (§8.0) |
 | **Quota exhaustion** — 100k calls/year, no rollover, ~274/day averaged | Admin-only live routes; anything public reads the cache (§6.7), refreshed by results at ~60 calls a day; the call counter reports the term against the quota and warns at 50% (§6.6); CricHeroes warn at 80% |
+| CricHeroes' MVP formula is not a fantasy formula, and can't be configured | Opt in per contest, so a contest scored by hand is unaffected (§9.3); the decision is recorded in §13.5 |
+| A player on CricHeroes not linked here scores nothing in an opted-in contest | The contest's summary lists every unlinked CricHeroes player with points; link them with the CricHeroes import or the sheet's id column (§9.3) |
 | Unbudgeted overage spend | Overage bills at ₹0.50–0.75/call after a 10% grace band — a runaway poll loop is a cost incident, not just an outage. Own counter + alert well below the 80% upstream warning |
 | Throttling under burst | A 429 is charged (§13.4), so it is not retried by default; batch jobs pace themselves below 50 RPS (§6.5). At our volumes a 429 more likely signals a runaway loop than real load |
 | Response truncated at the 3 MB cap | No endpoint paginates (§13.8), and only two tournaments are served; if a match list looks short, verify its count against the point table |

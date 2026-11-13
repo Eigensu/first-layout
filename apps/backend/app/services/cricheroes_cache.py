@@ -21,6 +21,11 @@ match and 4 a day for the age check: about 60 a day for both tournaments
 CricHeroes serve us, a fifth of the daily budget. During a match the standings
 are a match behind; that is the price.
 
+Each run also scores the contests that take their points from CricHeroes
+(app/services/cricheroes_points.py, spec §9.3), reading each completed match's
+MVP table about twice -- and nothing at all for a tournament no such contest
+uses.
+
 One refresh of a tournament runs at a time, across processes: the scheduled
 job and walle-api are separate services, so the claim is held in the
 database, not in memory.
@@ -49,6 +54,7 @@ from app.schemas.cricheroes import (
     PointTableRow,
     TournamentMatch,
 )
+from app.services import cricheroes_points
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import CricHeroesConfigError, CricHeroesError
 from config.settings import get_settings
@@ -59,8 +65,10 @@ logger = logging.getLogger("app.cricheroes")
 # "refresh now" twice, or the scheduled run right after one, costs nothing.
 MIN_REFRESH_INTERVAL = timedelta(minutes=5)
 # How long a claim on a tournament's refresh holds. Longer than any run --
-# five requests of at most 15 s each -- so a live run is never overtaken, and
-# short enough that a run that died holding it is soon forgotten.
+# five requests, plus at most cricheroes_points.MAX_READS_PER_RUN MVP tables,
+# of at most 15 s each: under four minutes -- so a live run is never
+# overtaken, and short enough that a run that died holding it is soon
+# forgotten.
 CLAIM_TIMEOUT = timedelta(minutes=10)
 
 
@@ -137,7 +145,7 @@ def results_digest(matches: List[TournamentMatch]) -> str:
             ]
         )
         for m in matches
-        if m.type == 3 or (m.status or "").casefold() == "past"
+        if cricheroes_points.is_completed(m)
     )
     return hashlib.sha256(json.dumps(completed).encode()).hexdigest()[:16]
 
@@ -382,6 +390,23 @@ async def _sync(
             continue
         await _save(resource.name, tournament_id, data, digest, now)
         report.refreshed.append(resource.name)
+
+    # Contest points (spec §9.3), only for a tournament some opted-in contest
+    # uses: otherwise no MVP table is read at all.
+    contests = await cricheroes_points.contests_using(tournament_id)
+    if contests:
+        reads = await cricheroes_points.read_mvp_tables(
+            client, tournament_id, matches, now
+        )
+        report.mvp_tables_read = reads.read
+        report.mvp_tables_failed = reads.failed
+        outcome = await cricheroes_points.score_contests(
+            contests, tournament_id, matches
+        )
+        report.contests_scored = sum(1 for why in outcome.values() if why is None)
+        report.contests_failed = {
+            label: why for label, why in outcome.items() if why is not None
+        }
     return report
 
 

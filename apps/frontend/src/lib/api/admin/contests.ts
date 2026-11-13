@@ -35,6 +35,11 @@ export interface Contest {
   max_players_per_team: number | null;
   /** The limit actually enforced, global fallback already applied. */
   effective_max_players_per_team: number;
+  /**
+   * Points come from the MVP tables of the CricHeroes matches the contest
+   * covers; the server refuses hand-entered points while it is on.
+   */
+  points_from_cricheroes: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +67,7 @@ export interface ContestCreate {
   purse?: number;
   squad_size?: number | null;
   max_players_per_team?: number | null;
+  points_from_cricheroes?: boolean;
 }
 
 export interface ContestUpdate {
@@ -79,6 +85,7 @@ export interface ContestUpdate {
   purse?: number;
   squad_size?: number | null;
   max_players_per_team?: number | null;
+  points_from_cricheroes?: boolean;
 }
 
 export interface EnrollmentBulkRequest { team_ids: string[] }
@@ -104,6 +111,31 @@ export interface PlayerPointsResponseItem {
 
 export interface PlayerPointsBulkUpsertRequest {
   updates: { player_id: string; points: number }[];
+}
+
+/** A CricHeroes match whose MVP table counts towards a contest. */
+export interface CricHeroesCountedMatch {
+  match_id: number;
+  match_date_time?: string | null;
+  teams: string;
+  players: number;
+}
+
+/**
+ * How a contest is scored from CricHeroes, worked out on the server from what
+ * the scheduled sync has stored: reading it costs no CricHeroes call.
+ */
+export interface ContestCricHeroesPoints {
+  contest_id: string;
+  points_from_cricheroes: boolean;
+  /** null: the tournament is not linked to CricHeroes. */
+  cricheroes_tournament_id: number | null;
+  matches_counted: CricHeroesCountedMatch[];
+  /** Completed matches in the window whose MVP table the sync has yet to read. */
+  matches_awaiting_mvp: number[];
+  players_scored: number;
+  /** "Name (Team)" of CricHeroes players with points but no player linked here. */
+  unlinked_players: string[];
 }
 
 export interface LeaderboardExportResponse {
@@ -154,6 +186,10 @@ export const adminContestsApi = {
     body: PlayerPointsBulkUpsertRequest
   ): Promise<PlayerPointsResponseItem[]> => {
     const response = await apiClient.put(`/api/admin/contests/${contestId}/player-points`, body);
+    return response.data;
+  },
+  getCricHeroesPoints: async (contestId: string): Promise<ContestCricHeroesPoints> => {
+    const response = await apiClient.get(`/api/admin/contests/${contestId}/cricheroes-points`);
     return response.data;
   },
   uploadLogo: async (contestId: string, file: File): Promise<{ url: string; message: string }> => {

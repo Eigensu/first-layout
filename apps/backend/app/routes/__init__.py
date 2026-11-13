@@ -1,5 +1,6 @@
 from .auth import router as auth_router
 from .contests import router as contests_router
+from .cricheroes import router as cricheroes_router
 from .leaderboard import router as leaderboard_router
 from .settings import router as settings_router
 from .sponsors import router as sponsors_router
@@ -14,4 +15,5 @@ __all__ = [
     "contests_router",
     "settings_router",
     "tournaments_router",
+    "cricheroes_router",
 ]

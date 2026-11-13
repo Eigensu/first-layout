@@ -25,6 +25,8 @@ class ContestCreate(BaseModel):
     purse: float = Field(default=1_000_000.0, ge=0)
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
+    # Score the contest from CricHeroes' match MVP tables (spec §9.3).
+    points_from_cricheroes: bool = False
 
     @model_validator(mode="after")
     def require_squad_size_for_auction(self):
@@ -72,6 +74,7 @@ class ContestUpdate(BaseModel):
     purse: Optional[float] = Field(default=None, ge=0)
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
+    points_from_cricheroes: Optional[bool] = None
 
     @field_validator("start_at", "end_at", mode="before")
     @classmethod
@@ -118,6 +121,7 @@ class ContestResponse(DatesInIST):
     # The limit actually enforced, with the global fallback already applied, so
     # clients never have to combine the two sources themselves.
     effective_max_players_per_team: int
+    points_from_cricheroes: bool = False
     created_at: datetime
     updated_at: datetime
 

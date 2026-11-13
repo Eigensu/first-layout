@@ -1,16 +1,18 @@
-"""What we keep from the CricHeroes API: how many calls we made, and the last
-answer for each resource we keep cached.
+"""What we keep from the CricHeroes API: how many calls we made, the last
+answer for each resource we keep cached, and each completed match's MVP table.
 
-docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6 (the call counter) and §6.7 (the
-cache). Both are platform-wide, with no tournament_id: the call quota is one
+docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6 (the call counter), §6.7 (the
+cache) and §9.3 (contest points). All are platform-wide, with no
+tournament_id: the call quota is one
 per CricHeroes account, and a CricHeroes tournament id is unrelated to our own
 tournaments (§13.1).
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from beanie import Document
+from pydantic import Field
 from pymongo import IndexModel
 
 
@@ -74,4 +76,35 @@ class CricHeroesSnapshot(Document):
         name = "cricheroes_snapshots"
         indexes = [
             IndexModel([("key", 1)], name="uniq_key", unique=True),
+        ]
+
+
+class CricHeroesMatchMvp(Document):
+    """The MVP table of one completed CricHeroes match, for contest points.
+
+    Written only by app/services/cricheroes_points.py (spec §9.3). `data` is
+    the rows as CricHeroes sent them, under their own field names, so they
+    read back through `PlayerMvp`. A failed read keeps the last good `data`
+    and records the failure in `last_error`.
+    """
+
+    match_id: int
+    cricheroes_tournament_id: int
+    data: List[Any] = Field(default_factory=list)
+    fetched_at: Optional[datetime] = None
+    # The match's result when its table was read: a corrected result makes
+    # the table due again.
+    result_key: Optional[str] = None
+    # How many times the table has been read for this result. It is read once
+    # when the match is completed and once more a day later, in case the
+    # scorer corrected the scorecard; after that it is settled.
+    reads: int = 0
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+
+    class Settings:
+        name = "cricheroes_match_mvps"
+        indexes = [
+            IndexModel([("match_id", 1)], name="uniq_match_id", unique=True),
+            "cricheroes_tournament_id",
         ]

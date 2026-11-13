@@ -1,5 +1,5 @@
 """What the CricHeroes call counter and cache report
-(docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6, §6.7).
+(docs/CRICHEROES_INTEGRATION_TECH_SPEC.md §6.6, §6.7, §9.3).
 
 The services build these and the admin routes return them as they are, so each
 shape is defined once.
@@ -69,12 +69,24 @@ class SyncReport(BaseModel):
     # Set when the whole tournament was passed over, with the reason.
     skipped: Optional[str] = None
     results_changed: bool = False
+    # Contest points (spec §9.3): the matches whose MVP table was read, each
+    # one request; the ones whose read failed (match id -> why); and how many
+    # opted-in contests were scored, and which could not be (code -> why).
+    mvp_tables_read: List[int] = Field(default_factory=list)
+    mvp_tables_failed: Dict[str, str] = Field(default_factory=dict)
+    contests_scored: int = 0
+    contests_failed: Dict[str, str] = Field(default_factory=dict)
 
     @computed_field
     @property
     def calls(self) -> int:
         """Requests made to CricHeroes for this tournament in this run."""
-        return len(self.refreshed) + len(self.failed)
+        return (
+            len(self.refreshed)
+            + len(self.failed)
+            + len(self.mvp_tables_read)
+            + len(self.mvp_tables_failed)
+        )
 
 
 class RefreshResponse(BaseModel):

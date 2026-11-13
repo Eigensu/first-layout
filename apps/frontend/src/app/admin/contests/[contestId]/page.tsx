@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import {
   adminContestsApi,
   Contest,
+  type ContestCricHeroesPoints,
   type PlayerPointsResponseItem,
 } from "@/lib/api/admin/contests";
 import {
@@ -24,6 +25,7 @@ import {
   CONTEST_TYPE_OPTIONS,
   CONTEST_VISIBILITY_OPTIONS,
 } from "@/common/consts";
+import { CricHeroesPointsPanel } from "@/components/admin/contests/CricHeroesPointsPanel";
 
 export default function AdminManageContestPage() {
   const params = useParams<{ contestId: string }>();
@@ -67,6 +69,11 @@ export default function AdminManageContestPage() {
     Contest["contest_type"] | ""
   >("");
   const [editAllowedTeamsRaw, setEditAllowedTeamsRaw] = useState<string>(""); // comma separated for daily
+  const [editPointsFromCricHeroes, setEditPointsFromCricHeroes] =
+    useState(false);
+  // How the contest is scored from CricHeroes; null until loaded or on error.
+  const [cricHeroesPoints, setCricHeroesPoints] =
+    useState<ContestCricHeroesPoints | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   // General settings
   const [editName, setEditName] = useState<string>("");
@@ -127,6 +134,7 @@ export default function AdminManageContestPage() {
     setEditVisibility(c.visibility);
     setEditContestType(c.contest_type);
     setEditAllowedTeamsRaw((c.allowed_teams || []).join(", "));
+    setEditPointsFromCricHeroes(c.points_from_cricheroes);
     setEditName(c.name);
     setEditLogoUrl(c.logo_url || "");
   };
@@ -174,6 +182,11 @@ export default function AdminManageContestPage() {
     }
     if (editName.trim()) payload.name = editName.trim();
     if (editLogoUrl !== undefined) payload.logo_url = editLogoUrl;
+    // Only when it changes: turning it on is what the server checks the
+    // tournament's CricHeroes link for.
+    if (editPointsFromCricHeroes !== contest.points_from_cricheroes) {
+      payload.points_from_cricheroes = editPointsFromCricHeroes;
+    }
 
     try {
       setSavingSettings(true);
@@ -219,6 +232,16 @@ export default function AdminManageContestPage() {
     setContest(c);
     // seed schedule editors from server
     reseedFrom(c);
+    await loadCricHeroesPoints();
+  };
+
+  // Worked out on the server from what the sync stored: no CricHeroes call.
+  const loadCricHeroesPoints = async () => {
+    try {
+      setCricHeroesPoints(await adminContestsApi.getCricHeroesPoints(contestId));
+    } catch {
+      setCricHeroesPoints(null);
+    }
   };
 
   const loadLeaderboard = async () => {
@@ -619,6 +642,27 @@ export default function AdminManageContestPage() {
                     </select>
                   </div>
 
+                  <div className="flex flex-col md:col-span-3">
+                    <label className="flex items-center gap-2 text-sm text-text-main">
+                      <input
+                        type="checkbox"
+                        checked={editPointsFromCricHeroes}
+                        onChange={(e) =>
+                          setEditPointsFromCricHeroes(e.target.checked)
+                        }
+                      />
+                      Points from CricHeroes
+                    </label>
+                    <p className="text-xs text-text-muted mt-1">
+                      Players&apos; points become the sum of their CricHeroes
+                      MVP points over the completed matches that start inside
+                      this contest&apos;s window (for a daily contest, only
+                      matches between its allowed teams). They update after
+                      each match and replace any points entered by hand. Needs
+                      the tournament linked to CricHeroes.
+                    </p>
+                  </div>
+
                   {(editContestType || contest?.contest_type) === "daily" && (
                     <div className="flex flex-col md:col-span-3">
                       <label className="text-sm text-text-muted mb-1">
@@ -653,6 +697,9 @@ export default function AdminManageContestPage() {
                 </div>
               </CardBody>
             </Card>
+            {contest.points_from_cricheroes && (
+              <CricHeroesPointsPanel summary={cricHeroesPoints} />
+            )}
             {contest.contest_type === "daily" && (
               <div className="mt-2 text-sm text-text-muted">
                 <div className="font-medium text-text-main">Allowed Teams</div>

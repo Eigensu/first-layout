@@ -58,6 +58,11 @@ class Contest(Document):
     # per-contest override for GlobalSettings.max_players_per_team.
     # None means fall back to the global setting.
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
+    # Players' points come from the MVP tables of the CricHeroes matches the
+    # contest covers, not from the admin points form (spec §9.3). Off for
+    # every existing contest; the scheduled sync overwrites hand-entered points
+    # in a contest that has it on.
+    points_from_cricheroes: bool = False
 
     # Tenant scope -- see app/utils/tenant.py. Optional only until the
     # backfill fills it in; None means "written before the migration".

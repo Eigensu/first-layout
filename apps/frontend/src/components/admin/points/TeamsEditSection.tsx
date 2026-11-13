@@ -37,6 +37,9 @@ export function TeamsEditSection() {
     () => contests.find((c) => c.id === selectedContestId) || null,
     [contests, selectedContestId],
   );
+  // Its points come from CricHeroes after each match, and the server refuses
+  // hand edits: show them, but read-only.
+  const fromCricHeroes = !!selectedContest?.points_from_cricheroes;
 
   const fetchAll = async () => {
     setLoading(true);
@@ -185,7 +188,11 @@ export function TeamsEditSection() {
         variant: "success",
       });
     } catch (e) {
-      // non-blocking, show inline error banner at top via setError if desired
+      showToast({
+        title: `${teamName} not saved`,
+        message: getErrorMessage(e),
+        variant: "error",
+      });
     } finally {
       setContestPointsLoading(false);
     }
@@ -246,6 +253,17 @@ export function TeamsEditSection() {
               ) : null}
             </div>
           )}
+          {fromCricHeroes && (
+            <div
+              role="status"
+              className="text-sm rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-text-main"
+            >
+              This contest takes its points from CricHeroes&apos; match MVP
+              tables, updated after each match, so they can&apos;t be edited
+              here. Turn off &ldquo;Points from CricHeroes&rdquo; on the contest
+              to enter them by hand.
+            </div>
+          )}
         </CardHeader>
         <CardBody className="p-0">
           {!selectedContest ? (
@@ -277,7 +295,11 @@ export function TeamsEditSection() {
                         size="sm"
                         variant="primary"
                         onClick={() => saveTeamPoints(teamName, teamPlayers)}
-                        disabled={!selectedContest || contestPointsLoading}
+                        disabled={
+                          !selectedContest ||
+                          contestPointsLoading ||
+                          fromCricHeroes
+                        }
                       >
                         {contestPointsLoading ? "Saving..." : "Save Team"}
                       </Button>
@@ -306,6 +328,8 @@ export function TeamsEditSection() {
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0.000"
+                                readOnly={fromCricHeroes}
+                                aria-readonly={fromCricHeroes}
                                 value={
                                   editTextMap[p.id] ??
                                   formatPoints(contestPointsMap[p.id] ?? 0)
