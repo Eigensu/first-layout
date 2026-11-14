@@ -22,8 +22,10 @@ async def _enrolled_team(user_client, **contest_overrides):
         contest_format=ContestFormat.SLOT_BASED, **contest_overrides
     )
     players = await _players(
-        [(name, team, 10, str(slot.id)) for name, team in
-         [("a1", "A"), ("b1", "B"), ("c1", "C")]]
+        [
+            (name, team, 10, str(slot.id))
+            for name, team in [("a1", "A"), ("b1", "B"), ("c1", "C")]
+        ]
     )
     res = await user_client.post("/api/teams/", json=_body(players[:2], contest))
     assert res.status_code == 201, res.text
@@ -40,8 +42,11 @@ async def test_edits_save_before_the_match_starts(user_client, db):
 
     res = await user_client.put(
         f"/api/teams/{team_id}",
-        json={"player_ids": [ids[0], ids[2]], "captain_id": ids[2],
-              "vice_captain_id": ids[0]},
+        json={
+            "player_ids": [ids[0], ids[2]],
+            "captain_id": ids[2],
+            "vice_captain_id": ids[0],
+        },
     )
     assert res.status_code == 200, res.text
 
