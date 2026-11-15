@@ -1,7 +1,7 @@
 # PostHog: errors, logs and sessions, end to end
 
-Every error, from the browser, the website's server, the API and the CricHeroes
-sync, goes to one PostHog project, along with the API's logs, pageviews and
+Every error, from the browser, the website's server, the API and its scheduled
+jobs, goes to one PostHog project, along with the API's logs, pageviews and
 session replays. All of it carries the same user id and browser session, so an
 API error opens onto the replay of the click that caused it and the log lines
 the request wrote.
@@ -16,7 +16,7 @@ no-ops and the API logs to the console only.
 | Browser (posthog-js) | Uncaught errors and promise rejections; React render errors (`app/global-error.tsx`); API calls that fail with a 5xx, time out or get no answer, as `ApiError: API 502: POST /api/contests/:id/enroll` | Pageviews and clicks; a 4xx from the API as an `api_request_failed` event; session replay |
 | Website server (Next.js, posthog-node) | Errors while rendering a page or running a route handler (`instrumentation.ts`) | |
 | API (FastAPI, posthog-python) | Every exception a request lets escape; every exception logged with `logger.exception(...)` | Every log line at `LOG_LEVEL` and above, to PostHog Logs |
-| CricHeroes sync cron | An exception that ends the run; failed resources and contests (logged at ERROR) | Its log lines |
+| Scheduled jobs: `scripts/refresh_membership_stats.py` (walle-stats-cron) and `scripts/sync_cricheroes.py` | An exception that ends the run; for the CricHeroes sync, also failed resources and contests (logged at ERROR) | Their log lines |
 
 An `HTTPException` the API raises on purpose (a 401, a 422) is a response, not
 an error, and is not captured.
@@ -34,10 +34,10 @@ an error, and is not captured.
   cookie. PostHog links all of these to the session's replay.
 - **Tournament.** Browser events carry the subdomain's tournament slug as
   `tournament`. API events and logs carry the `X-Tournament-Slug` header.
-- **Service.** API events have `service: backend` or `service:
-  cricheroes-sync`, and their logs `service.name` `walle-backend` or
-  `walle-cricheroes-sync`. Website server events have `service:
-  frontend-server`.
+- **Service.** Backend events have `service` set to `backend` (the API),
+  `membership-stats` or `cricheroes-sync`, and their logs carry the same
+  value as `service.name`, prefixed `walle-`. Website server events have
+  `service: frontend-server`.
 
 To follow an error end to end, open the issue in Error Tracking, open the
 session on one of its events and watch the replay, then filter Logs by that
@@ -54,14 +54,16 @@ session on one of its events and watch the replay, then filter Logs by that
    - `NEXT_PUBLIC_POSTHOG_KEY`: the key.
    - `NEXT_PUBLIC_POSTHOG_HOST`: the host, if not US Cloud.
    - `NEXT_PUBLIC_POSTHOG_SESSION_REPLAY=false` only to turn replay off.
-3. **Railway (API).** On the shared backend and on every legacy
-   per-tournament backend still running, set:
+3. **Railway (API).** In the Walle project, on `walle-api` (the shared
+   backend) and `second-layout` (the legacy backend on api-lpcl), set:
    - `POSTHOG_API_KEY`: the same key.
    - `POSTHOG_HOST`: the host, if not US Cloud.
    - `LOG_LEVEL` (default `INFO`) and `POSTHOG_ACCESS_LOGS` (default `false`),
      if needed.
-4. **Railway (CricHeroes sync cron).** The same `POSTHOG_API_KEY` and
-   `POSTHOG_HOST`.
+4. **Railway (scheduled jobs).** The same `POSTHOG_API_KEY` and
+   `POSTHOG_HOST` on `walle-stats-cron`, and on the CricHeroes sync's cron
+   service once it exists. All of these deploy from `main`, so nothing is
+   sent until this work is merged there.
 5. **In PostHog's project settings:**
    - Turn on session replay, which also has to be enabled on the project's
      side.
