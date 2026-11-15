@@ -17,8 +17,10 @@ reads the due match MVP tables and rescores those contests, and prints how
 many of each.
 
 Needs MONGODB_URL and the three CRICHEROES_* credentials. Exits 0 when every
-tournament refreshed or was current, 1 when anything failed (a resource, a
-match's MVP table or a contest's scoring) or the credentials are missing, and
+tournament refreshed or was current -- a table CricHeroes have no data for yet,
+like the MVP table before the first match, counts as refreshed -- 1 when
+anything failed (a resource, a match's MVP table or a contest's scoring) or
+the credentials are missing, and
 0 with a message when no tournament is configured, so a scheduled service set
 up ahead of the configuration does not report failures.
 """
@@ -81,6 +83,9 @@ async def run(args: argparse.Namespace) -> int:
         )
         if report.unchanged:
             line += f"; unchanged {', '.join(report.unchanged)}"
+        if report.no_data_yet:
+            # Before the first match, say: cached as empty, not a failure.
+            line += f"; no data yet for {', '.join(report.no_data_yet)}"
         print(line)
         for resource, error in sorted(report.failed.items()):
             failed = True

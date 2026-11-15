@@ -64,6 +64,10 @@ class SyncReport(BaseModel):
     refreshed: List[str] = Field(default_factory=list)
     # Resources whose cached copy was still current: no request.
     unchanged: List[str] = Field(default_factory=list)
+    # The refreshed resources CricHeroes have no data for yet -- before the
+    # first match, say -- cached as empty tables rather than failed (spec
+    # §6.7). Each is also in `refreshed`.
+    no_data_yet: List[str] = Field(default_factory=list)
     # Resource -> why it could not be read; its cached copy was kept.
     failed: Dict[str, str] = Field(default_factory=dict)
     # Set when the whole tournament was passed over, with the reason.
