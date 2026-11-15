@@ -103,9 +103,16 @@ async def register(
             mobile=mobile,
         )
     except ValidationError as e:
-        # Match FastAPI validation error format
+        # FastAPI's validation error format, minus two things: the context,
+        # whose ValueError objects do not serialise (the 422 became a 500),
+        # and the input, which is the password among others.
+        errors = e.errors(include_url=False, include_context=False, include_input=False)
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors()
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[
+                {**error, "msg": error["msg"].removeprefix("Value error, ")}
+                for error in errors
+            ],
         )
 
     # Check if username exists
