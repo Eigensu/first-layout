@@ -26,6 +26,14 @@ SQUAD_NOT_FOUND_CODE = "170003"  # the match has no playing squad
 # credentials.
 ID_REFUSAL_CODES = frozenset({ACCESS_DENIED_CODE, MATCH_NOT_FOUND_CODE})
 
+# "Not found" for a tournament table that does not exist *yet*: the match list
+# before any fixture (170011), the points table (170012) and the batting and
+# bowling leaderboards (170013, 170014) before anyone has played, and -- not
+# in the doc, seen live on 15 Nov 2026 -- the MVP table before the first match
+# (45002, "MVP of the tournament will be generated after the first match").
+# The cache keeps these as empty tables, not failures (spec §6.7).
+NO_DATA_YET_CODES = frozenset({"170011", "170012", "170013", "170014", "45002"})
+
 # Undocumented, seen live on 6 Nov 2026 (spec §7). CricHeroes' Cloudflare
 # firewall answers a request it dislikes -- e.g. one with httpx's default
 # User-Agent -- with HTTP 403 and this code, *before* the credentials are
@@ -163,6 +171,14 @@ class CricHeroesAPIError(CricHeroesError):
             text
             or f"CricHeroes returned an error (code {code}): {message or 'no message'}"
         )
+
+
+def is_no_data_yet(error: Exception) -> bool:
+    """Whether CricHeroes answered that a tournament table has no data yet
+    (NO_DATA_YET_CODES), rather than failing."""
+    return (
+        isinstance(error, CricHeroesAPIError) and str(error.code) in NO_DATA_YET_CODES
+    )
 
 
 class CricHeroesAccessError(CricHeroesAPIError):

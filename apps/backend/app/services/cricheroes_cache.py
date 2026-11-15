@@ -32,6 +32,11 @@ database, not in memory.
 
 A failed refresh keeps the last good data and records why, so a CricHeroes
 outage shows stale data rather than none.
+
+A table CricHeroes have no data for yet -- the MVP table and leaderboards
+before the first match -- is not a failure: it is cached as an empty table,
+and read again when a result comes in, like any other. Otherwise every run
+before the first match would fail and pay for three reads that cannot succeed.
 """
 
 import hashlib
@@ -56,7 +61,11 @@ from app.schemas.cricheroes import (
 )
 from app.services import cricheroes_points
 from app.services.cricheroes_client import CricHeroesClient
-from app.services.cricheroes_errors import CricHeroesConfigError, CricHeroesError
+from app.services.cricheroes_errors import (
+    CricHeroesConfigError,
+    CricHeroesError,
+    is_no_data_yet,
+)
 from config.settings import get_settings
 
 logger = logging.getLogger("app.cricheroes")
@@ -177,8 +186,14 @@ async def _upsert(resource: str, tournament_id: int, fields: dict) -> None:
 
 
 async def _save(
-    resource: str, tournament_id: int, data: Any, digest: str, when: datetime
+    resource: str,
+    tournament_id: int,
+    data: Any,
+    digest: Optional[str],
+    when: datetime,
 ) -> None:
+    # Without a digest the resource counts as behind, and the next run reads
+    # it again.
     dumped = _dump(data)
     await _upsert(
         resource,
@@ -203,6 +218,14 @@ async def _save_error(
         tournament_id,
         {"last_error": str(error)[:500], "last_error_at": when},
     )
+
+
+def _empty_for_now(snapshot: dict, error: Exception) -> bool:
+    """Whether a failed read is CricHeroes having no data for the table yet,
+    with nothing cached that an empty table would replace. A table that had
+    rows is not expected to lose them, so that is a failure like any other,
+    and its rows are kept."""
+    return is_no_data_yet(error) and not snapshot.get("rows")
 
 
 # -- reading ---------------------------------------------------------------
@@ -353,12 +376,17 @@ async def _sync(
     except CricHeroesConfigError:
         raise
     except CricHeroesError as exc:
-        # Without the match list there is nothing to decide with; the next
-        # run tries again.
-        await _save_error(MATCHES.name, tournament_id, exc, now)
-        report.failed[MATCHES.name] = str(exc)
-        return report
+        if not _empty_for_now(cached.get(MATCHES.name, {}), exc):
+            # Without the match list there is nothing to decide with; the
+            # next run tries again.
+            await _save_error(MATCHES.name, tournament_id, exc, now)
+            report.failed[MATCHES.name] = str(exc)
+            return report
+        # No fixtures yet: an empty list, and the tables are read as usual.
+        matches = []
+        report.no_data_yet.append(MATCHES.name)
     digest = results_digest(matches)
+    played = any(cricheroes_points.is_completed(m) for m in matches)
     await _save(MATCHES.name, tournament_id, matches, digest, now)
     report.refreshed.append(MATCHES.name)
     previous = cached.get(MATCHES.name, {}).get("results_digest")
@@ -380,15 +408,25 @@ async def _sync(
         if not due:
             report.unchanged.append(resource.name)
             continue
+        current: Optional[str] = digest
         try:
             data = await resource.fetch(client, tournament_id)
         except CricHeroesConfigError:
             raise
         except CricHeroesError as exc:
-            await _save_error(resource.name, tournament_id, exc, now)
-            report.failed[resource.name] = str(exc)
-            continue
-        await _save(resource.name, tournament_id, data, digest, now)
+            if not _empty_for_now(snapshot, exc):
+                await _save_error(resource.name, tournament_id, exc, now)
+                report.failed[resource.name] = str(exc)
+                continue
+            data = []
+            report.no_data_yet.append(resource.name)
+            # Before the first result there is nothing to wait for: the table
+            # is read again when one comes in. After it, the table is due, but
+            # CricHeroes may take a while to make it, so it is read again next
+            # run.
+            if played:
+                current = None
+        await _save(resource.name, tournament_id, data, current, now)
         report.refreshed.append(resource.name)
 
     # Contest points (spec §9.3), only for a tournament some opted-in contest

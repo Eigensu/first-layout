@@ -405,6 +405,24 @@ catches up. A failed read keeps the last good data and records the error, so
 an outage shows stale data rather than none. A missing credential stops the
 run before any call.
 
+**No data yet is not a failure.** Before a tournament's first match CricHeroes
+answer the MVP table with 45002 and the leaderboards with 170013 and 170014
+(seen live for 2242502 on 15 Nov 2026); before any fixture, the match list and
+points table may answer 170011 and 170012. Counted as failures, every run
+before the first match failed — so the scheduled job exited 1 every hour — and
+paid for three reads that could not succeed, since a failed read is retried
+every run. Instead (`NO_DATA_YET_CODES`, `is_no_data_yet`):
+
+- a resource with nothing cached is saved as an empty table, fetched now, and
+  reported in `SyncReport.no_data_yet` as well as `refreshed`, so the public
+  pages say the table is empty and the run exits 0;
+- with no completed match it is saved under the current digest, so it is read
+  again when the first result comes in, not every run;
+- once a match is completed it is saved without a digest, so it is read again
+  next run: CricHeroes may make the MVP table a while after the match ends;
+- a resource that already had rows keeps them, and the answer is a failure
+  like any other: a table is not expected to lose its rows.
+
 **One run at a time, across processes.** The scheduled job and walle-api are
 separate services, so an in-memory lock cannot keep an admin's "refresh now"
 from overlapping the hourly run. Each run first claims the tournament with one
@@ -558,6 +576,16 @@ credentials:
 |---|---|---|
 | 20250529 | 403 | "Request blocked by security policy." CricHeroes' Cloudflare firewall, answering httpx's default `User-Agent` (`python-httpx/…`) before any credential check. Every request our client sent got this, which the admin import reported as rejected credentials. |
 | 2002 | 200 | "Invalid api-key". How a wrong key really comes back — not as a 401/403. The codes for a wrong secret or udid are unknown. |
+
+And one seen live on 15 Nov 2026, with our real credentials, for tournament
+2242502 the day before its first match:
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| 45002 | 200 | The tournament MVP table, before the first match: "MVP of the tournament will be generated after the first match." The message carries HTML (`<br>` and a link). |
+
+The sync caches 45002 and 170011–170014 as empty tables rather than failures
+(§6.7).
 
 The client now sends a `User-Agent` naming our app, which gets past the
 firewall (§5.1). If the block comes back, the error says so rather than

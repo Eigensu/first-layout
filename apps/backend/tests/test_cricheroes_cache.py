@@ -378,6 +378,122 @@ async def test_a_tournament_not_served_is_recorded_not_raised(upstream, configur
     assert "do not give us access" in report.failed["matches"]
 
 
+# -- before the first match ------------------------------------------------------
+
+# What CricHeroes answered for tournament 2242502 on 15 Nov 2026, the day
+# before its first match.
+NOT_YET = {
+    "get-tournament-player-mvp": (
+        45002,
+        "MVP of the tournament will be generated after the first match.<br> "
+        "Please check <a href='https://blog.cricheroes.com/'>this link</a>",
+    ),
+    "get-tournament-batting-leaderboard": (
+        170013,
+        "Tournament batting leaderboard data is not found!",
+    ),
+    "get-tournament-bowling-leaderboard": (
+        170014,
+        "Tournament bowling leaderboard data is not found!",
+    ),
+}
+NOT_YET_RESOURCES = ["mvp", "batting-leaderboard", "bowling-leaderboard"]
+
+
+def upcoming(match_id: int) -> dict:
+    return completed(match_id, type=1, status="upcoming")
+
+
+def before_the_first_match(upstream, *played):
+    upstream.matches([*played, upcoming(2), upcoming(3)])
+    for endpoint, (code, message) in NOT_YET.items():
+        upstream.answers[endpoint] = refusal(code, message)
+
+
+async def test_tables_not_made_yet_are_empty_not_failed(upstream, configured):
+    before_the_first_match(upstream)
+
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert report.failed == {}
+    assert report.refreshed == ["matches", *DEPENDENTS]
+    assert report.no_data_yet == NOT_YET_RESOURCES
+    assert report.calls == 5
+    mvp = await read("mvp", TPL)
+    assert (mvp.data, mvp.fetched_at, mvp.last_error) == ([], T0, None)
+
+
+async def test_they_are_read_again_only_when_a_match_is_over(upstream, configured):
+    before_the_first_match(upstream)
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=1))
+
+    assert upstream.calls == {"get-tournament-match-list": 1}
+    assert report.unchanged == DEPENDENTS
+
+    # The first result: everything is read again, and now there is data.
+    upstream.matches([completed(1), upcoming(2), upcoming(3)])
+    for endpoint in NOT_YET:
+        upstream.answers[endpoint] = ok(DOC[endpoint]["data"])
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=2))
+
+    assert report.refreshed == ["matches", *DEPENDENTS]
+    assert report.no_data_yet == [] and report.failed == {}
+    assert len((await read("mvp", TPL)).data) == 2
+
+
+async def test_a_table_still_missing_after_a_result_is_read_next_run(
+    upstream, configured
+):
+    """CricHeroes may make the MVP table a while after a match ends."""
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.answers["get-tournament-player-mvp"] = ok(
+        DOC["get-tournament-player-mvp"]["data"]
+    )
+    upstream.reset()
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=1))
+
+    assert report.unchanged == ["point-table"]
+    assert report.refreshed == ["matches", *NOT_YET_RESOURCES]
+    assert report.no_data_yet == NOT_YET_RESOURCES[1:]
+    assert len((await read("mvp", TPL)).data) == 2
+
+
+async def test_a_table_that_had_rows_keeps_them(upstream, configured):
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.matches(DOC["get-tournament-match-list"]["data"] + [completed(999)])
+    upstream.answers["get-tournament-player-mvp"] = refusal(
+        *NOT_YET["get-tournament-player-mvp"]
+    )
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=1))
+
+    assert list(report.failed) == ["mvp"] and report.no_data_yet == []
+    mvp = await read("mvp", TPL)
+    assert mvp.fetched_at == T0 and len(mvp.data) == 2
+    assert "45002" in mvp.last_error
+
+
+async def test_a_tournament_without_fixtures_yet(upstream, configured):
+    before_the_first_match(upstream)
+    upstream.answers["get-tournament-match-list"] = refusal(
+        170011, "Tournament match list is not found!"
+    )
+    upstream.answers["get-tournament-point-table"] = refusal(
+        170012, "Tournament point table is not found!"
+    )
+
+    report = await sync_tournament(upstream.client, TPL, now=T0)
+
+    assert report.failed == {}
+    assert report.no_data_yet == ["matches", *DEPENDENTS]
+    assert (await read("matches", TPL)).data == []
+
+
 async def test_missing_credentials_stop_the_run(db, configured):
     client = CricHeroesClient(api_key="", secret_access_key="", udid="", base_url=BASE)
 

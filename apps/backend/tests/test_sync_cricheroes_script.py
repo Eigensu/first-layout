@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 import pytest_asyncio
+from cricheroes_responses import refusal
 
 import scripts.sync_cricheroes as script
 from app.models.cricheroes import CricHeroesCallCount
@@ -67,6 +68,21 @@ async def test_a_failure_exits_1(upstream, capsys):
     assert await script.run(script.parse_args([])) == 1
 
     assert "FAILED mvp: CricHeroes returned HTTP 500" in capsys.readouterr().out
+
+
+async def test_a_table_with_no_data_yet_is_not_a_failure(upstream, capsys):
+    """The MVP table before the tournament's first match (spec §6.7)."""
+    answers, _ = upstream
+    answers["get-tournament-player-mvp"] = refusal(
+        45002, "MVP of the tournament will be generated after the first match."
+    )
+
+    assert await script.run(script.parse_args([])) == 0
+
+    out = capsys.readouterr().out
+    assert "refreshed matches, point-table, mvp" in out
+    assert "; no data yet for mvp" in out
+    assert "FAILED" not in out
 
 
 def reports(monkeypatch, **contest_points):
