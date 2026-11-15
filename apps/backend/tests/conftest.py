@@ -4,6 +4,9 @@ import os
 # instantiated at import time in config/settings.py).
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-use-0000")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-not-for-production-00000")
+# Never PostHog from a test, whatever a developer's .env says: an environment
+# variable beats the .env file. Tests that need it build their own client.
+os.environ["POSTHOG_API_KEY"] = ""
 
 import pytest
 import pytest_asyncio

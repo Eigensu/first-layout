@@ -49,6 +49,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Skip Next internals, API proxy routes, and static assets (paths with a dot).
-  matcher: ["/((?!_next/|api/|favicon\\.ico|.*\\..*).*)"],
+  // Skip Next internals, API and PostHog proxy routes, and static assets (paths
+  // with a dot).
+  matcher: ["/((?!_next/|api/|ingest/|favicon\\.ico|.*\\..*).*)"],
 };

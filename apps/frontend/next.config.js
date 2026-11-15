@@ -5,6 +5,15 @@ const { config } = require("dotenv");
 const rootEnvPath = path.resolve(__dirname, "../../.env");
 config({ path: rootEnvPath });
 
+// PostHog, proxied through /ingest so ad blockers that block PostHog's own
+// domain do not hide errors from us (docs/POSTHOG_OBSERVABILITY.md). PostHog
+// Cloud serves its scripts from a separate assets host; self-hosted, the same.
+const POSTHOG_HOST = (process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com").replace(/\/$/, "");
+const POSTHOG_ASSETS_HOST = POSTHOG_HOST.replace(
+  /^https:\/\/(us|eu)\.i\.posthog\.com$/,
+  "https://$1-assets.i.posthog.com"
+);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -84,8 +93,13 @@ const nextConfig = {
     // good and /dashboard stays free to reuse.
     return [{ source: "/dashboard", destination: "/profile", permanent: false }];
   },
+  // PostHog's endpoints end in a slash (/e/, /flags/); redirecting them away
+  // from it would break every request through /ingest.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     return [
+      { source: "/ingest/static/:path*", destination: `${POSTHOG_ASSETS_HOST}/static/:path*` },
+      { source: "/ingest/:path*", destination: `${POSTHOG_HOST}/:path*` },
       {
         source: "/api/:path*",
         destination: process.env.NEXT_PUBLIC_API_URL

@@ -10,6 +10,7 @@ import React, {
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
 import { getErrorMessage } from "@/lib/api/client";
+import { identifyUser, resetUser } from "@/lib/analytics/posthog";
 import { LS_KEYS, ROUTES } from "@/common/consts";
 import type {
   User,
@@ -24,6 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+
+  // PostHog knows the signed-in user by id (docs/POSTHOG_OBSERVABILITY.md).
+  useEffect(() => {
+    if (user) identifyUser(user);
+  }, [user]);
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -45,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.removeItem(LS_KEYS.USER);
             sessionStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
             setUser(null);
+            resetUser();
           }
         }
       } catch (error) {
@@ -155,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
 
       setUser(null);
+      resetUser();
       router.push(ROUTES.LOGIN);
     } catch (error) {
       // Silently fail

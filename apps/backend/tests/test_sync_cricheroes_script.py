@@ -1,6 +1,7 @@
 """scripts/sync_cricheroes.py: what the scheduled run does and how it exits."""
 
 import json
+import logging
 from pathlib import Path
 
 import httpx
@@ -60,13 +61,17 @@ async def test_the_scheduled_run(upstream, capsys):
     assert sum(r.calls for r in await CricHeroesCallCount.find_all().to_list()) == 5
 
 
-async def test_a_failure_exits_1(upstream, capsys):
+async def test_a_failure_exits_1(upstream, capsys, caplog):
     answers, _ = upstream
     answers["get-tournament-player-mvp"] = httpx.Response(500, text="down")
 
     assert await script.run(script.parse_args([])) == 1
 
     assert "FAILED mvp: CricHeroes returned HTTP 500" in capsys.readouterr().out
+    # Logged too, at ERROR, which is what reaches PostHog.
+    [failure] = [r for r in caplog.records if r.name == "scripts.sync_cricheroes"]
+    assert failure.levelno == logging.ERROR
+    assert "mvp: CricHeroes returned HTTP 500" in failure.getMessage()
 
 
 def reports(monkeypatch, **contest_points):
