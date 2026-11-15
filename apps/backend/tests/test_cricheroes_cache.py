@@ -421,6 +421,8 @@ async def test_tables_not_made_yet_are_empty_not_failed(upstream, configured):
     assert report.calls == 5
     mvp = await read("mvp", TPL)
     assert (mvp.data, mvp.fetched_at, mvp.last_error) == ([], T0, None)
+    # Nothing is over, so there is nothing to retry: no doubling wait.
+    assert (await snapshot("mvp")).empty_since is None
 
 
 async def test_they_are_read_again_only_when_a_match_is_over(upstream, configured):
@@ -461,6 +463,51 @@ async def test_a_table_still_missing_after_a_result_is_read_next_run(
     assert report.refreshed == ["matches", *NOT_YET_RESOURCES]
     assert report.no_data_yet == NOT_YET_RESOURCES[1:]
     assert len((await read("mvp", TPL)).data) == 2
+    assert (await snapshot("mvp")).empty_since is None
+    assert (await snapshot("batting-leaderboard")).empty_since == T0.replace(
+        tzinfo=None
+    )
+
+
+def reads_of_the_mvp_table(upstream) -> bool:
+    read = bool(upstream.calls.get(ENDPOINTS["mvp"]))
+    upstream.reset()
+    return read
+
+
+async def test_a_table_never_made_is_read_with_a_doubling_wait(upstream, configured):
+    """A few reads a day, not one every run, for a table CricHeroes never make
+    -- say, after a first match that was abandoned."""
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    read_at = []
+    for hour in range(1, 49):
+        await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=hour))
+        if reads_of_the_mvp_table(upstream):
+            read_at.append(hour)
+
+    # Doubling to 32 hours, then the 24-hour age rule takes over.
+    assert read_at == [1, 2, 4, 8, 16, 32]
+    assert (await snapshot("mvp")).empty_since == T0.replace(tzinfo=None)
+
+
+async def test_a_result_reads_it_and_the_wait_carries_on(upstream, configured):
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    read_at = []
+    for hour in range(1, 8):
+        if hour == 3:
+            upstream.matches([completed(1), completed(2), upcoming(3)])
+        await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=hour))
+        if reads_of_the_mvp_table(upstream):
+            read_at.append(hour)
+
+    # Read on the result at hour 3; empty for 3 hours by then, so next at 6.
+    assert read_at == [1, 2, 3, 6]
 
 
 async def test_a_table_that_had_rows_keeps_them(upstream, configured):
