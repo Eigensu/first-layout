@@ -80,9 +80,67 @@ async def test_a_table_with_no_data_yet_is_not_a_failure(upstream, capsys):
     assert await script.run(script.parse_args([])) == 0
 
     out = capsys.readouterr().out
-    assert "refreshed matches, point-table, mvp" in out
-    assert "; no data yet for mvp" in out
+    # Listed once, under "no data yet", though it was one of the five calls.
+    assert (
+        "2242502: 5 call(s); refreshed matches, point-table, batting-leaderboard, "
+        "bowling-leaderboard; no data yet for mvp\n"
+    ) in out
     assert "FAILED" not in out
+
+
+@pytest.mark.parametrize(
+    "report, line",
+    [
+        # Before any fixture every table is empty: nothing to call refreshed.
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["matches", "mvp"],
+                no_data_yet=["matches", "mvp"],
+            ),
+            "2 call(s); no data yet for matches, mvp",
+        ),
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["matches", "mvp"],
+                unchanged=["point-table"],
+                no_data_yet=["mvp"],
+            ),
+            "2 call(s); refreshed matches; unchanged point-table; no data yet for mvp",
+        ),
+        (
+            SyncReport(tournament_id=1, refreshed=["matches"], unchanged=["mvp"]),
+            "1 call(s); refreshed matches; unchanged mvp",
+        ),
+        # The usual hourly run: every table still current, so no calls.
+        (
+            SyncReport(
+                tournament_id=1,
+                unchanged=["matches", "point-table", "mvp"],
+            ),
+            "0 call(s); refreshed nothing; unchanged matches, point-table, mvp",
+        ),
+        # The match list failed: no call succeeded.
+        (
+            SyncReport(tournament_id=1, failed={"matches": "down"}),
+            "1 call(s); refreshed nothing",
+        ),
+        # A failure beside a table with no data yet: the empty table is still
+        # listed once, and the failure is printed on its own FAILED line.
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["mvp"],
+                no_data_yet=["mvp"],
+                failed={"matches": "down"},
+            ),
+            "2 call(s); no data yet for mvp",
+        ),
+    ],
+)
+def test_each_resource_is_listed_once(report, line):
+    assert script.summary(report) == line
 
 
 def reports(monkeypatch, **contest_points):

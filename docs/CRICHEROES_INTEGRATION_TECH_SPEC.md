@@ -414,7 +414,8 @@ paid for three reads that could not succeed, since a failed read is retried
 every run. Instead (`NO_DATA_YET_CODES`, `is_no_data_yet`):
 
 - a resource with nothing cached is saved as an empty table, fetched now, and
-  reported in `SyncReport.no_data_yet` as well as `refreshed`, so the public
+  reported in `SyncReport.no_data_yet` as well as `refreshed` (it was one
+  call; the run log lists it once, under "no data yet"), so the public
   pages say the table is empty and the run exits 0;
 - with no completed match it is saved under the current digest, so it is read
   again when the first result comes in, not every run;
