@@ -17,10 +17,19 @@ import pytest_asyncio
 from cricheroes_responses import refusal
 from pymongo.errors import DuplicateKeyError
 
+from app.common.enums.tournaments import TournamentStatus
 from app.models.cricheroes import CricHeroesCallCount, CricHeroesSnapshot
+from app.models.tournament import Tournament
 from app.routes.admin.cricheroes import get_cricheroes_client
 from app.services import cricheroes_cache
-from app.services.cricheroes_cache import read, results_digest, sync, sync_tournament
+from app.services.cricheroes_cache import (
+    linked_tournaments,
+    read,
+    results_digest,
+    sync,
+    sync_tournament,
+    tournaments_to_sync,
+)
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import CricHeroesConfigError
 from app.services.cricheroes_usage import counted_client
@@ -86,11 +95,27 @@ async def upstream(db):
     await http.aclose()
 
 
-@pytest.fixture
-def configured(monkeypatch):
+async def link(
+    slug: str, cricheroes_id: int, status: TournamentStatus = TournamentStatus.LIVE
+) -> Tournament:
+    """A tournament linked to a CricHeroes tournament, as an admin does."""
+    tournament = Tournament(
+        slug=slug,
+        name=slug.upper(),
+        status=status,
+        cricheroes_tournament_id=cricheroes_id,
+    )
+    await tournament.insert()
+    return tournament
+
+
+@pytest_asyncio.fixture
+async def configured(db, monkeypatch):
+    """TPL linked to a tournament, and nothing configured: no cap, no list."""
     settings = get_settings()
-    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", str(TPL))
+    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", "")
     monkeypatch.setattr(settings, "cricheroes_snapshot_max_age_hours", 24.0)
+    await link("tpl", TPL)
     return settings
 
 
@@ -642,15 +667,67 @@ def test_the_digest_covers_completed_results_only():
 # -- sync() and the counter -------------------------------------------------------
 
 
-async def test_sync_covers_the_configured_tournaments(
-    upstream, configured, monkeypatch
-):
-    monkeypatch.setattr(configured, "cricheroes_sync_tournament_ids", f"{TPL},2251924")
+async def test_sync_covers_every_linked_tournament(upstream, configured):
+    await link("tpl-test", 2251924)
 
     reports = await sync(upstream.client)
 
     assert [r.tournament_id for r in reports] == [TPL, 2251924]
     assert await CricHeroesSnapshot.find_all().count() == 10
+
+
+# -- which tournaments are synced ----------------------------------------------
+
+
+async def test_a_linked_tournament_is_synced_with_nothing_configured(db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
+    assert await tournaments_to_sync() == []
+
+    await link("gsl", 2251924)
+
+    assert await tournaments_to_sync() == [2251924]
+
+
+async def test_tournaments_sharing_a_cricheroes_tournament_share_one_sync(
+    db, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
+    await link("tpl", TPL)
+    await link("tpl-copy", TPL)
+    await link("gsl", 2251924)
+
+    assert await linked_tournaments() == [TPL, 2251924]
+    assert await tournaments_to_sync() == [TPL, 2251924]
+
+
+async def test_unlinked_and_archived_tournaments_cost_nothing(db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
+    await Tournament(slug="wtsa", name="WTSA").insert()
+    await link("old", 2251924, TournamentStatus.ARCHIVED)
+    await link("draft", TPL, TournamentStatus.DRAFT)
+
+    # Archived is hidden; a draft, or a finished one, is still kept up to date.
+    assert await tournaments_to_sync() == [TPL]
+    await link("done", 2251924, TournamentStatus.COMPLETED)
+    assert await tournaments_to_sync() == [TPL, 2251924]
+
+
+async def test_the_cap_holds_linked_tournaments_back(db, monkeypatch):
+    await link("tpl", TPL)
+    await link("gsl", 2251924)
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", str(TPL))
+
+    assert await tournaments_to_sync() == [TPL]
+    assert await linked_tournaments() == [TPL, 2251924]
+
+
+async def test_the_cap_cannot_add_a_tournament_nobody_linked(db, monkeypatch):
+    await link("tpl", TPL)
+    monkeypatch.setattr(
+        get_settings(), "cricheroes_sync_tournament_ids", f"{TPL},2251924,60214"
+    )
+
+    assert await tournaments_to_sync() == [TPL]
 
 
 async def test_a_counted_run_is_counted(upstream, configured):
@@ -697,9 +774,36 @@ async def test_refresh_now(client, serve, configured):
     assert serve.total() == 5
 
 
-async def test_refresh_now_only_for_configured_tournaments(client, serve, configured):
+async def test_refresh_now_only_for_linked_tournaments(client, serve, configured):
     response = await client.post(
         "/api/admin/cricheroes/cache/refresh", params={"tournament_id": 60214}
+    )
+
+    assert response.status_code == 422
+    assert "no tournament is linked to it" in response.json()["detail"]
+    assert serve.total() == 0
+
+
+async def test_refresh_now_for_a_linked_tournament_needs_no_configuration(
+    client, serve, configured
+):
+    await link("gsl", 2251924)
+
+    response = await client.post(
+        "/api/admin/cricheroes/cache/refresh", params={"tournament_id": 2251924}
+    )
+
+    assert response.status_code == 200, response.text
+    [report] = response.json()["reports"]
+    assert (report["tournament_id"], report["calls"]) == (2251924, 5)
+
+
+async def test_refresh_now_stops_at_the_cap(client, serve, configured, monkeypatch):
+    await link("gsl", 2251924)
+    monkeypatch.setattr(configured, "cricheroes_sync_tournament_ids", str(TPL))
+
+    response = await client.post(
+        "/api/admin/cricheroes/cache/refresh", params={"tournament_id": 2251924}
     )
 
     assert response.status_code == 422
@@ -707,12 +811,13 @@ async def test_refresh_now_only_for_configured_tournaments(client, serve, config
     assert serve.total() == 0
 
 
-async def test_refresh_now_with_nothing_configured(client, serve, monkeypatch):
+async def test_refresh_now_with_nothing_linked(client, serve, db, monkeypatch):
     monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
 
     response = await client.post("/api/admin/cricheroes/cache/refresh")
 
     assert response.status_code == 422
+    assert "Admin > Tournaments" in response.json()["detail"]
     assert serve.total() == 0
 
 
@@ -744,8 +849,21 @@ async def test_cache_status(client, serve, configured):
     assert response.status_code == 200
     body = response.json()
     assert body["tournaments"] == [TPL] and body["max_age_hours"] == 24.0
+    assert body["linked_not_synced"] == []
     by_resource = {s["resource"]: s for s in body["snapshots"]}
     assert by_resource["point-table"]["rows"] == 3  # duplicates dropped
     assert by_resource["matches"]["rows"] == 2
     assert by_resource["mvp"]["rows"] == 0 and by_resource["mvp"]["fetched_at"] is None
     assert "HTTP 500" in by_resource["mvp"]["last_error"]
+
+
+async def test_cache_status_says_which_linked_tournaments_the_cap_holds_back(
+    client, serve, configured, monkeypatch
+):
+    await link("gsl", 2251924)
+    monkeypatch.setattr(configured, "cricheroes_sync_tournament_ids", str(TPL))
+
+    body = (await client.get("/api/admin/cricheroes/cache")).json()
+
+    assert body["tournaments"] == [TPL]
+    assert body["linked_not_synced"] == [2251924]

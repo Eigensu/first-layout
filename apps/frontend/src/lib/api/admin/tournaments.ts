@@ -18,6 +18,10 @@ export interface Tournament {
   /** The same tournament on CricHeroes, whose cached stats its /stats page
    *  shows. Null: not linked. */
   cricheroes_tournament_id?: number | null;
+  /** Only on the response to a save that linked a CricHeroes tournament, when
+   *  CricHeroes could not be asked whether they serve it: the link is saved,
+   *  and this says what is not confirmed. */
+  cricheroes_warning?: string | null;
   created_at: string;
   updated_at: string;
 }

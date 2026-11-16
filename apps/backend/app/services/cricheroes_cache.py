@@ -21,6 +21,13 @@ match and 4 a day for the age check: about 60 a day for both tournaments
 CricHeroes serve us, a fifth of the daily budget. During a match the standings
 are a match behind; that is the price.
 
+Which tournaments are kept is not configured: it is whatever the platform's
+tournaments are linked to (`tournaments_to_sync`, spec §13.1). Linking a
+tournament in Admin is the whole of setting it up, and the next run picks it
+up. Two tournaments linked to the same CricHeroes tournament share one cache,
+and cost one tournament's calls. CRICHEROES_SYNC_TOURNAMENT_IDS is only an
+optional cap on top of that.
+
 Each run also scores the contests that take their points from CricHeroes
 (app/services/cricheroes_points.py, spec §9.3), reading each completed match's
 MVP table about twice -- and nothing at all for a tournament no such contest
@@ -53,7 +60,9 @@ from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
 from app.common.datetime_utils import to_ist, to_utc_naive, utc_now
+from app.common.enums.tournaments import TournamentStatus
 from app.models.cricheroes import CricHeroesSnapshot
+from app.models.tournament import Tournament
 from app.schemas.admin.cricheroes_ops import SnapshotStatus, SyncReport
 from app.schemas.cricheroes import (
     BattingLeaderboardEntry,
@@ -471,19 +480,39 @@ async def _sync(
     return report
 
 
+async def linked_tournaments() -> List[int]:
+    """The CricHeroes tournaments our tournaments are linked to, once each,
+    lowest id first (spec §13.1). An archived tournament is hidden, so its link
+    no longer costs calls; a finished one stays until it is archived or
+    unlinked."""
+    linked = await Tournament.find(
+        {
+            "cricheroes_tournament_id": {"$ne": None},
+            "status": {"$ne": TournamentStatus.ARCHIVED.value},
+        }
+    ).to_list()
+    return sorted({t.cricheroes_tournament_id for t in linked})
+
+
+async def tournaments_to_sync() -> List[int]:
+    """The CricHeroes tournaments the scheduled run keeps cached: every linked
+    one (`linked_tournaments`), or, when CRICHEROES_SYNC_TOURNAMENT_IDS is set,
+    only those of them it names -- a cap an operator can put on what the sync
+    spends, not a list anyone has to maintain."""
+    linked = await linked_tournaments()
+    cap = get_settings().cricheroes_sync_tournaments
+    return [i for i in linked if i in cap] if cap else linked
+
+
 async def sync(
     client: CricHeroesClient,
     tournament_ids: Optional[List[int]] = None,
     *,
     force: bool = False,
 ) -> List[SyncReport]:
-    """Refresh every configured tournament (CRICHEROES_SYNC_TOURNAMENT_IDS),
-    or the ones given, one after the other."""
-    ids = (
-        tournament_ids
-        if tournament_ids is not None
-        else get_settings().cricheroes_sync_tournaments
-    )
+    """Refresh every tournament that is linked (`tournaments_to_sync`), or the
+    ones given, one after the other."""
+    ids = tournament_ids if tournament_ids is not None else await tournaments_to_sync()
     reports = []
     for tournament_id in ids:
         report = await sync_tournament(client, tournament_id, force=force)

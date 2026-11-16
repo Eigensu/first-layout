@@ -79,13 +79,20 @@ async def _cricheroes_tournament_for_scoring(tournament_id: TenantId) -> int:
                 "Admin > Tournaments."
             ),
         )
-    if linked not in get_settings().cricheroes_sync_tournaments:
+    if linked not in await cricheroes_cache.tournaments_to_sync():
+        # It is linked, so the operator's cap is what keeps the sync from
+        # reading it.
         raise HTTPException(
             status_code=422,
             detail=(
                 f"CricHeroes tournament {linked} is not among the tournaments "
-                "the scheduled sync reads (CRICHEROES_SYNC_TOURNAMENT_IDS), so "
-                "no MVP table of it would ever be read."
+                "the scheduled sync reads"
+                + (
+                    " (CRICHEROES_SYNC_TOURNAMENT_IDS holds it back)"
+                    if get_settings().cricheroes_sync_tournaments
+                    else ""
+                )
+                + ", so no MVP table of it would ever be read."
             ),
         )
     return linked

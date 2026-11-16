@@ -6,9 +6,10 @@ CricHeroes added. Our tournaments link to theirs (§13.1), each tournament's
 site shows its cached points table, MVP and leaderboards (§9.2), and a contest
 can take its fantasy points from CricHeroes' match MVP tables (§9.3). One
 request with our real credentials got `status: true` on 6 Nov 2026 (§5.1); the
-check script against the deployed keys (Phase 4) and the cron service
-(Phase 5b) are still open, and the public pages and contest points work only
-once both are. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
+check script against the deployed keys (Phase 4) is still open. The hourly sync
+(Phase 5b) runs as a Railway cron service and keeps every linked tournament
+cached with nothing to configure (§6.7, §13.1), so the public pages and contest
+points have data. Moved to the MediaHubble doc of 4 Nov 2026 (§13.12),
 which changed every path, the `device-type` header and every error code, and
 serves us two tournaments only. CricHeroes have closed the scope beyond that
 (§13.11).
@@ -130,13 +131,13 @@ New settings on the existing `Settings` class, following the established
 | `cricheroes_annual_quota` | `CRICHEROES_ANNUAL_QUOTA` | `100000` | no — the call counter's yardstick (§6.6) |
 | `cricheroes_quota_term_start` | `CRICHEROES_QUOTA_TERM_START` | unset (or blank): the last 365 days | no — the first day of any term, `YYYY-MM-DD` |
 | `cricheroes_usage_warn_percent` | `CRICHEROES_USAGE_WARN_PERCENT` | `50` | no |
-| `cricheroes_sync_tournament_ids` | `CRICHEROES_SYNC_TOURNAMENT_IDS` | empty: nothing cached | for the cache (§6.7), e.g. `2242502,2251924` |
+| `cricheroes_sync_tournament_ids` | `CRICHEROES_SYNC_TOURNAMENT_IDS` | empty: no cap, the sync reads every linked tournament | no — an optional cap (§6.7), e.g. `2242502`; leave it unset |
 | `cricheroes_snapshot_max_age_hours` | `CRICHEROES_SNAPSHOT_MAX_AGE_HOURS` | `24` | no |
 
 The timeout must be positive and the retry count non-negative; a bad value fails
 at startup rather than at the first call. So must every
 `CRICHEROES_SYNC_TOURNAMENT_IDS` entry be a positive number: a typo would
-otherwise only show as a cache that quietly stays empty.
+otherwise only show as a cap that quietly holds a tournament back.
 
 `cricheroes_timeout_seconds` defaults **below** the 30s upstream allows — see
 §6.4 for why. `cricheroes_max_retries` applies to 429 only (§6.5), and is `0` —
@@ -386,9 +387,23 @@ if there was one. `cricheroes_cache.read(resource, tournament_id)` is the read
 side; nothing a visitor triggers calls CricHeroes. The public stats routes
 (§9.2) are its first visitor-facing reader.
 
-**Cached, per tournament in `CRICHEROES_SYNC_TOURNAMENT_IDS`:** the match list,
-the points table (exact duplicate rows dropped, §8.2), the MVP table, and the
-batting and bowling leaderboards in their default order.
+**Cached, per CricHeroes tournament a tournament is linked to (§13.1):** the
+match list, the points table (exact duplicate rows dropped, §8.2), the MVP
+table, and the batting and bowling leaderboards in their default order.
+
+**Which tournaments (`tournaments_to_sync`).** Every CricHeroes tournament that
+a tournament is linked to, once each, lowest id first, except where the
+tournament is archived. Linking in Admin → Tournaments is the whole of setting
+it up; the next hourly run picks it up. Two of our tournaments linked to the
+same CricHeroes tournament share one cache and cost one tournament's calls, and
+a finished tournament stays on the schedule (24 match-list calls a day) until it
+is archived or unlinked. This replaced a separate list in
+`CRICHEROES_SYNC_TOURNAMENT_IDS`, which had to be set on every service that read
+it and let a link sit fetching nothing, without a word, when its id was missing
+from the list. The variable survives as an optional **cap**: when set, only the
+linked tournaments it names are read. It cannot add one nobody linked, and a run
+says which linked tournaments the cap held back (the script prints it,
+`GET /api/admin/cricheroes/cache` lists them as `linked_not_synced`).
 
 **Refreshed by results, not by the clock.** Each run (`sync_tournament`):
 1. reads the match list — one call — and always stores it, so live scores are
@@ -467,12 +482,12 @@ uses (§9.3).
 its own Railway cron service (start command
 `. /opt/venv/bin/activate && python scripts/sync_cricheroes.py`, schedule
 `0 * * * *`, with `MONGODB_URL`, `MONGODB_DB_NAME`, `TENANCY`, the three
-credentials and `CRICHEROES_SYNC_TOURNAMENT_IDS` set). It exits 0 when every
-tournament refreshed or was current, 1 on any failure or missing credential,
-and 0 with a message when nothing is configured. Admins can see the cache at
+credentials set; no list of tournaments). It exits 0 when every tournament
+refreshed or was current, 1 on any failure or missing credential, and 0 with a
+message when no tournament is linked. Admins can see the cache at
 `GET /api/admin/cricheroes/cache` and refresh it with
 `POST /api/admin/cricheroes/cache/refresh` (`tournament_id`, `force`), which
-accepts only configured tournaments.
+accepts only tournaments the scheduled run keeps.
 
 ### 6.4 Timeout: deliberate deviation
 
@@ -946,10 +961,10 @@ archived slug, is the usual 400 from `get_tenant`.
   nothing to show and nothing coming; so does a legacy single-tournament
   service (`TENANCY=single`), which has no registry row to link.
 - `fetched_at` — when the sync last read this table, in IST. `null` with
-  `linked: true` means linked but not fetched yet: the id is not in
-  `CRICHEROES_SYNC_TOURNAMENT_IDS`, the sync has not run, or every read of it
-  has failed. A later failed refresh keeps the last good rows (§6.7), so this
-  is how a page says how old they are.
+  `linked: true` means linked but not fetched yet: the sync has not run since
+  it was linked (it runs hourly), `CRICHEROES_SYNC_TOURNAMENT_IDS` holds it
+  back, or every read of it has failed. A later failed refresh keeps the last
+  good rows (§6.7), so this is how a page says how old they are.
 - `rows` — the cached rows in CricHeroes' order, under our attribute names
   (`response_model_by_alias=False`, §8.3); unmodelled extras still come
   through under their upstream names.
@@ -986,8 +1001,9 @@ are its fantasy points.
 **Opt in, per contest.** `Contest.points_from_cricheroes` is off by default,
 and for every existing contest. Tournament admins turn it on on the contest's
 page. It can only be turned on when the contest's tournament is linked to a
-CricHeroes tournament (§13.1) that `CRICHEROES_SYNC_TOURNAMENT_IDS` lists.
-Otherwise the answer is a 422 saying which is missing, since no MVP table
+CricHeroes tournament (§13.1) that the sync reads, which any linked tournament
+is unless `CRICHEROES_SYNC_TOURNAMENT_IDS` holds it back. Otherwise the answer
+is a 422 saying which is missing, since no MVP table
 would ever be read. While it is on, the admin points form is refused with a
 409, because the next sync would overwrite whatever was entered, and the team
 points editor shows the points read-only. Turning it off leaves the points as
@@ -1184,7 +1200,8 @@ not connect to the database, so that call is not in the counter (§6.6).
 | 3d | Move to the MediaHubble doc of 4 Nov 2026: paths, header, error codes, new fields (§13.12) | ✅ done |
 | 4 | Obtain real credentials (the secret above all, §13.12), set in Railway, run the check script | script exits 0 |
 | 5 | Call counter — calls/day/endpoint, logged and queryable (§6.6) | ✅ done |
-| 5b | Cache with a results-driven scheduled sync (§6.7) | ✅ done; the Railway cron service is still to be created |
+| 5b | Cache with a results-driven scheduled sync (§6.7) | ✅ done; runs hourly as the Railway cron service `walle-stats-cron`, after the membership refresh |
+| 5c | The sync reads every linked tournament, so there is no list to keep; a link is checked with CricHeroes when it is saved (§6.7, §13.1) | ✅ done |
 | 6 | Public pages read the cache: MVP, leaderboards, points table (§9.2), with tournaments linked to CricHeroes (§13.1) | ✅ done — reads `cricheroes_cache.read`, never CricHeroes; shows data once the cron service (5b) and credentials (4) are live |
 | 7 | Contest points from CricHeroes' match MVP tables, opt-in per contest (§9.3) | ✅ done — scores once the cron service (5b) and credentials (4) are live and the tournament is linked |
 
@@ -1207,11 +1224,20 @@ allowance — far too late to change a polling interval cheaply.
    cricheroes.com tournament link. The API accepts only a positive whole
    number up to 2^53 − 1 (strictly: no `true`, `"2242502"` or `2242502.0`),
    and `null` unlinks. It is not shown on the public tournament
-   (`/api/tournaments`). Nothing checks it against the ids CricHeroes serve us
-   or against `CRICHEROES_SYNC_TOURNAMENT_IDS`: an id outside the sync list
-   simply has no cached data, and its stats page says so. Two of our
-   tournaments may share an id. The public stats routes (§9.2) key off it;
-   the admin routes (§9) still take a raw CricHeroes id.
+   (`/api/tournaments`). Saving a new or changed link asks CricHeroes, with one
+   call (the match list the sync reads first), whether they serve that
+   tournament to us. An id outside our agreement (170001, §13.12) is refused
+   with a 422 and the tournament is not saved, so a typo is caught now rather
+   than showing as a stats page that stays empty. A tournament with no fixtures
+   yet counts as served. Anything else — an outage, their firewall, no
+   credentials on that service — cannot say either way, so the link is saved
+   and the response carries a `cricheroes_warning` that the admin form shows;
+   an outage at CricHeroes does not stop an admin linking. Saving the same link
+   again, or unlinking, asks nothing, and a request refused for another reason
+   makes no call. Linking is also all it takes to have the tournament synced
+   (§6.7); nothing else needs setting. Two of our tournaments may share an id.
+   The public stats routes (§9.2) key off it; the admin routes (§9) still take
+   a raw CricHeroes id.
 2. **Player identity — decided: an explicit id, set at import.** `Player` has a
    `cricheroes_player_id`, filled from a "CricHeroes Player ID" column in the
    player import template (a `CricHeroes ID` header is accepted too). Name

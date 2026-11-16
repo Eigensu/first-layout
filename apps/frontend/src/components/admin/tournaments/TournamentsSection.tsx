@@ -147,12 +147,18 @@ function TournamentForm({
   >({ state: "idle" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the tournament saved but CricHeroes could not confirm the link.
+  const [warning, setWarning] = useState<string | null>(null);
   const slugCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
   const cricheroesId = parseCricHeroesTournamentId(form.cricheroes);
+
+  // Once it has saved, however the admin dismisses the form the list reloads;
+  // before that, closing just discards the edit.
+  const dismiss = warning ? onSaved : onClose;
 
   // Availability check (debounced). Local format errors short-circuit the call.
   const scheduleSlugCheck = useCallback(
@@ -228,12 +234,16 @@ function TournamentForm({
 
     try {
       setSaving(true);
-      if (isEdit && initial) {
-        await adminTournamentsApi.update(initial.id, formToPayload(form, true));
+      const saved =
+        isEdit && initial
+          ? await adminTournamentsApi.update(initial.id, formToPayload(form, true))
+          : await adminTournamentsApi.create(formToPayload(form, false) as TournamentCreate);
+      if (saved.cricheroes_warning) {
+        // Saved, but stay open: the admin should read what is unconfirmed.
+        setWarning(saved.cricheroes_warning);
       } else {
-        await adminTournamentsApi.create(formToPayload(form, false) as TournamentCreate);
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -254,7 +264,7 @@ function TournamentForm({
               {isEdit ? `Edit ${initial?.name}` : "Create Tournament"}
             </h2>
             <button
-              onClick={onClose}
+              onClick={dismiss}
               className="p-1 rounded hover:bg-bg-elevated text-text-muted"
               aria-label="Close"
             >
@@ -440,8 +450,9 @@ function TournamentForm({
                   <>
                     Shows its points table, MVP and leaderboards on{" "}
                     <span className="font-mono">/stats</span>, from the hourly
-                    CricHeroes sync (only for ids in CRICHEROES_SYNC_TOURNAMENT_IDS).
-                    Leave empty for none.
+                    CricHeroes sync, which picks it up on its next run. Checked
+                    with CricHeroes when you save: only tournaments in our
+                    CricHeroes agreement can be linked. Leave empty for none.
                   </>
                 )}
               </p>
@@ -474,13 +485,30 @@ function TournamentForm({
               </div>
             )}
 
+            {warning && (
+              <div
+                role="status"
+                className="rounded-lg border border-border-subtle bg-bg-elevated text-warning text-sm px-3 py-2"
+              >
+                Saved. {warning}
+              </div>
+            )}
+
             <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="ghost" onClick={onClose} disabled={saving} className="text-text-main hover:bg-bg-card-soft">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving || slugStatus.state === "error"}>
-                {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Tournament"}
-              </Button>
+              {warning ? (
+                <Button type="button" onClick={dismiss}>
+                  Close
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" variant="ghost" onClick={onClose} disabled={saving} className="text-text-main hover:bg-bg-card-soft">
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving || slugStatus.state === "error"}>
+                    {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Tournament"}
+                  </Button>
+                </>
+              )}
             </div>
           </form>
         </CardBody>

@@ -50,8 +50,12 @@ class SnapshotStatus(BaseModel):
 
 
 class CacheStatusResponse(BaseModel):
-    # CRICHEROES_SYNC_TOURNAMENT_IDS.
+    # The CricHeroes tournaments the scheduled sync keeps cached: every one a
+    # tournament is linked to, less any held back by CRICHEROES_SYNC_TOURNAMENT_IDS.
     tournaments: List[int]
+    # Linked, but outside CRICHEROES_SYNC_TOURNAMENT_IDS, so never refreshed.
+    # Empty unless that cap is set.
+    linked_not_synced: List[int] = Field(default_factory=list)
     max_age_hours: float
     snapshots: List[SnapshotStatus]
 
