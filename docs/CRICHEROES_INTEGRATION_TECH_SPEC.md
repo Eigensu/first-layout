@@ -434,6 +434,13 @@ every run. Instead (`NO_DATA_YET_CODES`, `is_no_data_yet`):
 - a resource that already had rows keeps them, and the answer is a failure
   like any other: a table is not expected to lose its rows.
 
+A mistyped tournament id cannot hide behind this. CricHeroes refuse every id
+outside our agreement, real or made up, with 170001 (seen live for a made-up
+id on 16 Nov 2026, §7), not with 170011. That refusal is a failure, so the run
+exits 1. A 170011 on the match list therefore comes only from a tournament we
+are served that has no fixtures yet. What no answer can catch is the *other*
+served tournament configured by mistake: its tables are read like any others.
+
 **One run at a time, across processes.** The scheduled job and walle-api are
 separate services, so an in-memory lock cannot keep an admin's "refresh now"
 from overlapping the hourly run. Each run first claims the tournament with one
@@ -597,6 +604,12 @@ And one seen live on 15 Nov 2026, with our real credentials, for tournament
 
 The sync caches 45002 and 170011–170014 as empty tables rather than failures
 (§6.7).
+
+On 16 Nov 2026, with our real credentials, the match list of a made-up
+tournament id (98765432) answered 170001 ("Access to this tournament is not
+allowed."). So the access check comes before the lookup: an id that does not
+exist is refused like a real tournament outside our agreement, and never gets
+the 170011 of a served tournament without fixtures.
 
 The client now sends a `User-Agent` naming our app, which gets past the
 firewall (§5.1). If the block comes back, the error says so rather than
