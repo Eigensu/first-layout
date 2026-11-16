@@ -38,8 +38,8 @@ before the first match -- is not a failure: it is cached as an empty table,
 and read again when a result comes in, like any other. Otherwise every run
 before the first match would fail and pay for three reads that cannot succeed.
 One still empty after a match is over is read again too, as CricHeroes may make
-it late, but with a doubling wait: a table they never make costs a few reads a
-day, not one every run.
+it late, but with a doubling wait that each new result starts again: a table
+they never make costs a few reads per result, not one every run.
 """
 
 import hashlib
@@ -236,10 +236,11 @@ def _empty_retry_due(snapshot: dict, fetched: datetime, now: datetime) -> bool:
 
     It waits as long as it had been empty when last read, so the wait doubles:
     on an hourly schedule it is read about 1, 2, 4, 8, 16 and 32 hours after it
-    was first found empty, then once a day by the age rule, and whenever a
-    result comes in. CricHeroes may make the MVP table a while
+    was found empty, then once a day by the age rule. A new result reads it at
+    once and starts the wait again. CricHeroes may make the MVP table a while
     after the match ends, but a table they never make must not cost a read
-    every run.
+    every run. The price is delay: a table made late is read about as late
+    again as it was made, and never more than the age rule allows.
     """
     since = _when(snapshot.get("empty_since"))
     return since is not None and now - fetched >= fetched - since
@@ -441,9 +442,13 @@ async def _sync(
             # Before the first result there is nothing to wait for: the table
             # is read again when one comes in. After it, CricHeroes may make
             # it late, so it is read again with a doubling wait, counted from
-            # when it was first found empty.
+            # when it was found empty after the latest result. A new result
+            # starts the wait again: CricHeroes may make the table soon after
+            # it, however long it had been empty before.
             if played:
-                empty_since = _when(snapshot.get("empty_since")) or now
+                new_result = snapshot.get("results_digest") != digest
+                kept = None if new_result else _when(snapshot.get("empty_since"))
+                empty_since = kept or now
         await _save(resource.name, tournament_id, data, digest, now, empty_since)
         report.refreshed.append(resource.name)
 
