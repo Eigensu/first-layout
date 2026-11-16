@@ -7,7 +7,10 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "clean": "turbo run clean",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "mobile": "pnpm --filter @fantasy11/mobile start",
+    "android": "pnpm --filter @fantasy11/mobile android",
+    "ios": "pnpm --filter @fantasy11/mobile ios"
   },
   "devDependencies": {
     "@turbo/gen": "^2.5.8",

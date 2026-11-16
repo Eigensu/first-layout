@@ -1,0 +1,51 @@
+{
+  "cli": {
+    "version": ">= 16.28.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "22.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://walle-api.wallearena.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1027007110827-udskn7fcg8tulvdv4meip7q0v121t8i2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "1027007110827-ttrlbacrn9csq01kvdk2d48ucj7jtbcj.apps.googleusercontent.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "node": "22.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://walle-api.wallearena.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1027007110827-udskn7fcg8tulvdv4meip7q0v121t8i2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "1027007110827-ttrlbacrn9csq01kvdk2d48ucj7jtbcj.apps.googleusercontent.com"
+      }
+    },
+    "preview-simulator": {
+      "ios": {
+        "simulator": true
+      },
+      "node": "22.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://walle-api.wallearena.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1027007110827-udskn7fcg8tulvdv4meip7q0v121t8i2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "1027007110827-ttrlbacrn9csq01kvdk2d48ucj7jtbcj.apps.googleusercontent.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "node": "22.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://walle-api.wallearena.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1027007110827-udskn7fcg8tulvdv4meip7q0v121t8i2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "1027007110827-ttrlbacrn9csq01kvdk2d48ucj7jtbcj.apps.googleusercontent.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -8,7 +8,8 @@ This repository contains the Wall-E Layout (MWPL) monorepo — a multi-applicati
 mwpl/
 ├── apps/
 │   ├── frontend/          # Next.js frontend application (app dir)
-│   └── backend/           # FastAPI backend application
+│   ├── backend/           # FastAPI backend application
+│   └── mobile/            # Expo / React Native app (Wall-E Arena)
 ├── frontend/              # Optional standalone public frontend (legacy)
 ├── packages/              # Shared workspace packages (env / constants / ui)
 ├── docs/                  # Project documentation
@@ -88,6 +89,24 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 pnpm run dev  # uses uvicorn script from apps/backend/package.json
 ```
+
+## Mobile App
+
+`apps/mobile` is the Expo (SDK 54) / React Native app, brought over from the
+`walle-app` repo. It talks to the backend in `apps/backend`.
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env   # set EXPO_PUBLIC_API_BASE_URL
+pnpm mobile     # expo start
+pnpm ios        # expo run:ios
+pnpm android    # expo run:android
+```
+
+EAS builds run from `apps/mobile` (`eas build --profile <profile>`); see
+`apps/mobile/eas.json`. Planning docs live in `docs/mobile/`.
+
+The mobile app has no `dev` or `build` script on purpose: `pnpm dev` and
+`pnpm build` stay web and backend only, and the app is built by EAS.
 
 ## Available Scripts
 
