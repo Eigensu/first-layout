@@ -113,10 +113,29 @@ async def test_a_table_with_no_data_yet_is_not_a_failure(upstream, capsys):
             SyncReport(tournament_id=1, refreshed=["matches"], unchanged=["mvp"]),
             "1 call(s); refreshed matches; unchanged mvp",
         ),
+        # The usual hourly run: every table still current, so no calls.
+        (
+            SyncReport(
+                tournament_id=1,
+                unchanged=["matches", "point-table", "mvp"],
+            ),
+            "0 call(s); refreshed nothing; unchanged matches, point-table, mvp",
+        ),
         # The match list failed: no call succeeded.
         (
             SyncReport(tournament_id=1, failed={"matches": "down"}),
             "1 call(s); refreshed nothing",
+        ),
+        # A failure beside a table with no data yet: the empty table is still
+        # listed once, and the failure is printed on its own FAILED line.
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["mvp"],
+                no_data_yet=["mvp"],
+                failed={"matches": "down"},
+            ),
+            "2 call(s); no data yet for mvp",
         ),
     ],
 )
