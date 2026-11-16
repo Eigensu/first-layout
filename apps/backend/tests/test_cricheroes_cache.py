@@ -421,6 +421,8 @@ async def test_tables_not_made_yet_are_empty_not_failed(upstream, configured):
     assert report.calls == 5
     mvp = await read("mvp", TPL)
     assert (mvp.data, mvp.fetched_at, mvp.last_error) == ([], T0, None)
+    # Nothing is over, so there is nothing to retry: no doubling wait.
+    assert (await snapshot("mvp")).empty_since is None
 
 
 async def test_they_are_read_again_only_when_a_match_is_over(upstream, configured):
@@ -461,6 +463,112 @@ async def test_a_table_still_missing_after_a_result_is_read_next_run(
     assert report.refreshed == ["matches", *NOT_YET_RESOURCES]
     assert report.no_data_yet == NOT_YET_RESOURCES[1:]
     assert len((await read("mvp", TPL)).data) == 2
+    assert (await snapshot("mvp")).empty_since is None
+    assert (await snapshot("batting-leaderboard")).empty_since == T0.replace(
+        tzinfo=None
+    )
+
+
+def mvp_table_was_read(upstream) -> bool:
+    return bool(upstream.calls.get(ENDPOINTS["mvp"]))
+
+
+async def hours_the_mvp_table_is_read(upstream, last_hour: int, changes=None):
+    """Syncs every hour from T0 + 1 hour to `last_hour`, first applying
+    `changes[hour]` to CricHeroes if there is one, and returns the hours whose
+    run read the MVP table."""
+    read_at = []
+    for hour in range(1, last_hour + 1):
+        if changes and hour in changes:
+            changes[hour]()
+        upstream.reset()
+        await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=hour))
+        if mvp_table_was_read(upstream):
+            read_at.append(hour)
+    return read_at
+
+
+def a_second_result(upstream):
+    upstream.matches([completed(1), completed(2), upcoming(3)])
+
+
+def the_mvp_table_is_made(upstream):
+    upstream.answers[ENDPOINTS["mvp"]] = ok(DOC[ENDPOINTS["mvp"]]["data"])
+
+
+async def test_a_table_never_made_is_read_with_a_doubling_wait(upstream, configured):
+    """A few reads a day, not one every run, for a table CricHeroes never make
+    -- say, after a first match that was abandoned."""
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+
+    read_at = await hours_the_mvp_table_is_read(upstream, 60)
+
+    # Doubling to 32 hours, then once a day by the 24-hour age rule.
+    assert read_at == [1, 2, 4, 8, 16, 32, 56]
+    assert (await snapshot("mvp")).empty_since == T0.replace(tzinfo=None)
+
+
+async def test_a_result_reads_it_and_starts_the_wait_again(upstream, configured):
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+
+    read_at = await hours_the_mvp_table_is_read(
+        upstream, 8, {3: lambda: a_second_result(upstream)}
+    )
+
+    # Read on the result at hour 3, then 1, 2 and 4 hours after it.
+    assert read_at == [1, 2, 3, 4, 5, 7]
+    assert (await snapshot("mvp")).empty_since == (T0 + timedelta(hours=3)).replace(
+        tzinfo=None
+    )
+
+
+async def test_a_table_made_after_a_long_wait_is_read_within_the_hour(
+    upstream, configured
+):
+    """However long the table was empty, one CricHeroes make soon after a new
+    result is read on the next run, not a day later."""
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+
+    read_at = await hours_the_mvp_table_is_read(
+        upstream,
+        241,
+        {
+            240: lambda: a_second_result(upstream),
+            241: lambda: the_mvp_table_is_made(upstream),
+        },
+    )
+
+    assert read_at[-2:] == [240, 241]
+    assert len((await read("mvp", TPL)).data) == 2
+    assert (await snapshot("mvp")).empty_since is None
+
+
+async def test_a_failed_read_during_the_wait_is_retried_and_the_wait_goes_on(
+    upstream, configured
+):
+    before_the_first_match(upstream, completed(1))
+    await sync_tournament(upstream.client, TPL, now=T0)
+    mvp = ENDPOINTS["mvp"]
+
+    def down():
+        upstream.answers[mvp] = httpx.Response(500, text="down")
+
+    def back_with_no_data():
+        upstream.answers[mvp] = refusal(*NOT_YET[mvp])
+
+    read_at = await hours_the_mvp_table_is_read(
+        upstream, 11, {4: down, 5: back_with_no_data}
+    )
+
+    # Failed at hour 4, so read again at 5, like any failure. Empty for 5
+    # hours by then, so next at 10.
+    assert read_at == [1, 2, 4, 5, 10]
+    mvp_snapshot = await snapshot("mvp")
+    assert mvp_snapshot.last_error is None
+    assert mvp_snapshot.empty_since == T0.replace(tzinfo=None)
 
 
 async def test_a_table_that_had_rows_keeps_them(upstream, configured):

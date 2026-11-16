@@ -418,8 +418,19 @@ every run. Instead (`NO_DATA_YET_CODES`, `is_no_data_yet`):
   pages say the table is empty and the run exits 0;
 - with no completed match it is saved under the current digest, so it is read
   again when the first result comes in, not every run;
-- once a match is completed it is saved without a digest, so it is read again
-  next run: CricHeroes may make the MVP table a while after the match ends;
+- once a match is completed CricHeroes may make the MVP table a while after it
+  ends, so the table is read again before the next result, but with a doubling
+  wait (`empty_since`, when it was found empty after the latest result): each
+  read waits as long as it had been empty at the last one, so on the hourly
+  schedule it is read about 1, 2, 4, 8, 16 and 32 hours later, then daily by
+  the age rule. A new result reads it at once, as usual, and starts the wait
+  again, since CricHeroes may make the table soon after it however long it was
+  empty before. A table CricHeroes never make — after an abandoned first
+  match, say — costs about six extra calls per result, where reading it every
+  run would cost 24 a day per table. The price is delay: a table made late is
+  read at the next step of the wait, so about as late again as it was made
+  (one made 9 hours after the result is read at 16 hours), and never more than
+  a day late;
 - a resource that already had rows keeps them, and the answer is a failure
   like any other: a table is not expected to lose its rows.
 

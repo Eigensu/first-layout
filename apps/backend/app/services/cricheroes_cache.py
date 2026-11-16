@@ -37,6 +37,9 @@ A table CricHeroes have no data for yet -- the MVP table and leaderboards
 before the first match -- is not a failure: it is cached as an empty table,
 and read again when a result comes in, like any other. Otherwise every run
 before the first match would fail and pay for three reads that cannot succeed.
+One still empty after a match is over is read again too, as CricHeroes may make
+it late, but with a doubling wait that each new result starts again: a table
+they never make costs a few reads per result, not one every run.
 """
 
 import hashlib
@@ -189,11 +192,10 @@ async def _save(
     resource: str,
     tournament_id: int,
     data: Any,
-    digest: Optional[str],
+    digest: str,
     when: datetime,
+    empty_since: Optional[datetime] = None,
 ) -> None:
-    # Without a digest the resource counts as behind, and the next run reads
-    # it again.
     dumped = _dump(data)
     await _upsert(
         resource,
@@ -203,6 +205,7 @@ async def _save(
             "rows": len(dumped) if isinstance(dumped, list) else 1,
             "fetched_at": when,
             "results_digest": digest,
+            "empty_since": empty_since,
             "last_error": None,
             "last_error_at": None,
         },
@@ -226,6 +229,21 @@ def _empty_for_now(snapshot: dict, error: Exception) -> bool:
     rows is not expected to lose them, so that is a failure like any other,
     and its rows are kept."""
     return is_no_data_yet(error) and not snapshot.get("rows")
+
+
+def _empty_retry_due(snapshot: dict, fetched: datetime, now: datetime) -> bool:
+    """Whether a table still empty after a match is over is due a read.
+
+    It waits as long as it had been empty when last read, so the wait doubles:
+    on an hourly schedule it is read about 1, 2, 4, 8, 16 and 32 hours after it
+    was found empty, then once a day by the age rule. A new result reads it at
+    once and starts the wait again. CricHeroes may make the MVP table a while
+    after the match ends, but a table they never make must not cost a read
+    every run. The price is delay: a table made late is read about as late
+    again as it was made, and never more than the age rule allows.
+    """
+    since = _when(snapshot.get("empty_since"))
+    return since is not None and now - fetched >= fetched - since
 
 
 # -- reading ---------------------------------------------------------------
@@ -404,11 +422,12 @@ async def _sync(
             or fetched is None
             or snapshot.get("results_digest") != digest
             or now - fetched >= max_age
+            or _empty_retry_due(snapshot, fetched, now)
         )
         if not due:
             report.unchanged.append(resource.name)
             continue
-        current: Optional[str] = digest
+        empty_since: Optional[datetime] = None
         try:
             data = await resource.fetch(client, tournament_id)
         except CricHeroesConfigError:
@@ -421,12 +440,16 @@ async def _sync(
             data = []
             report.no_data_yet.append(resource.name)
             # Before the first result there is nothing to wait for: the table
-            # is read again when one comes in. After it, the table is due, but
-            # CricHeroes may take a while to make it, so it is read again next
-            # run.
+            # is read again when one comes in. After it, CricHeroes may make
+            # it late, so it is read again with a doubling wait, counted from
+            # when it was found empty after the latest result. A new result
+            # starts the wait again: CricHeroes may make the table soon after
+            # it, however long it had been empty before.
             if played:
-                current = None
-        await _save(resource.name, tournament_id, data, current, now)
+                new_result = snapshot.get("results_digest") != digest
+                kept = None if new_result else _when(snapshot.get("empty_since"))
+                empty_since = kept or now
+        await _save(resource.name, tournament_id, data, digest, now, empty_since)
         report.refreshed.append(resource.name)
 
     # Contest points (spec §9.3), only for a tournament some opted-in contest

@@ -66,6 +66,10 @@ class CricHeroesSnapshot(Document):
     # other resource, the match list's digest when it was fetched: a resource
     # whose digest is behind the match list's is due a refresh (§6.7).
     results_digest: Optional[str] = None
+    # When CricHeroes first had no data for this table although a match was
+    # over. While set, the table is read again with a doubling wait, not every
+    # run (§6.7).
+    empty_since: Optional[datetime] = None
     last_error: Optional[str] = None
     last_error_at: Optional[datetime] = None
     # On the match list's document only: when a refresh of the tournament
