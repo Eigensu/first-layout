@@ -80,9 +80,48 @@ async def test_a_table_with_no_data_yet_is_not_a_failure(upstream, capsys):
     assert await script.run(script.parse_args([])) == 0
 
     out = capsys.readouterr().out
-    assert "refreshed matches, point-table, mvp" in out
-    assert "; no data yet for mvp" in out
+    # Listed once, under "no data yet", though it was one of the five calls.
+    assert (
+        "2242502: 5 call(s); refreshed matches, point-table, batting-leaderboard, "
+        "bowling-leaderboard; no data yet for mvp\n"
+    ) in out
     assert "FAILED" not in out
+
+
+@pytest.mark.parametrize(
+    "report, line",
+    [
+        # Before any fixture every table is empty: nothing to call refreshed.
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["matches", "mvp"],
+                no_data_yet=["matches", "mvp"],
+            ),
+            "2 call(s); no data yet for matches, mvp",
+        ),
+        (
+            SyncReport(
+                tournament_id=1,
+                refreshed=["matches", "mvp"],
+                unchanged=["point-table"],
+                no_data_yet=["mvp"],
+            ),
+            "2 call(s); refreshed matches; unchanged point-table; no data yet for mvp",
+        ),
+        (
+            SyncReport(tournament_id=1, refreshed=["matches"], unchanged=["mvp"]),
+            "1 call(s); refreshed matches; unchanged mvp",
+        ),
+        # The match list failed: no call succeeded.
+        (
+            SyncReport(tournament_id=1, failed={"matches": "down"}),
+            "1 call(s); refreshed nothing",
+        ),
+    ],
+)
+def test_each_resource_is_listed_once(report, line):
+    assert script.summary(report) == line
 
 
 def reports(monkeypatch, **contest_points):

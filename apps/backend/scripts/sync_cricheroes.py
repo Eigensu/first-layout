@@ -18,7 +18,8 @@ many of each.
 
 Needs MONGODB_URL and the three CRICHEROES_* credentials. Exits 0 when every
 tournament refreshed or was current -- a table CricHeroes have no data for yet,
-like the MVP table before the first match, counts as refreshed -- 1 when
+like the MVP table before the first match, is not a failure and is listed under
+"no data yet" -- 1 when
 anything failed (a resource, a match's MVP table or a contest's scoring) or
 the credentials are missing, and
 0 with a message when no tournament is configured, so a scheduled service set
@@ -33,6 +34,7 @@ import sys
 # Ensure the backend package root is importable when running this script directly.
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
+from app.schemas.admin.cricheroes_ops import SyncReport  # noqa: E402
 from app.services import cricheroes_cache, cricheroes_usage  # noqa: E402
 from app.services.cricheroes_errors import CricHeroesConfigError  # noqa: E402
 from config.database import close_mongo_connection, connect_to_mongo  # noqa: E402
@@ -51,6 +53,24 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--force", action="store_true", help="read every resource, changed or not"
     )
     return parser.parse_args(argv)
+
+
+def summary(report: SyncReport) -> str:
+    """What one tournament's run did, each resource named once.
+
+    A table CricHeroes have no data for yet -- the MVP table before the first
+    match, say -- is in both `refreshed` and `no_data_yet` (it was one call,
+    cached as empty), so it is listed only under "no data yet".
+    """
+    got = [name for name in report.refreshed if name not in report.no_data_yet]
+    parts = [f"{report.calls} call(s)"]
+    if got or not report.no_data_yet:
+        parts.append(f"refreshed {', '.join(got) or 'nothing'}")
+    if report.unchanged:
+        parts.append(f"unchanged {', '.join(report.unchanged)}")
+    if report.no_data_yet:
+        parts.append(f"no data yet for {', '.join(report.no_data_yet)}")
+    return "; ".join(parts)
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -77,16 +97,7 @@ async def run(args: argparse.Namespace) -> int:
         if report.skipped:
             print(f"{report.tournament_id}: skipped, {report.skipped}")
             continue
-        line = (
-            f"{report.tournament_id}: {report.calls} call(s); refreshed "
-            f"{', '.join(report.refreshed) or 'nothing'}"
-        )
-        if report.unchanged:
-            line += f"; unchanged {', '.join(report.unchanged)}"
-        if report.no_data_yet:
-            # Before the first match, say: cached as empty, not a failure.
-            line += f"; no data yet for {', '.join(report.no_data_yet)}"
-        print(line)
+        print(f"{report.tournament_id}: {summary(report)}")
         for resource, error in sorted(report.failed.items()):
             failed = True
             print(f"  FAILED {resource}: {error}")
