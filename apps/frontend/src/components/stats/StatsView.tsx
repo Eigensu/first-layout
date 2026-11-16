@@ -162,9 +162,6 @@ export function StatsView({
           <BarChart3 className="h-7 w-7 text-accent-pink-500" aria-hidden />
           <h1 className="text-3xl font-extrabold text-text-main">Tournament Stats</h1>
         </div>
-        <p className="mt-2 text-sm text-text-muted">
-          From CricHeroes, refreshed after every completed match.
-        </p>
       </header>
 
       {!hasTournament ? (
