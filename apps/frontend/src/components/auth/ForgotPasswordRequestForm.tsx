@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -53,8 +54,10 @@ export function ForgotPasswordRequestForm({
     setError(null);
     const result = await sendResetCode(channel, value);
     setLoading(false);
-    if (result.ok) onSent(result.next);
-    else setError(result.error);
+    if (result.ok) {
+      posthog.capture("password_reset_requested", { channel });
+      onSent(result.next);
+    } else setError(result.error);
   }
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import Link from "next/link";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
@@ -36,8 +37,12 @@ export function ForgotPasswordVerifyForm({
     setError(null);
     const result = await checkResetCode(destination, otp);
     setLoading(false);
-    if (result.ok) onVerified(result.next);
-    else setError(result.error);
+    if (result.ok) {
+      posthog.capture("password_reset_code_verified", {
+        channel: byEmail ? "email" : "sms",
+      });
+      onVerified(result.next);
+    } else setError(result.error);
   }
 
   return (

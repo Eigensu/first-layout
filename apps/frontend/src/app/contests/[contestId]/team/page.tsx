@@ -28,6 +28,7 @@ import { PlayerSelectionStep } from "./molecules/PlayerSelectionStep";
 import { CaptainSelectionStep } from "./molecules/CaptainSelectionStep";
 import { TeamSummaryStep } from "./molecules/TeamSummaryStep";
 import { ReplacePlayerModal } from "./molecules/ReplacePlayerModal";
+import posthog from "posthog-js";
 
 export default function ContestTeamBuilderPage() {
   const { isAuthenticated } = useAuth();
@@ -274,12 +275,25 @@ export default function ContestTeamBuilderPage() {
       if (editMode && existingTeam) {
         // Update existing team
         await updateTeam(existingTeam.id, teamData, token);
+        posthog.capture("team_updated", {
+          player_count: selectedPlayers.length,
+          update_source: "contest_builder",
+        });
         gotoTeams();
       } else {
         const created = await createTeam(teamData, token);
+        posthog.capture("team_created", {
+          contest_id: selectedContestId || null,
+          contest_format: contest?.contest_format,
+          player_count: selectedPlayers.length,
+        });
         if (selectedContestId) {
           try {
             await publicContestsApi.enroll(selectedContestId, created.id);
+            posthog.capture("contest_enrolled", {
+              contest_id: selectedContestId,
+              enrollment_source: "team_builder",
+            });
           } catch (e: any) {
             let errorMsg = "Failed to enroll in contest";
             const detail = e?.response?.data?.detail;
