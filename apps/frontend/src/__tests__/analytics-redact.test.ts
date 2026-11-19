@@ -17,8 +17,22 @@ describe("redactPersonalData", () => {
     ["SMS to +919876543210", "SMS to [mobile]"],
     ["9876543210", "[mobile]"],
     ["call 9876543210 or 9876543211.", "call [mobile] or [mobile]."],
+    ["a@example.com", "[email]"],
+    ["(a.b@example.com)", "([email])"],
+    ["to=a@example.com,b@example.org", "to=[email],[email]"],
+    ["a@b.c@d.com", "a@[email]"],
   ])("redacts %j", (text, redacted) => {
     expect(redactPersonalData(text)).toBe(redacted);
+  });
+
+  it("takes linear time on a long run with no @", () => {
+    // A long display name, masked by session replay on every render. The old
+    // pattern rescanned it from every position and froze the page.
+    const text = "a".repeat(200_000);
+    const started = performance.now();
+    expect(redactPersonalData(text)).toBe(text);
+    expect(redactPersonalData(`${text}@example`)).toBe(`${text}@example`);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it.each([

@@ -71,6 +71,9 @@ SPENDS_MONEY = {"forgot_password_request", "email_change_request"}
 # limiter sits in front of sign-in, and a stalled write must not hold it up.
 STORE_TIMEOUT_SECONDS = 1.0
 
+# How much of X-Forwarded-For a blocked request's log line keeps.
+FORWARDED_FOR_LOG_LIMIT = 256
+
 
 def _enforcing(rule: str) -> bool:
     """RATE_LIMIT_ENFORCE turns on every rule; RATE_LIMIT_ENFORCE_RULES names
@@ -230,7 +233,9 @@ async def rate_limit(
         rule,
         ",".join(tripped),
         values[IP],
-        request.headers.get("x-forwarded-for", ""),
+        # The client writes this header, at any length; enough to see a chain
+        # of proxies is kept.
+        request.headers.get("x-forwarded-for", "")[:FORWARDED_FOR_LOG_LIMIT],
     )
     if not _enforcing(rule):
         logger.warning(

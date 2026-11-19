@@ -102,6 +102,10 @@ wrote. It now logs at `LOG_LEVEL`, `INFO` by default, to the console
 request goes only when `POSTHOG_ACCESS_LOGS=true`. Those lines are most of
 the volume, and the API's exception events already carry the request.
 
+The HTTP client libraries (`httpx`, `httpcore`, `urllib3`) log at `WARNING`
+and above, whatever `LOG_LEVEL` is. At `INFO` httpx logs every request's
+full URL, and 2Factor's URLs carry its API key and the OTP being checked.
+
 ## Privacy
 
 - **Email addresses and mobile numbers are redacted** (to `[email]` and

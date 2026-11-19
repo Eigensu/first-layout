@@ -7,7 +7,12 @@ import, so a standalone script can use it without SECRET_KEY and the rest.
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+# A match may only start where the run of address characters starts. Without
+# the lookbehind, a long run with no "@" in it (an X-Forwarded-For header, a
+# name) is rescanned from every position in it: quadratic, and a few kilobytes
+# of it stalls the worker that is logging it.
 _EMAIL = re.compile(
+    r"(?<![A-Za-z0-9._%+-])"
     r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
 )
 # Mobiles are stored as 10 to 15 bare digits (app/schemas/user.py), so any run

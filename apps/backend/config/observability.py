@@ -48,6 +48,9 @@ _STANDARD_RECORD_ATTRS = frozenset(
     vars(logging.LogRecord("", 0, "", 0, "", (), None))
 ) | {"message", "asctime", "taskName", "color_message"}
 
+# HTTP client libraries whose request lines include the URL.
+_URL_LOGGERS = ("httpx", "httpcore", "urllib3")
+
 # The free-text event properties; ids, timestamps and the like are left alone.
 _FREE_TEXT_PROPERTIES = (
     "$current_url",
@@ -334,6 +337,11 @@ def setup_observability(service: str) -> Optional[Posthog]:
     logging.basicConfig(level=level, format=LOG_FORMAT)
     # basicConfig leaves the level alone once the root has a handler.
     logging.getLogger().setLevel(level)
+    # These log each request's full URL (httpx at INFO, the others at DEBUG).
+    # 2Factor's URLs carry its API key and the OTP being checked, so the
+    # console and PostHog get their warnings and errors only.
+    for name in _URL_LOGGERS:
+        logging.getLogger(name).setLevel(max(level, logging.WARNING))
 
     if not settings.posthog_api_key:
         return None

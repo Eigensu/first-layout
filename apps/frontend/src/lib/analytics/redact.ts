@@ -13,7 +13,11 @@ export const EMAIL_PLACEHOLDER = "[email]";
 export const MOBILE_PLACEHOLDER = "[mobile]";
 export const SECRET_PLACEHOLDER = "[redacted]";
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+// A match may only start where a run of address characters starts. Otherwise
+// a long run with no "@" (a name on a leaderboard, which replay masks) is
+// rescanned from every position in it: quadratic, on the main thread. The
+// boundary is captured and put back, as lookbehind would break Safari (below).
+const EMAIL = /(^|[^A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
 // Mobiles are stored as 10 to 15 bare digits. No lookbehind for "standing on
 // its own": Safari before 16.4 cannot parse one, and the bundle would fail.
 const MOBILE = /(^|\W)\+?\d{10,15}(?!\w)/g;
@@ -33,7 +37,9 @@ const SECRET_QUERY_PARAMS = new Set([
 const TEXT_PROPERTIES = new Set(["$el_text", "$exception_message", "$elements_chain", "title"]);
 
 export function redactPersonalData(text: string): string {
-  return text.replace(EMAIL, EMAIL_PLACEHOLDER).replace(MOBILE, `$1${MOBILE_PLACEHOLDER}`);
+  return text
+    .replace(EMAIL, `$1${EMAIL_PLACEHOLDER}`)
+    .replace(MOBILE, `$1${MOBILE_PLACEHOLDER}`);
 }
 
 /**

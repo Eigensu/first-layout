@@ -6,6 +6,7 @@ recording session.
 """
 
 import logging
+import time
 import uuid
 
 import pytest
@@ -108,6 +109,28 @@ def _records(session):
 )
 def test_redact_personal_data(text, redacted):
     assert redact_personal_data(text) == redacted
+
+
+@pytest.mark.parametrize(
+    "text, redacted",
+    [
+        ("(a.b@example.com)", "([email])"),
+        ("to=a@example.com,b@example.org", "to=[email],[email]"),
+        ("a@b.c@d.com", "a@[email]"),
+    ],
+)
+def test_emails_are_found_wherever_they_start(text, redacted):
+    assert redact_personal_data(text) == redacted
+
+
+def test_redaction_takes_linear_time():
+    # A forged X-Forwarded-For or a long name: one run of address characters
+    # with no "@". The old pattern took seconds on this, on the request's loop.
+    text = "a" * 50_000
+    started = time.perf_counter()
+    assert redact_personal_data(text) == text
+    assert redact_personal_data(text + "@example") == text + "@example"
+    assert time.perf_counter() - started < 1.0
 
 
 def test_log_record_carries_the_request_context(log_handler):
@@ -356,6 +379,30 @@ def test_setup_without_a_key_sends_nothing(monkeypatch):
         assert root.level == logging.INFO
     finally:
         root.setLevel(level)
+
+
+@pytest.mark.parametrize("log_level", ["DEBUG", "INFO", "ERROR"])
+def test_http_clients_never_log_their_urls(monkeypatch, log_level):
+    """httpx logs every request's URL at INFO; 2Factor's carry its API key."""
+    monkeypatch.setattr(observability, "_configured", False)
+    monkeypatch.setattr(observability, "_client", None)
+    monkeypatch.setattr(observability.settings, "posthog_api_key", "")
+    monkeypatch.setattr(observability.settings, "log_level", log_level)
+    loggers = [logging.getLogger(name) for name in ("httpx", "httpcore", "urllib3")]
+    levels = [logger.level for logger in loggers]
+    root_level = logging.getLogger().level
+    try:
+        observability.setup_observability("backend")
+        for logger in loggers:
+            assert not logger.isEnabledFor(logging.INFO)
+            assert logger.isEnabledFor(logging.ERROR)
+        assert logging.getLogger("httpx").level == max(
+            getattr(logging, log_level), logging.WARNING
+        )
+    finally:
+        for logger, level in zip(loggers, levels):
+            logger.setLevel(level)
+        logging.getLogger().setLevel(root_level)
 
 
 def test_setup_with_a_key(monkeypatch):
