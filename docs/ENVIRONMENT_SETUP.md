@@ -139,6 +139,23 @@ CLOUDINARY_SECURE=true
 CLOUDINARY_DEFAULT_FOLDER=walle
 ```
 
+### PostHog and logging (optional)
+
+Error tracking, logs, analytics and session replay; off until a key is set.
+[POSTHOG_OBSERVABILITY.md](./POSTHOG_OBSERVABILITY.md) has the full setup.
+
+```bash
+# Website (Vercel). The project API key, which starts with phc_, and the host.
+NEXT_PUBLIC_POSTHOG_KEY=
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+
+# API and its scheduled jobs (Railway). The same key.
+POSTHOG_API_KEY=
+POSTHOG_HOST=https://us.i.posthog.com
+POSTHOG_ACCESS_LOGS=false
+LOG_LEVEL=INFO
+```
+
 ## How It Works
 
 ### Frontend (Next.js)
