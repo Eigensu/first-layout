@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { authApi } from "@/lib/api/auth";
 import { getErrorMessage } from "@/lib/api/client";
 import { LS_KEYS, ROUTES } from "@/common/consts";
@@ -19,6 +20,19 @@ import type {
 } from "@/types/auth";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const posthogLogger = posthog.logger;
+
+function identifyUser(user: User) {
+  posthog.identify(user.id, {
+    email: user.email,
+    name: user.full_name,
+    username: user.username,
+    is_admin: user.is_admin,
+    is_platform_admin: user.is_platform_admin,
+    auth_provider: user.auth_provider,
+  });
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -38,12 +52,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const freshUser = await authApi.getCurrentUser();
             setUser(freshUser);
             localStorage.setItem(LS_KEYS.USER, JSON.stringify(freshUser));
+            identifyUser(freshUser);
+            posthogLogger.info("authenticated session restored", {
+              auth_provider: freshUser.auth_provider ?? "unknown",
+            });
           } catch (error) {
             // Token invalid/expired: clear all auth artifacts
             localStorage.removeItem(LS_KEYS.ACCESS_TOKEN);
             localStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
             localStorage.removeItem(LS_KEYS.USER);
             sessionStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
+            posthog.reset();
             setUser(null);
           }
         }
@@ -76,6 +95,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userData = await authApi.getCurrentUser();
         setUser(userData);
         localStorage.setItem(LS_KEYS.USER, JSON.stringify(userData));
+        identifyUser(userData);
+        posthog.capture("user_logged_in", {
+          auth_provider: "password",
+          remembered_session: rememberMe,
+        });
+        posthogLogger.info("authenticated session established", {
+          auth_provider: "password",
+          remembered_session: rememberMe,
+        });
 
         // Redirect to home page after login
         router.push(ROUTES.HOME);
@@ -100,6 +128,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userData = await authApi.getCurrentUser();
         setUser(userData);
         localStorage.setItem(LS_KEYS.USER, JSON.stringify(userData));
+        identifyUser(userData);
+        posthog.capture("user_logged_in", { auth_provider: "google" });
+        posthogLogger.info("authenticated session established", {
+          auth_provider: "google",
+        });
 
         router.push(ROUTES.HOME);
       } catch (error) {
@@ -123,6 +156,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userData = await authApi.getCurrentUser();
         setUser(userData);
         localStorage.setItem(LS_KEYS.USER, JSON.stringify(userData));
+        identifyUser(userData);
+        posthog.capture("user_registered", {
+          auth_provider: userData.auth_provider || "password",
+        });
+        posthogLogger.info("account registration completed", {
+          auth_provider: userData.auth_provider || "password",
+        });
 
         // Redirect to home page after register
         router.push(ROUTES.HOME);
@@ -154,6 +194,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(LS_KEYS.USER);
       sessionStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
 
+      posthog.capture("user_logged_out");
+      posthogLogger.info("authenticated session ended");
+      posthog.reset();
       setUser(null);
       router.push(ROUTES.LOGIN);
     } catch (error) {
@@ -188,6 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = useCallback((fresh: User) => {
     setUser(fresh);
     localStorage.setItem(LS_KEYS.USER, JSON.stringify(fresh));
+    identifyUser(fresh);
   }, []);
 
   const value: AuthContextType = {
