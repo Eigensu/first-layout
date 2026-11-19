@@ -28,6 +28,7 @@ up ahead of the configuration does not report failures.
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
 
@@ -38,7 +39,10 @@ from app.schemas.admin.cricheroes_ops import SyncReport  # noqa: E402
 from app.services import cricheroes_cache, cricheroes_usage  # noqa: E402
 from app.services.cricheroes_errors import CricHeroesConfigError  # noqa: E402
 from config.database import close_mongo_connection, connect_to_mongo  # noqa: E402
+from config.observability import flush_observability, setup_observability  # noqa: E402
 from config.settings import get_settings  # noqa: E402
+
+logger = logging.getLogger("scripts.sync_cricheroes")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -90,16 +94,19 @@ async def run(args: argparse.Namespace) -> int:
             reports = await cricheroes_cache.sync(client, ids, force=args.force)
         except CricHeroesConfigError as exc:
             print(f"FAILED: {exc}")
+            logger.error("CricHeroes sync could not start: %s", exc)
             return 1
 
-    failed = False
+    # Printed as they come, and logged together at the end, at ERROR, so a
+    # failed run shows in PostHog (docs/POSTHOG_OBSERVABILITY.md).
+    failures: list[str] = []
     for report in reports:
         if report.skipped:
             print(f"{report.tournament_id}: skipped, {report.skipped}")
             continue
         print(f"{report.tournament_id}: {summary(report)}")
         for resource, error in sorted(report.failed.items()):
-            failed = True
+            failures.append(f"{report.tournament_id} {resource}: {error}")
             print(f"  FAILED {resource}: {error}")
         # Contest points (spec §9.3); silent for a tournament no contest uses.
         if (
@@ -113,10 +120,14 @@ async def run(args: argparse.Namespace) -> int:
                 f"table(s); scored {report.contests_scored} contest(s)"
             )
         for match_id, error in sorted(report.mvp_tables_failed.items()):
-            failed = True
+            failures.append(
+                f"{report.tournament_id} MVP table of match {match_id}: {error}"
+            )
             print(f"  FAILED MVP table of match {match_id}: {error}")
         for contest, error in sorted(report.contests_failed.items()):
-            failed = True
+            failures.append(
+                f"{report.tournament_id} scoring contest {contest}: {error}"
+            )
             print(f"  FAILED scoring contest {contest}: {error}")
 
     usage = await cricheroes_usage.usage(days=1)
@@ -125,15 +136,21 @@ async def run(args: argparse.Namespace) -> int:
         f"({usage.percent_used:.1f}%)"
     )
     cricheroes_usage.warn_if_over(usage)
-    return 1 if failed else 0
+    if failures:
+        logger.error("CricHeroes sync failed:\n%s", "\n".join(failures))
+    return 1 if failures else 0
 
 
 async def main(args: argparse.Namespace) -> int:
+    # An exception that ends the run is captured on its way out, and sent
+    # when the process exits.
+    setup_observability("cricheroes-sync")
     await connect_to_mongo()
     try:
         return await run(args)
     finally:
         await close_mongo_connection()
+        await asyncio.to_thread(flush_observability)
 
 
 if __name__ == "__main__":

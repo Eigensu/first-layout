@@ -9,6 +9,7 @@ from app.models.tournament_membership import ROLE_ADMIN, TournamentMembership
 from app.models.user import User
 from app.utils.security import decode_token
 from app.utils.tenant import TenantId, get_tenant
+from config.observability import identify_user
 from config.settings import settings
 
 # Marks a token whose `sub` is a user id. Tokens minted before ids became the
@@ -92,6 +93,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     if user is None:
         raise credentials_exception
 
+    identify_user(str(user.id))
     return user
 
 
@@ -113,7 +115,10 @@ async def get_optional_current_user(
     subject = payload.get("sub")
     if not subject or not isinstance(subject, str):
         return None
-    return await resolve_token_subject(subject, payload.get(SUBJECT_KIND_CLAIM))
+    user = await resolve_token_subject(subject, payload.get(SUBJECT_KIND_CLAIM))
+    if user is not None:
+        identify_user(str(user.id))
+    return user
 
 
 async def get_current_active_user(

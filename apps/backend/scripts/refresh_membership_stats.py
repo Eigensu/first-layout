@@ -25,6 +25,7 @@ from app.common.enums.tournaments import TournamentStatus  # noqa: E402
 from app.models.tournament import Tournament  # noqa: E402
 from app.services.membership_stats import refresh_tournament  # noqa: E402
 from config.database import close_mongo_connection, connect_to_mongo  # noqa: E402
+from config.observability import flush_observability, setup_observability  # noqa: E402
 from config.settings import settings  # noqa: E402
 
 
@@ -47,6 +48,9 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main(args: argparse.Namespace) -> int:
+    # Its logs, and an exception that ends the run, go to PostHog
+    # (docs/POSTHOG_OBSERVABILITY.md); this is the hourly walle-stats-cron.
+    setup_observability("membership-stats")
     if not settings.shared_tenancy:
         print("Memberships exist only on the shared backend: set TENANCY=shared.")
         return 2
@@ -78,6 +82,7 @@ async def main(args: argparse.Namespace) -> int:
             print("No tournaments to refresh.")
     finally:
         await close_mongo_connection()
+        await asyncio.to_thread(flush_observability)
     return 0
 
 
