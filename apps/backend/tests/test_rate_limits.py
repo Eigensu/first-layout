@@ -277,6 +277,20 @@ async def test_observe_mode_never_blocks(anon_client, rahul, caplog):
     assert "1.2.3.4, 203.0.113.7" in logged
 
 
+async def test_a_long_forwarded_for_is_cut_short_in_the_log(anon_client, rahul, caplog):
+    forwarded = "a" * 5000 + ", 203.0.113.7"
+    for _ in range(6):
+        await _login(anon_client, "rahul", forwarded=forwarded)
+
+    with caplog.at_level(logging.WARNING, logger="app.rate_limit"):
+        await _login(anon_client, "rahul", forwarded=forwarded)
+
+    logged = [r.getMessage() for r in caplog.records if "would_block" in r.getMessage()]
+    assert logged
+    assert all(len(message) < 600 for message in logged)
+    assert "a" * rl.FORWARDED_FOR_LOG_LIMIT in logged[0]
+
+
 async def test_one_rule_can_be_enforced_alone(anon_client, rahul, monkeypatch):
     """The rollout enforces the SMS route first, while login keeps observing."""
     monkeypatch.setattr(

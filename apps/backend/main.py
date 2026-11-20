@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -31,27 +32,35 @@ from app.routes.players import router as players_router
 from app.routes.players_hot import router as players_hot_router
 from app.routes.slots import router as slots_router
 from app.routes.teams import router as teams_router
+from app.utils.tenant import TENANT_HEADER
 from config.database import close_mongo_connection, connect_to_mongo
+from config.observability import (
+    flush_observability,
+    instrument_app,
+    setup_observability,
+    ship_uvicorn_logs,
+)
 from config.settings import settings
 from config.startup_checks import assert_tenancy_matches_data
 
-# Logging configuration
-logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+# Console logging at LOG_LEVEL, and PostHog error tracking and logs when
+# POSTHOG_API_KEY is set (docs/POSTHOG_OBSERVABILITY.md).
+setup_observability("backend")
 logger = logging.getLogger("app.startup")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
+    ship_uvicorn_logs()
     # Startup: Connect to MongoDB
     await connect_to_mongo()
     await assert_tenancy_matches_data()
     yield
     # Shutdown: Close MongoDB connection
     await close_mongo_connection()
+    # Whatever is still queued for PostHog, before the process goes.
+    await asyncio.to_thread(flush_observability)
 
 
 app = FastAPI(
@@ -72,6 +81,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Outermost, so it sees every request and every exception that escapes one.
+instrument_app(app, TENANT_HEADER)
 
 # Log CORS configuration (helpful for debugging in deployments)
 logger.info("CORS exact origins: %s", settings.cors_exact_origins)
@@ -143,6 +155,6 @@ if __name__ == "__main__":
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.is_development,
-        log_level="critical",
+        log_level=settings.log_level.lower(),
         access_log=False,
     )

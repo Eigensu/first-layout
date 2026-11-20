@@ -27,7 +27,10 @@ async def send_otp_autogen(
         )
         return False, None, "Missing 2Factor configuration"
     url = f"{BASE_URL}/{API_KEY}/SMS/{phone}/AUTOGEN/{tpl}"
-    logger.info("2Factor AUTOGEN GET %s", url.replace(API_KEY or "", "[redacted]"))
+    # The path carries the API key and the user's mobile number.
+    logger.info(
+        "2Factor AUTOGEN GET %s/[redacted]/SMS/[redacted]/AUTOGEN/%s", BASE_URL, tpl
+    )
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             resp = await client.get(url)
