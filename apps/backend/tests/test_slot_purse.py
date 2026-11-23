@@ -1,0 +1,280 @@
+"""slot_purse contests: slot rules for the squad's shape, plus one purse for the
+whole squad.
+
+Each half is already covered on its own (slot rules in
+test_auction_team_routes.py, the purse in the auction tests); these check
+that a slot_purse contest applies both at once, in every path that touches a
+squad: team create/update, the player pool, and the admin contest gate.
+"""
+
+from datetime import timedelta
+
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
+from app.common.datetime_utils import utc_now
+from app.common.enums.contests import ContestFormat
+from app.models.admin.slot import Slot
+from app.models.contest import Contest
+from app.models.player import Player
+from app.models.user import User
+from app.utils.dependencies import get_current_active_user
+
+
+@pytest_asyncio.fixture
+async def user_client(db):
+    from main import app
+
+    u = User(
+        username="slot-purse-user",
+        email="slotpurse@example.com",
+        hashed_password="not-a-real-hash",
+        is_active=True,
+        is_verified=True,
+    )
+    await u.insert()
+
+    async def _fake_user():
+        return u
+
+    app.dependency_overrides[get_current_active_user] = _fake_user
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.pop(get_current_active_user, None)
+
+
+async def _slots():
+    """Two slots, each needing exactly two players."""
+    bat = Slot(code="BAT", name="Batters", min_select=2, max_select=2)
+    bowl = Slot(code="BOWL", name="Bowlers", min_select=2, max_select=2)
+    await bat.insert()
+    await bowl.insert()
+    return bat, bowl
+
+
+async def _contest(**overrides) -> Contest:
+    start = utc_now() + timedelta(days=1)
+    fields = {
+        "code": "sp1",
+        "name": "Slot Purse",
+        "start_at": start,
+        "end_at": start + timedelta(days=7),
+        "contest_format": ContestFormat.SLOT_PURSE,
+        "purse": 400,
+    }
+    fields.update(overrides)
+    contest = Contest(**fields)
+    await contest.insert()
+    return contest
+
+
+async def _player(name, team, price, slot, status="Active") -> Player:
+    p = Player(name=name, team=team, price=price, slot=str(slot.id), status=status)
+    await p.insert()
+    return p
+
+
+def _body(players, contest, name="My Squad"):
+    ids = [str(p.id) for p in players]
+    return {
+        "team_name": name,
+        "player_ids": ids,
+        "captain_id": ids[0],
+        "vice_captain_id": ids[1],
+        "contest_id": str(contest.id),
+    }
+
+
+async def _squad(bat, bowl, price=100):
+    return [
+        await _player("bat1", "A", price, bat),
+        await _player("bat2", "B", price, bat),
+        await _player("bowl1", "A", price, bowl),
+        await _player("bowl2", "B", price, bowl),
+    ]
+
+
+# --- team create / update ---------------------------------------------------
+
+
+async def test_valid_squad_within_purse_is_created(user_client, db):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=400)
+    players = await _squad(bat, bowl, price=100)
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 201, res.text
+    assert res.json()["total_value"] == 400
+
+
+async def test_squad_over_purse_is_rejected(user_client, db):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=300)
+    players = await _squad(bat, bowl, price=100)
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["over_by"] == 100
+
+
+async def test_slot_rules_still_apply_within_purse(user_client, db):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=10_000)
+    # Three batters and one bowler: cheap enough, wrong shape.
+    players = [
+        await _player("bat1", "A", 10, bat),
+        await _player("bat2", "B", 10, bat),
+        await _player("bat3", "C", 10, bat),
+        await _player("bowl1", "A", 10, bowl),
+    ]
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 400
+    assert (
+        res.json()["detail"]["message"]
+        == "Team violates per-slot selection constraints"
+    )
+
+
+async def test_unpriced_player_cannot_be_picked(user_client, db):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=10_000)
+    players = [
+        await _player("bat1", "A", 100, bat),
+        await _player("free", "B", 0, bat),
+        await _player("bowl1", "A", 100, bowl),
+        await _player("bowl2", "B", 100, bowl),
+    ]
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["unavailable_players"] == ["free"]
+
+
+async def test_update_over_purse_is_rejected(user_client, db):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=400)
+    players = await _squad(bat, bowl, price=100)
+    created = await user_client.post("/api/teams/", json=_body(players, contest))
+    assert created.status_code == 201, created.text
+
+    pricey = await _player("bat-star", "C", 250, bat)
+    ids = [str(pricey.id)] + [str(p.id) for p in players[1:]]
+    res = await user_client.put(
+        f"/api/teams/{created.json()['id']}",
+        json={"player_ids": ids, "captain_id": ids[0], "vice_captain_id": ids[1]},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["over_by"] == 150
+
+
+# --- player pool -------------------------------------------------------------
+
+
+async def test_pool_hides_unpriced_and_inactive_players(user_client, db):
+    bat, _ = await _slots()
+    contest = await _contest()
+    await _player("priced", "A", 100, bat)
+    await _player("unpriced", "A", 0, bat)
+    await _player("injured", "A", 100, bat, status="Inactive")
+
+    res = await user_client.get(f"/api/players?contest_id={contest.id}")
+
+    assert res.status_code == 200
+    assert [p["name"] for p in res.json()] == ["priced"]
+
+
+# --- admin contest gate ------------------------------------------------------
+
+
+def _payload(**overrides):
+    start = utc_now() + timedelta(days=1)
+    body = {
+        "code": "slot-purse",
+        "name": "Slot Purse",
+        "start_at": start.isoformat(),
+        "end_at": (start + timedelta(days=7)).isoformat(),
+        "contest_format": "slot_purse",
+        "purse": 400,
+    }
+    body.update(overrides)
+    return body
+
+
+async def test_create_does_not_need_squad_size(client, db):
+    bat, bowl = await _slots()
+    await _squad(bat, bowl, price=100)
+
+    res = await client.post("/api/admin/contests", json=_payload())
+
+    assert res.status_code == 201, res.text
+    assert res.json()["contest_format"] == "slot_purse"
+
+
+async def test_create_rejects_purse_below_cheapest_slot_minimums(client, db):
+    bat, bowl = await _slots()
+    await _squad(bat, bowl, price=100)
+
+    res = await client.post("/api/admin/contests", json=_payload(purse=399))
+
+    assert res.status_code == 400
+    assert "at least 400" in res.json()["detail"]
+
+
+async def test_create_rejects_slot_without_enough_priced_players(client, db):
+    bat, bowl = await _slots()
+    await _player("bat1", "A", 100, bat)
+    await _player("bat2", "B", 0, bat)
+    await _player("bowl1", "A", 100, bowl)
+    await _player("bowl2", "B", 100, bowl)
+
+    res = await client.post("/api/admin/contests", json=_payload(purse=10_000))
+
+    assert res.status_code == 400
+    assert "Slot Batters needs 2" in res.json()["detail"]
+
+
+async def test_tightening_purse_below_an_existing_team_is_refused(
+    client, user_client, db
+):
+    bat, bowl = await _slots()
+    players = await _squad(bat, bowl, price=100)
+    # Cheaper alternatives keep the tighter purse feasible, so the existing
+    # team check is what has to catch it.
+    for slot in (bat, bowl):
+        for i in range(2):
+            await _player(f"cheap-{slot.code}-{i}", "C", 10, slot)
+
+    created = await client.post("/api/admin/contests", json=_payload(purse=400))
+    assert created.status_code == 201, created.text
+    contest_id = created.json()["id"]
+
+    ids = [str(p.id) for p in players]
+    team = await user_client.post(
+        "/api/teams/",
+        json={
+            "team_name": "Squad One",
+            "player_ids": ids,
+            "captain_id": ids[0],
+            "vice_captain_id": ids[1],
+            "contest_id": contest_id,
+        },
+    )
+    assert team.status_code == 201, team.text
+
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"purse": 200})
+
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert any("Squad One costs 400" in line for line in detail["broken_teams"])
+
+    forced = await client.put(
+        f"/api/admin/contests/{contest_id}?force=true", json={"purse": 200}
+    )
+    assert forced.status_code == 200, forced.text

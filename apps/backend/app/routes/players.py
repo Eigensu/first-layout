@@ -3,11 +3,10 @@ from typing import List, Optional
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.common.enums.contests import ContestFormat
 from app.models.contest import Contest
 from app.models.player import Player
 from app.schemas.player import PlayerOut
-from app.services.auction import ACTIVE_STATUS
+from app.services.auction import ACTIVE_STATUS, uses_purse
 from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -58,9 +57,10 @@ async def list_players(
             else:
                 query = team_filter
 
-        # An auction contest's pool is only the players who were actually
-        # auctioned; anyone left at the unset price is not selectable.
-        if contest and contest.contest_format == ContestFormat.AUCTION_PURSE:
+        # A purse contest's pool (auction or slot_purse) is only the players
+        # who were actually auctioned; anyone left at the unset price is not
+        # selectable.
+        if uses_purse(contest):
             eligibility_filter = {
                 "price": {"$gt": 0},
                 "$or": [{"status": ACTIVE_STATUS}, {"status": None}],

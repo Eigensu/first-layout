@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { PlayerListItem, type EditPlayer } from "./PlayerListItem";
 import { PoolFilterBar } from "./PoolFilterBar";
 import { usePlayerPoolFilters } from "./usePlayerPoolFilters";
-import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
+import { usesPurse, type ContestFormat } from "@/common/consts/contest";
 import { formatPlayerValue, formatPoints } from "@/utils/playerValue";
 
 interface ReplacePlayerModalProps {
@@ -44,7 +44,8 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
   maxPerTeam = 0,
   onSelect,
 }) => {
-  const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
+  // Purse budget and the per-team cap apply to auction and slot + purse alike.
+  const isAuction = usesPurse(contestFormat);
 
   const playerById = useMemo(() => {
     const map: Record<string, EditPlayer> = {};

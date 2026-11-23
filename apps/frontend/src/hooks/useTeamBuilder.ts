@@ -8,7 +8,7 @@ import {
   type ApiPlayer,
 } from "@/lib/api/public/players";
 import { publicContestsApi, type Contest } from "@/lib/api/public/contests";
-import { CONTEST_FORMAT } from "@/common/consts/contest";
+import { CONTEST_FORMAT, usesPurse } from "@/common/consts/contest";
 import { formatPoints } from "@/utils/playerValue";
 
 export type UIBuildPlayer = Player & { slotId: string };
@@ -18,7 +18,7 @@ export type SelectionBlock = string | null;
 
 export function useTeamBuilder(
   contestId?: string,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
 ) {
   const enabled = options?.enabled ?? true;
   const [players, setPlayers] = useState<UIBuildPlayer[]>([]);
@@ -35,7 +35,11 @@ export function useTeamBuilder(
   const [isStep1Collapsed, setIsStep1Collapsed] = useState(false);
   const [contest, setContest] = useState<Contest | null>(null);
 
+  // isAuction: one open pool with no slots. hasPurse: the squad's total price
+  // is capped by the contest purse — true for auction and for slot + purse,
+  // where the slot stepper stays and the purse applies on top.
   const isAuction = contest?.contest_format === CONTEST_FORMAT.AUCTION_PURSE;
+  const hasPurse = usesPurse(contest?.contest_format);
 
   // Limits per slot from backend
   const SLOT_LIMITS = useMemo(() => {
@@ -141,7 +145,7 @@ export function useTeamBuilder(
 
         // Build a local map for slot names to avoid depending on external state
         const slotNameById: Record<string, string> = Object.fromEntries(
-          sortedSlots.map((s) => [s.id, s.name])
+          sortedSlots.map((s) => [s.id, s.name]),
         );
 
         const playerArrays = await Promise.all(
@@ -149,13 +153,13 @@ export function useTeamBuilder(
             try {
               const arr: ApiPlayer[] = await fetchPlayersBySlot(
                 s.id,
-                contestId
+                contestId,
               );
               return arr.map((p) => ({ ...p, slot: p.slot || s.id }));
             } catch {
               return [] as ApiPlayer[];
             }
-          })
+          }),
         );
         const flatPlayers: ApiPlayer[] = playerArrays.flat();
         const mappedBase: UIBuildPlayer[] = flatPlayers.map((p) => ({
@@ -239,7 +243,7 @@ export function useTeamBuilder(
    * Why an unselected player cannot be added to `selectedIds`, or null if they
    * can be.
    *
-   * Mirrors the server's auction rules so the UI can disable a card and say
+   * Mirrors the server's purse rules so the UI can disable a card and say
    * why, rather than letting the submit fail. Takes the selection explicitly
    * so a state updater can pass its own `prev` — reading component state here
    * would go stale when React batches two selections into one render.
@@ -249,7 +253,7 @@ export function useTeamBuilder(
       selectedIds: string[],
       player: { id: string; name?: string; team: string; price: number },
     ): SelectionBlock => {
-      if (!isAuction) return null;
+      if (!hasPurse) return null;
       if (selectedIds.includes(player.id)) return null;
       if (TOTAL_MAX > 0 && selectedIds.length >= TOTAL_MAX) {
         return `Your squad is full at ${TOTAL_MAX} players.`;
@@ -260,7 +264,9 @@ export function useTeamBuilder(
         .filter((p): p is UIBuildPlayer => Boolean(p));
 
       if (maxPerTeam > 0) {
-        const fromSameTeam = chosen.filter((p) => p.team === player.team).length;
+        const fromSameTeam = chosen.filter(
+          (p) => p.team === player.team,
+        ).length;
         if (fromSameTeam >= maxPerTeam) {
           return `You already have ${maxPerTeam} player${
             maxPerTeam === 1 ? "" : "s"
@@ -276,7 +282,7 @@ export function useTeamBuilder(
       }
       return null;
     },
-    [isAuction, players, TOTAL_MAX, maxPerTeam, purse],
+    [hasPurse, players, TOTAL_MAX, maxPerTeam, purse],
   );
 
   /** Block reason against the current selection, for rendering. */
@@ -312,7 +318,7 @@ export function useTeamBuilder(
 
   const isFirstSlot = useMemo(
     () => slots.findIndex((s) => s.id === activeSlotId) === 0,
-    [activeSlotId, slots]
+    [activeSlotId, slots],
   );
 
   const handleClearAll = useCallback(() => {
@@ -353,10 +359,12 @@ export function useTeamBuilder(
         if (currentSlotCount >= slotLimit) {
           return prev;
         }
+        // slot_purse: the slot limit above, plus the purse and per-team cap.
+        if (hasPurse && blockForSelection(prev, player)) return prev;
         return [...prev, playerId];
       });
     },
-    [players, SLOT_LIMITS, TOTAL_MAX, isAuction, blockForSelection]
+    [players, SLOT_LIMITS, TOTAL_MAX, isAuction, hasPurse, blockForSelection],
   );
 
   const handleSetCaptain = useCallback((playerId: string) => {
@@ -377,6 +385,7 @@ export function useTeamBuilder(
     error,
     contest,
     isAuction,
+    hasPurse,
 
     // selection state
     selectedPlayers,

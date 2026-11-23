@@ -21,7 +21,7 @@ class ContestCreate(BaseModel):
     # Allowed real-world team names (e.g., "IND", "AUS") for daily contests
     allowed_teams: List[str] = Field(default_factory=list)
     # Squad assembly format; independent of contest_type
-    contest_format: Literal["slot_based", "auction_purse"] = "slot_based"
+    contest_format: Literal["slot_based", "auction_purse", "slot_purse"] = "slot_based"
     purse: float = Field(default=1_000_000.0, ge=0)
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)
@@ -70,7 +70,9 @@ class ContestUpdate(BaseModel):
     points_scope: Optional[Literal["time_window", "snapshot"]] = None
     contest_type: Optional[Literal["daily", "full"]] = None
     allowed_teams: Optional[List[str]] = None
-    contest_format: Optional[Literal["slot_based", "auction_purse"]] = None
+    contest_format: Optional[Literal["slot_based", "auction_purse", "slot_purse"]] = (
+        None
+    )
     purse: Optional[float] = Field(default=None, ge=0)
     squad_size: Optional[int] = Field(default=None, ge=1)
     max_players_per_team: Optional[int] = Field(default=None, ge=1)

@@ -3,7 +3,11 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { X, Check, Lock } from "lucide-react";
 import { getInitials, getSlotGradient } from "../types";
-import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
+import {
+  CONTEST_FORMAT,
+  usesPurse,
+  type ContestFormat,
+} from "@/common/consts/contest";
 import { formatPlayerValue, formatPoints } from "@/utils/playerValue";
 import { PoolFilterBar } from "@/components/team/Edit/PoolFilterBar";
 import { EditPurseBar } from "@/components/team/Edit/EditPurseBar";
@@ -247,9 +251,12 @@ export function EditPlayersModal({
     initialViceCaptainId || "",
   );
 
+  // isAuction: one open pool, no slots. hasPurse: the squad's total price is
+  // capped, which is also true of slot + purse contests.
   const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
+  const hasPurse = usesPurse(contestFormat);
 
-  const filters = usePlayerPoolFilters(allPlayers, selectedIds, isAuction);
+  const filters = usePlayerPoolFilters(allPlayers, selectedIds, hasPurse);
   const { reset: resetFilters } = filters;
 
   // Reset when opening
@@ -316,7 +323,15 @@ export function EditPlayersModal({
         return `Squad is full (${requiredCount} players).`;
       }
 
-      if (isAuction) {
+      if (!isAuction) {
+        const sid = String(player.slot || "");
+        const limit = slotLimits[sid] || 4;
+        if ((selectedCountBySlot[sid] || 0) >= limit) {
+          return `Slot is full (max ${limit}).`;
+        }
+      }
+
+      if (hasPurse) {
         if (maxPerTeam > 0 && player.team) {
           const fromSameTeam = selectedCountByTeam[player.team] || 0;
           if (fromSameTeam >= maxPerTeam) {
@@ -329,13 +344,6 @@ export function EditPlayersModal({
             remainingPurse,
           )} left.`;
         }
-        return null;
-      }
-
-      const sid = String(player.slot || "");
-      const limit = slotLimits[sid] || 4;
-      if ((selectedCountBySlot[sid] || 0) >= limit) {
-        return `Slot is full (max ${limit}).`;
       }
       return null;
     },
@@ -344,6 +352,7 @@ export function EditPlayersModal({
       count,
       requiredCount,
       isAuction,
+      hasPurse,
       maxPerTeam,
       selectedCountByTeam,
       remainingPurse,
@@ -375,7 +384,7 @@ export function EditPlayersModal({
     setViceCaptainId(id);
   };
 
-  const overspent = isAuction && remainingPurse < 0;
+  const overspent = hasPurse && remainingPurse < 0;
   const isValid =
     count === requiredCount &&
     !!captainId &&
@@ -425,7 +434,7 @@ export function EditPlayersModal({
       onMakeCaptain={() => makeCaptain(p.id)}
       onMakeViceCaptain={() => makeViceCaptain(p.id)}
       blockReason={blockReasonFor(p)}
-      showValue={isAuction}
+      showValue={hasPurse}
       contestFormat={contestFormat}
     />
   );
@@ -480,7 +489,7 @@ export function EditPlayersModal({
 
         {/* Sticky controls */}
         <div className="px-3 sm:px-4 pt-2 pb-2 space-y-2 border-b border-white/[0.06]">
-          {isAuction && (
+          {hasPurse && (
             <EditPurseBar
               purse={purse}
               spent={spent}

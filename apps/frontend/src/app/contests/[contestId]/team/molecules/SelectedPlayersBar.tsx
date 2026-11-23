@@ -7,8 +7,8 @@ interface SelectedPlayersBarProps {
   totalMax: number;
   selectedPlayerObjs: Player[];
   onPlayerRemove: (playerId: string) => void;
-  /** Auction contests show the remaining purse alongside the squad count */
-  isAuction?: boolean;
+  /** Purse contests (auction or slot + purse) show the remaining purse */
+  showPurse?: boolean;
   remainingPurse?: number;
 }
 
@@ -17,10 +17,10 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
   totalMax,
   selectedPlayerObjs,
   onPlayerRemove,
-  isAuction = false,
+  showPurse = false,
   remainingPurse = 0,
 }) => {
-  const purseChip = isAuction ? (
+  const purseChip = showPurse ? (
     <span
       className={`px-1.5 py-0 rounded-full text-[9px] sm:text-xs font-bold shadow-sm ${
         remainingPurse < 0

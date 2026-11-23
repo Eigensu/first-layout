@@ -41,7 +41,9 @@ from app.schemas.enrollment import (
 from app.services import cricheroes_cache, cricheroes_points
 from app.services.auction import (
     assert_auction_config_feasible,
+    assert_slot_purse_config_feasible,
     find_teams_breaking_auction_rules,
+    find_teams_over_purse,
     resolve_max_players_per_team,
 )
 from app.services.contest_status import (
@@ -182,6 +184,14 @@ async def create_contest(
             max_per_team=data.max_players_per_team or settings.max_players_per_team,
             # A daily contest can only draw from its named teams, so the rest
             # of the pool must not count towards feasibility.
+            allowed_teams=(
+                data.allowed_teams if data.contest_type == "daily" else None
+            ),
+            tournament_id=tournament_id,
+        )
+    elif data.contest_format == ContestFormat.SLOT_PURSE:
+        await assert_slot_purse_config_feasible(
+            purse=data.purse,
             allowed_teams=(
                 data.allowed_teams if data.contest_type == "daily" else None
             ),
@@ -353,6 +363,40 @@ async def update_contest(
                 purse=new_purse,
                 max_per_team=effective_max,
                 allowed_teams=effective_allowed,
+                tournament_id=tournament_id,
+            )
+            if broken:
+                shown = broken[:5]
+                more = len(broken) - len(shown)
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": (
+                            f"{len(broken)} existing team(s) would break under these "
+                            f"rules. Fix or remove them, or repeat the request with "
+                            f"force=true to apply anyway."
+                        ),
+                        "broken_teams": shown
+                        + ([f"and {more} more"] if more > 0 else []),
+                    },
+                )
+    elif new_format == ContestFormat.SLOT_PURSE:
+        new_purse = update_fields.get("purse", contest.purse)
+        new_type = update_fields.get("contest_type", contest.contest_type)
+        new_allowed = update_fields.get("allowed_teams", contest.allowed_teams)
+        await assert_slot_purse_config_feasible(
+            purse=new_purse,
+            allowed_teams=new_allowed if new_type == "daily" else None,
+            tournament_id=tournament_id,
+        )
+
+        # Both halves of the rules: slot shape and the purse.
+        if rules_changed and not force:
+            broken = await find_teams_breaking_slot_rules(
+                contest_id=str(contest.id), tournament_id=tournament_id
+            ) + await find_teams_over_purse(
+                contest_id=str(contest.id),
+                purse=new_purse,
                 tournament_id=tournament_id,
             )
             if broken:

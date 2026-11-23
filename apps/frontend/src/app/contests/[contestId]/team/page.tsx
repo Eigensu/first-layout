@@ -59,6 +59,7 @@ export default function ContestTeamBuilderPage() {
     error,
     contest,
     isAuction,
+    hasPurse,
 
     // selection state
     selectedPlayers,
@@ -365,7 +366,7 @@ export default function ContestTeamBuilderPage() {
           totalMax={TOTAL_MAX || 0}
           selectedPlayerObjs={selectedPlayerObjs}
           onPlayerRemove={handlePlayerSelect}
-          isAuction={isAuction}
+          showPurse={hasPurse}
           remainingPurse={remainingPurse}
         />
       )}
@@ -409,6 +410,7 @@ export default function ContestTeamBuilderPage() {
                 slotLimits={SLOT_LIMITS}
                 totalMax={isAuction ? TOTAL_MAX : TOTAL_MAX || 12}
                 isAuction={isAuction}
+                hasPurse={hasPurse}
                 contestFormat={contest?.contest_format}
                 purse={purse}
                 spent={spent}

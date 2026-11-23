@@ -1,5 +1,5 @@
 """
-Auction-purse contest rules.
+Auction-purse contest rules (and the purse half of slot_purse contests).
 
 An auction contest replaces the slot-based squad structure with a single open
 pool of players priced by their auction sale value. A squad is valid when it:
@@ -12,6 +12,10 @@ Eligibility: a player joins the pool only once they have been auctioned, i.e.
 ``price > 0`` and ``status`` is Active. Players still sitting at the unset
 default price are excluded rather than treated as nearly free, which would
 otherwise be an easy way to beat the purse.
+
+slot_purse contests keep the slot rules (routes/teams.py) for the squad's
+shape and per-team limits, and add only the purse half here: the same
+eligibility rule plus one purse for the whole squad (``evaluate_purse``).
 """
 
 from collections import Counter
@@ -24,6 +28,7 @@ from fastapi import HTTPException, status
 
 from app.common.enums.contests import ContestFormat
 from app.models.admin.player import Player as AdminPlayer
+from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.settings import GlobalSettings
 from app.models.team import Team
@@ -188,6 +193,18 @@ async def assert_auction_config_feasible(
         )
 
 
+def uses_purse(contest: Optional[Contest]) -> bool:
+    """True for every format whose squad cost is capped by ``Contest.purse``."""
+    return contest is not None and contest.contest_format in (
+        ContestFormat.AUCTION_PURSE,
+        ContestFormat.SLOT_PURSE,
+    )
+
+
+def is_slot_purse_contest(contest: Optional[Contest]) -> bool:
+    return contest is not None and contest.contest_format == ContestFormat.SLOT_PURSE
+
+
 @dataclass(frozen=True)
 class SquadViolation:
     """A broken auction rule, in both a human and an API-friendly shape."""
@@ -197,6 +214,47 @@ class SquadViolation:
     # Payload for the HTTPException raised at submission time. Kept separate
     # because the team builder parses specific keys out of it.
     detail: object
+
+
+def _ineligible_violation(players: Sequence) -> Optional[SquadViolation]:
+    ineligible = [p.name for p in players if not is_auction_eligible(p)]
+    if not ineligible:
+        return None
+    return SquadViolation(
+        summary=(
+            "includes players no longer in the auction pool: " + ", ".join(ineligible)
+        ),
+        detail={
+            "message": "Some selected players are not available in this auction contest",
+            "unavailable_players": ineligible,
+        },
+    )
+
+
+def _over_purse_violation(players: Sequence, purse: float) -> Optional[SquadViolation]:
+    total_value = sum(p.price or 0.0 for p in players)
+    if total_value <= purse:
+        return None
+    return SquadViolation(
+        summary=(f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"),
+        detail={
+            "message": "Squad exceeds the contest purse",
+            "purse": purse,
+            "total_value": total_value,
+            "over_by": total_value - purse,
+        },
+    )
+
+
+def evaluate_purse(players: Sequence, purse: float) -> Optional[SquadViolation]:
+    """
+    The purse half of the rules, on its own: every player priced and Active,
+    and the squad's total cost within ``purse``.
+
+    A slot_purse contest applies this on top of the slot rules, which already
+    decide the squad's shape and per-team limits.
+    """
+    return _ineligible_violation(players) or _over_purse_violation(players, purse)
 
 
 def evaluate_squad(
@@ -216,18 +274,9 @@ def evaluate_squad(
     """
     count = submitted_count if submitted_count is not None else len(players)
 
-    ineligible = [p.name for p in players if not is_auction_eligible(p)]
-    if ineligible:
-        return SquadViolation(
-            summary=(
-                "includes players no longer in the auction pool: "
-                + ", ".join(ineligible)
-            ),
-            detail={
-                "message": "Some selected players are not available in this auction contest",
-                "unavailable_players": ineligible,
-            },
-        )
+    violation = _ineligible_violation(players)
+    if violation is not None:
+        return violation
 
     if allowed_teams:
         permitted = set(allowed_teams)
@@ -263,19 +312,7 @@ def evaluate_squad(
                 ),
             )
 
-    total_value = sum(p.price or 0.0 for p in players)
-    if total_value > purse:
-        return SquadViolation(
-            summary=(f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"),
-            detail={
-                "message": "Squad exceeds the contest purse",
-                "purse": purse,
-                "total_value": total_value,
-                "over_by": total_value - purse,
-            },
-        )
-
-    return None
+    return _over_purse_violation(players, purse)
 
 
 async def validate_auction_squad(
@@ -307,22 +344,24 @@ async def validate_auction_squad(
     return sum(p.price or 0.0 for p in players)
 
 
-async def find_teams_breaking_auction_rules(
-    contest_id: str,
-    squad_size: Optional[int],
-    purse: float,
-    max_per_team: int,
-    allowed_teams: Optional[Sequence[str]] = None,
-    *,
-    tournament_id: TenantId,
-) -> List[str]:
+def validate_squad_purse(players: Sequence, contest: Contest) -> float:
     """
-    Existing squads in this contest that the given rules would invalidate.
+    Enforce the purse on a slot_purse squad and return its total cost.
 
-    Returns one "<team name> <reason>" line per broken team. Tightening a purse
-    or a cap after teams exist would otherwise leave those squads enrolled and
-    scoring under rules they no longer satisfy.
+    Raises HTTPException(400) with the same detail shapes an auction contest
+    uses, so the team builder parses both the same way.
     """
+    violation = evaluate_purse(players, contest.purse)
+    if violation is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=violation.detail,
+        )
+    return sum(p.price or 0.0 for p in players)
+
+
+async def _load_contest_squads(contest_id: str, *, tournament_id: TenantId):
+    """Every team in the contest paired with the players it still resolves to."""
     teams = (
         await scoped(Team, tournament_id)
         .find(Team.contest_id == str(contest_id))
@@ -347,10 +386,97 @@ async def find_teams_breaking_auction_rules(
         else []
     )
     by_id = {str(p.id): p for p in players}
+    return [
+        (team, [by_id[pid] for pid in team.player_ids if pid in by_id])
+        for team in teams
+    ]
 
+
+async def find_teams_over_purse(
+    contest_id: str, purse: float, *, tournament_id: TenantId
+) -> List[str]:
+    """
+    Existing squads in a slot_purse contest that the given purse would break.
+
+    The slot half of the rules is checked separately by
+    routes/teams.find_teams_breaking_slot_rules.
+    """
     broken: List[str] = []
-    for team in teams:
-        squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
+    for team, squad in await _load_contest_squads(
+        contest_id, tournament_id=tournament_id
+    ):
+        violation = evaluate_purse(squad, purse)
+        if violation is not None:
+            broken.append(f"{team.team_name} {violation.summary}")
+    return broken
+
+
+async def assert_slot_purse_config_feasible(
+    purse: float,
+    allowed_teams: Optional[Sequence[str]] = None,
+    *,
+    tournament_id: TenantId,
+) -> None:
+    """
+    Reject a slot_purse purse no participant could satisfy.
+
+    Each slot needs at least ``min_select`` priced players, and the cheapest
+    way to fill every slot's minimum must fit the purse. This ignores the
+    per-team cap, so it is a lower bound: it catches a purse that is plainly
+    too small without claiming every passing setup is buildable.
+    """
+    pool = await load_eligible_pool(
+        tournament_id=tournament_id, allowed_teams=allowed_teams
+    )
+    by_slot: dict = {}
+    for p in pool:
+        if p.slot:
+            by_slot.setdefault(p.slot, []).append(p.price or 0.0)
+
+    minimum_cost = 0.0
+    for slot in await scoped(Slot, tournament_id).find(Slot.min_select > 0).to_list():
+        prices = sorted(by_slot.get(str(slot.id), []))
+        if len(prices) < slot.min_select:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Slot {slot.name} needs {slot.min_select} player(s) but only "
+                    f"{len(prices)} priced player(s) are available. Import auction "
+                    f"values before creating this contest."
+                ),
+            )
+        minimum_cost += sum(prices[: slot.min_select])
+
+    if minimum_cost > purse:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Purse of {purse:,.0f} is too small: filling every slot's minimum "
+                f"costs at least {minimum_cost:,.0f}."
+            ),
+        )
+
+
+async def find_teams_breaking_auction_rules(
+    contest_id: str,
+    squad_size: Optional[int],
+    purse: float,
+    max_per_team: int,
+    allowed_teams: Optional[Sequence[str]] = None,
+    *,
+    tournament_id: TenantId,
+) -> List[str]:
+    """
+    Existing squads in this contest that the given rules would invalidate.
+
+    Returns one "<team name> <reason>" line per broken team. Tightening a purse
+    or a cap after teams exist would otherwise leave those squads enrolled and
+    scoring under rules they no longer satisfy.
+    """
+    broken: List[str] = []
+    for team, squad in await _load_contest_squads(
+        contest_id, tournament_id=tournament_id
+    ):
         violation = evaluate_squad(
             players=squad,
             squad_size=squad_size,

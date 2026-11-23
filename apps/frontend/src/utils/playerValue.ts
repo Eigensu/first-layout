@@ -1,4 +1,4 @@
-import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
+import { usesPurse, type ContestFormat } from "@/common/consts/contest";
 
 /**
  * Format an auction points figure, e.g. 200000 -> "200,000".
@@ -20,7 +20,7 @@ export function formatPlayerValue(
   value: number,
   format: ContestFormat | undefined,
 ): string {
-  if (format === CONTEST_FORMAT.AUCTION_PURSE) {
+  if (usesPurse(format)) {
     return formatPoints(value);
   }
   return `₹${Math.floor(value)}`;
@@ -28,5 +28,5 @@ export function formatPlayerValue(
 
 /** Column label that goes with `formatPlayerValue`. */
 export function playerValueLabel(format: ContestFormat | undefined): string {
-  return format === CONTEST_FORMAT.AUCTION_PURSE ? "Sold For" : "Price";
+  return usesPurse(format) ? "Sold For" : "Price";
 }

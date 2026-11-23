@@ -16,8 +16,10 @@ from app.models.user import User
 from app.schemas.team import TeamCreate, TeamResponse, TeamsListResponse, TeamUpdate
 from app.services.auction import (
     is_auction_contest,
+    is_slot_purse_contest,
     resolve_max_players_per_team,
     validate_auction_squad,
+    validate_squad_purse,
 )
 from app.services.contest_status import compute_contest_status
 from app.services.membership import record_play
@@ -310,6 +312,9 @@ async def create_team(
             max_players_allowed=max_players_allowed,
             tournament_id=tournament_id,
         )
+        # slot_purse: the slot rules above, plus one purse for the whole squad.
+        if is_slot_purse_contest(contest):
+            total_value = validate_squad_purse(players, contest)
 
     user_id = current_user.id
     if user_id is None:
@@ -599,6 +604,10 @@ async def update_team(
                     await _validate_slot_constraints(
                         players, tournament_id=tournament_id
                     )
+                    if is_slot_purse_contest(contest):
+                        update_data["total_value"] = validate_squad_purse(
+                            players, contest
+                        )
 
         update_data["updated_at"] = utc_now()
 
