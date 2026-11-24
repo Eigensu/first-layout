@@ -31,7 +31,9 @@ async def test_the_report_is_logged(monkeypatch, caplog):
     monkeypatch.setattr(
         script, "Tournament", SimpleNamespace(find=lambda *a: Query(), status=None)
     )
-    monkeypatch.setattr(type(get_settings()), "shared_tenancy", property(lambda s: True))
+    monkeypatch.setattr(
+        type(get_settings()), "shared_tenancy", property(lambda s: True)
+    )
 
     with caplog.at_level(logging.INFO, logger="scripts.refresh_membership_stats"):
         args = argparse.Namespace(all_live=True, all=False, tournament=None)

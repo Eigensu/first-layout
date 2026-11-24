@@ -120,7 +120,9 @@ async def connect_to_mongo():
                 CricHeroesMatchMvp,
             ],
         )
-        logger.info("Initialized Beanie ODM with database: %s", settings.mongodb_db_name)
+        logger.info(
+            "Initialized Beanie ODM with database: %s", settings.mongodb_db_name
+        )
 
     except Exception:
         logger.exception("Failed to connect to MongoDB")
