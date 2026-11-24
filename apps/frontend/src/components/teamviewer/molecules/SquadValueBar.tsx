@@ -2,6 +2,7 @@
 
 import React from "react";
 import { formatPoints } from "@/utils/playerValue";
+import { isOverPurse } from "@/utils/purse";
 
 export interface SquadValueBarProps {
   /** Sum of the squad's auction prices. */
@@ -22,7 +23,7 @@ export interface SquadValueBarProps {
 export function SquadValueBar({ spent, purse, className }: SquadValueBarProps) {
   const hasPurse = typeof purse === "number" && purse > 0;
   const pctSpent = hasPurse ? Math.min(100, (spent / purse!) * 100) : 0;
-  const overspent = hasPurse && spent > purse!;
+  const overspent = hasPurse && isOverPurse(spent, purse!);
 
   return (
     <div
