@@ -65,11 +65,19 @@ export interface PlayerListProps {
   getDisabledReason?: (player: Player) => string | null;
   /** Show the real-world team dropdown and value/points sort controls */
   showPoolFilters?: boolean;
+  /**
+   * Show only the value/points sort control (no team dropdown). Implied by
+   * `showPoolFilters`. Used by slots + purse contests.
+   */
+  showSortControl?: boolean;
+  /** Controlled sort; lets the choice survive the list remounting per slot */
+  sort?: PoolSort;
+  onSortChange?: (sort: PoolSort) => void;
   /** Contest format, used to label and format a player's value */
   contestFormat?: ContestFormat;
 }
 
-/** Ordering options for the open pool in auction contests. */
+/** Ordering options for purse-based player lists (auction, slots + purse). */
 export const POOL_SORTS = {
   VALUE_DESC: "value_desc",
   VALUE_ASC: "value_asc",

@@ -3,6 +3,7 @@ import { StepCard, Badge, Button, PlayerList, Player } from "@/components";
 import type { ContestFormat } from "@/common/consts/contest";
 import { PurseBar } from "./PurseBar";
 import { formatPoints } from "@/utils/playerValue";
+import { POOL_SORTS, type PoolSort } from "@/components/team/PlayerCard/types";
 
 interface PlayerSelectionStepProps {
   currentStep: number;
@@ -91,6 +92,10 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
   canNextForActiveSlot,
   isLastSlot,
 }) => {
+  // Kept here, not in PlayerList, so the choice survives switching slot tabs
+  // (the list remounts per slot).
+  const [sort, setSort] = React.useState<PoolSort>(POOL_SORTS.VALUE_DESC);
+
   return (
     <StepCard
       stepNumber={1}
@@ -251,6 +256,9 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
                 compact={true}
                 compactShowPrice={hasPurse}
                 showPoolFilters={isAuction}
+                showSortControl={hasPurse}
+                sort={sort}
+                onSortChange={setSort}
                 contestFormat={contestFormat}
                 getDisabledReason={
                   hasPurse && getSelectionBlock
