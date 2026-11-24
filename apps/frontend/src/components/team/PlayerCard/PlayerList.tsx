@@ -29,13 +29,25 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   isPlayerDisabled,
   getDisabledReason,
   showPoolFilters = false,
+  showSortControl = showPoolFilters,
+  sort: controlledSort,
+  onSortChange,
   contestFormat,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [teamFilter, setTeamFilter] = React.useState<string>(ALL_TEAMS);
-  const [sort, setSort] = React.useState<PoolSort>(POOL_SORTS.VALUE_DESC);
-  const [priceRangeIndex, setPriceRangeIndex] = React.useState<number | null>(null);
+  const [uncontrolledSort, setUncontrolledSort] = React.useState<PoolSort>(
+    POOL_SORTS.VALUE_DESC,
+  );
+  const sort = controlledSort ?? uncontrolledSort;
+  const setSort = (next: PoolSort) => {
+    setUncontrolledSort(next);
+    onSortChange?.(next);
+  };
+  const [priceRangeIndex, setPriceRangeIndex] = React.useState<number | null>(
+    null,
+  );
 
   const canSelectMoreTotal = selectedPlayers.length < maxSelections;
 
@@ -80,8 +92,11 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       );
     }
 
-    if (showPoolFilters) {
-      const bySort: Record<PoolSort, (a: typeof list[0], b: typeof list[0]) => number> = {
+    if (showSortControl) {
+      const bySort: Record<
+        PoolSort,
+        (a: (typeof list)[0], b: (typeof list)[0]) => number
+      > = {
         [POOL_SORTS.VALUE_DESC]: (a, b) => b.price - a.price,
         [POOL_SORTS.VALUE_ASC]: (a, b) => a.price - b.price,
         [POOL_SORTS.NAME_ASC]: (a, b) => a.name.localeCompare(b.name),
@@ -90,7 +105,17 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     }
 
     return list;
-  }, [players, filterSlot, searchQuery, showPoolFilters, teamFilter, sort, priceRangeIndex, priceRanges]);
+  }, [
+    players,
+    filterSlot,
+    searchQuery,
+    showPoolFilters,
+    showSortControl,
+    teamFilter,
+    sort,
+    priceRangeIndex,
+    priceRanges,
+  ]);
 
   // Reset to page 1 when search or filters change
   React.useEffect(() => {
@@ -125,24 +150,26 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       {/* Search Input */}
       <SearchInput searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
-      {/* Open-pool filters: by real-world team, and by value or points */}
-      {showPoolFilters && (
+      {/* Sort by value or points; auction pools also filter by real-world team */}
+      {showSortControl && (
         <div className="flex gap-1.5 sm:gap-2">
-          <label className="flex-1 min-w-0">
-            <span className="sr-only">Filter by team</span>
-            <select
-              value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              className="w-full rounded-lg border border-border-subtle bg-bg-card text-text-main px-2 py-1.5 text-[11px] sm:text-sm"
-            >
-              <option value={ALL_TEAMS}>All teams</option>
-              {teamOptions.map((team) => (
-                <option key={team} value={team}>
-                  {team}
-                </option>
-              ))}
-            </select>
-          </label>
+          {showPoolFilters && (
+            <label className="flex-1 min-w-0">
+              <span className="sr-only">Filter by team</span>
+              <select
+                value={teamFilter}
+                onChange={(e) => setTeamFilter(e.target.value)}
+                className="w-full rounded-lg border border-border-subtle bg-bg-card text-text-main px-2 py-1.5 text-[11px] sm:text-sm"
+              >
+                <option value={ALL_TEAMS}>All teams</option>
+                {teamOptions.map((team) => (
+                  <option key={team} value={team}>
+                    {team}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex-1 min-w-0">
             <span className="sr-only">Sort players</span>
             <select
