@@ -364,8 +364,14 @@ async def test_a_single_tournament_service_writes_no_memberships(
         },
     )
     user = await User.find_one(User.username == "newplayer")
-    # A legacy service's squad comes from its own, tournament-less players.
-    legacy_players = [AdminPlayer(name=f"legacy {i}", team="XI") for i in range(2)]
+    # A legacy service's squad comes from its own, tournament-less players,
+    # each in one of its own slots (a player outside every slot is refused).
+    legacy_slot = Slot(code="ANY", name="Any", min_select=0, max_select=2)
+    await legacy_slot.insert()
+    legacy_players = [
+        AdminPlayer(name=f"legacy {i}", team="XI", slot=str(legacy_slot.id))
+        for i in range(2)
+    ]
     for p in legacy_players:
         await p.insert()
     player_ids = [str(p.id) for p in legacy_players]

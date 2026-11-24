@@ -106,7 +106,8 @@ async def upstream(db):
 @pytest.fixture
 def configured(monkeypatch):
     monkeypatch.setattr(settings, "tenancy", "shared")
-    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", str(TPL))
+    # No cap: a linked tournament is synced without anyone configuring it.
+    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", "")
     monkeypatch.setattr(settings, "cricheroes_snapshot_max_age_hours", 24.0)
 
 
@@ -526,10 +527,10 @@ async def test_it_cannot_be_turned_on_without_a_linked_tournament(client, alpha)
     assert (await Contest.get(full.id)).points_from_cricheroes is False
 
 
-async def test_it_cannot_be_turned_on_for_a_tournament_the_sync_skips(
+async def test_it_cannot_be_turned_on_for_a_tournament_the_cap_holds_back(
     client, alpha, monkeypatch
 ):
-    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", "")
+    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", str(TPL + 1))
     full = await contest(alpha, on=False)
 
     response = await client.put(
@@ -539,7 +540,24 @@ async def test_it_cannot_be_turned_on_for_a_tournament_the_sync_skips(
     )
 
     assert response.status_code == 422
-    assert "CRICHEROES_SYNC_TOURNAMENT_IDS" in response.json()["detail"]
+    assert "CRICHEROES_SYNC_TOURNAMENT_IDS holds it back" in response.json()["detail"]
+    assert (await Contest.get(full.id)).points_from_cricheroes is False
+
+
+async def test_a_cap_that_names_the_tournament_lets_it_on(
+    client, alpha, no_upstream, monkeypatch
+):
+    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", str(TPL))
+    full = await contest(alpha, on=False)
+
+    response = await client.put(
+        f"/api/admin/contests/{full.id}",
+        json={"points_from_cricheroes": True},
+        headers=ALPHA,
+    )
+
+    assert response.status_code == 200, response.text
+    assert (await Contest.get(full.id)).points_from_cricheroes is True
 
 
 async def test_moving_the_window_rescores(client, alpha, no_upstream):

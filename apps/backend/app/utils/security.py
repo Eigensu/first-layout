@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from secrets import token_hex
 from typing import Optional
@@ -8,6 +9,8 @@ from passlib.context import CryptContext
 
 from app.common.datetime_utils import utc_now
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -78,5 +81,6 @@ def decode_token(token: str) -> Optional[dict]:
         )
         return payload
     except PyJWTError as e:
-        print(f"JWT Error: {e}")
+        # Routine (an expired session), so INFO: a log line, not an error.
+        logger.info("JWT rejected: %s", e)
         return None

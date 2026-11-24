@@ -85,13 +85,20 @@ async def _cricheroes_tournament_for_scoring(tournament_id: TenantId) -> int:
                 "Admin > Tournaments."
             ),
         )
-    if linked not in get_settings().cricheroes_sync_tournaments:
+    if linked not in await cricheroes_cache.tournaments_to_sync():
+        # It is linked, so the operator's cap is what keeps the sync from
+        # reading it.
         raise HTTPException(
             status_code=422,
             detail=(
                 f"CricHeroes tournament {linked} is not among the tournaments "
-                "the scheduled sync reads (CRICHEROES_SYNC_TOURNAMENT_IDS), so "
-                "no MVP table of it would ever be read."
+                "the scheduled sync reads"
+                + (
+                    " (CRICHEROES_SYNC_TOURNAMENT_IDS holds it back)"
+                    if get_settings().cricheroes_sync_tournaments
+                    else ""
+                )
+                + ", so no MVP table of it would ever be read."
             ),
         )
     return linked
@@ -405,8 +412,9 @@ async def update_contest(
 
         if not force:
             # Every rule a slot_purse squad must meet: slot shape, then purse,
-            # per-team cap and allowed teams. One line per team, however many
-            # rules it breaks, so the count and the preview stay honest.
+            # per-team cap, allowed teams and the daily per-team minimum. One line
+            # per team, however many rules it breaks, so the count and the preview
+            # stay honest.
             slot_reasons = await slot_rule_reasons_by_team(
                 contest_id=str(contest.id), tournament_id=tournament_id
             )
@@ -415,6 +423,9 @@ async def update_contest(
                 purse=new_purse,
                 max_per_team=effective_max,
                 allowed_teams=effective_allowed,
+                # Same daily minimum that create and update enforce, so a
+                # switch to daily cannot leave one-sided squads scoring.
+                min_per_team=settings.min_players_per_team,
                 tournament_id=tournament_id,
             )
             broken = []

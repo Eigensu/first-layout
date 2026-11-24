@@ -36,6 +36,12 @@ from app.utils.tenant import TenantId, scoped
 
 ACTIVE_STATUS = "Active"
 
+# Prices are floats, and the client and server can add a squad's prices in a
+# different order, so the same squad can total a hair over the purse on one
+# side and not the other. Every purse comparison, here and in the frontend's
+# utils/purse.ts, allows this much slack so both sides agree.
+PURSE_TOLERANCE = 1e-6
+
 
 def is_auction_eligible(player) -> bool:
     """True when the player has an auction value and is Active."""
@@ -233,7 +239,7 @@ def _ineligible_violation(players: Sequence) -> Optional[SquadViolation]:
 
 def _over_purse_violation(players: Sequence, purse: float) -> Optional[SquadViolation]:
     total_value = sum(p.price or 0.0 for p in players)
-    if total_value <= purse:
+    if total_value <= purse + PURSE_TOLERANCE:
         return None
     return SquadViolation(
         summary=(f"costs {total_value:,.0f}, over the purse of {purse:,.0f}"),
@@ -392,20 +398,45 @@ async def _load_contest_squads(contest_id: str, *, tournament_id: TenantId):
     ]
 
 
+def team_minimum_shortfall(
+    players: Sequence,
+    allowed_teams: Optional[Sequence[str]],
+    min_per_team: int,
+) -> Optional[str]:
+    """
+    The first allowed team a daily squad draws too few players from.
+
+    A daily contest between exactly two teams needs at least ``min_per_team``
+    from each. Returns that team's name, or None when the rule is met or does
+    not apply. Pass ``allowed_teams`` only for a daily contest.
+    """
+    if not allowed_teams or len(allowed_teams) != 2 or min_per_team <= 0:
+        return None
+    team_counts = Counter(p.team for p in players if p.team)
+    for required_team in allowed_teams:
+        if team_counts.get(required_team, 0) < min_per_team:
+            return required_team
+    return None
+
+
 async def purse_rule_reasons_by_team(
     contest_id: str,
     purse: float,
     max_per_team: int,
     allowed_teams: Optional[Sequence[str]] = None,
     *,
+    min_per_team: int = 0,
     tournament_id: TenantId,
 ) -> Dict[str, Tuple[str, str]]:
     """
-    Squads in a slot_purse contest that the given purse, per-team cap or
-    allowed-teams list would break: ``{team_id: (team_name, reason)}``.
+    Squads in a slot_purse contest that the given purse, per-team cap,
+    allowed-teams list or daily per-team minimum would break:
+    ``{team_id: (team_name, reason)}``.
 
     This is evaluate_squad without the exact-size rule, which slot_purse takes
-    from slots instead (routes/teams.slot_rule_reasons_by_team checks that half).
+    from slots instead (routes/teams.slot_rule_reasons_by_team checks that half),
+    plus the daily minimum that validate_team_composition applies on create and
+    update. Like there, it applies to every squad, whatever its size.
     """
     broken: Dict[str, Tuple[str, str]] = {}
     for team, squad in await _load_contest_squads(
@@ -420,6 +451,13 @@ async def purse_rule_reasons_by_team(
         )
         if violation is not None:
             broken[str(team.id)] = (team.team_name, violation.summary)
+            continue
+        short_team = team_minimum_shortfall(squad, allowed_teams, min_per_team)
+        if short_team is not None:
+            broken[str(team.id)] = (
+                team.team_name,
+                f"has fewer than {min_per_team} player(s) from {short_team}",
+            )
     return broken
 
 

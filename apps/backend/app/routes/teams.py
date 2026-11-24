@@ -30,14 +30,20 @@ from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_on
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
-async def _get_dynamic_max_players_from_slots(
-    *, tournament_id: TenantId
-) -> Optional[int]:
-    """Compute maximum team size from slot configuration using total min_select."""
+async def get_slot_squad_size(*, tournament_id: TenantId) -> Optional[int]:
+    """
+    The largest squad the slot configuration allows: the sum of every slot's
+    max_select.
+
+    The team builder and the edit sheet both size a full squad this way, so
+    the server must too. Summing min_select instead rejected the full squad the
+    UI asked for whenever a slot's minimum was below its maximum. The per-slot
+    min/max check (_validate_slot_constraints) still decides the squad's shape.
+    """
     slots = await scoped(Slot, tournament_id).to_list()
     if not slots:
         return None
-    return sum(max(0, slot.min_select) for slot in slots)
+    return sum(max(0, slot.max_select) for slot in slots)
 
 
 async def _resolve_contest(
@@ -59,7 +65,7 @@ async def _compute_slot_violations(
     squad is legal. Shared by submission-time validation and admin
     reconciliation of existing teams so the two cannot drift apart.
     """
-    # Count players per slot (ignore players without a slot)
+    # Count players per slot (players without a valid slot are rejected below)
     slot_counts: Dict[str, int] = {}
     for p in players:
         if p.slot:
@@ -71,7 +77,7 @@ async def _compute_slot_violations(
         try:
             present_slot_oids.append(PydanticObjectId(sid))
         except Exception:
-            # If slot id is malformed, skip; it won't be validated
+            # A malformed slot id never resolves, so it is rejected below.
             continue
     slots_present = (
         await scoped(Slot, tournament_id)
@@ -90,6 +96,18 @@ async def _compute_slot_violations(
         slots_by_id.setdefault(str(s.id), s)
 
     violations = []
+    # Every player must sit in one of this tournament's slots. A player with no
+    # slot, a malformed one or one that no longer exists would otherwise fill a
+    # spare place in the squad without counting against any slot's limits.
+    unslotted = sum(1 for p in players if not p.slot or p.slot not in slots_by_id)
+    if unslotted:
+        violations.append(
+            {
+                "slot": {"id": None, "code": None, "name": "Players without a slot"},
+                "expected": {"min_select": 0, "max_select": 0},
+                "actual": unslotted,
+            }
+        )
     for sid, slot in slots_by_id.items():
         count = slot_counts.get(sid, 0)
         if count < slot.min_select or count > slot.max_select:
@@ -276,9 +294,7 @@ async def validate_squad_for_contest(
         )
 
     # Squad size comes from slots outside auction mode.
-    max_players_allowed = await _get_dynamic_max_players_from_slots(
-        tournament_id=tournament_id
-    )
+    max_players_allowed = await get_slot_squad_size(tournament_id=tournament_id)
     if max_players_allowed is not None and submitted_count > max_players_allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -289,8 +305,6 @@ async def validate_squad_for_contest(
     await validate_team_composition(
         players=players,
         contest=contest,
-        squad_size=submitted_count,
-        max_players_allowed=max_players_allowed,
         tournament_id=tournament_id,
     )
     # slot_purse: the slot rules above, plus one purse for the whole squad.

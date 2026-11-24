@@ -1,4 +1,47 @@
+import httpx
 import pytest
+import pytest_asyncio
+from cricheroes_responses import refusal
+
+from app.routes.admin.cricheroes import get_cricheroes_client
+from app.services.cricheroes_client import CricHeroesClient
+
+BASE = "https://cricheroes.test/api/v1"
+CREDS = {"api_key": "k", "secret_access_key": "s", "udid": "u"}
+
+
+class ScriptedCricHeroes:
+    """A CricHeroes that serves every tournament, until told otherwise, and
+    counts the requests it gets."""
+
+    def __init__(self):
+        self.answer = httpx.Response(200, json={"status": True, "data": []})
+        self.calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        return self.answer
+
+
+@pytest_asyncio.fixture
+async def cricheroes(db):
+    """Put a scripted CricHeroes behind the routes that check a link with it,
+    so no test here can reach the real one. Takes `db`, not `client`: `client`
+    installs the admin sign-in override, which a test of the gate must not
+    have."""
+    from main import app
+
+    scripted = ScriptedCricHeroes()
+    http = httpx.AsyncClient(transport=httpx.MockTransport(scripted))
+    served = CricHeroesClient(**CREDS, base_url=BASE, client=http)
+
+    async def _client():
+        yield served
+
+    app.dependency_overrides[get_cricheroes_client] = _client
+    yield scripted
+    app.dependency_overrides.pop(get_cricheroes_client, None)
+    await http.aclose()
 
 
 class TestCheckSlug:
@@ -270,6 +313,10 @@ class TestCricHeroesLink:
     public stats page reads from the cache (CRICHEROES_INTEGRATION_TECH_SPEC.md
     §13.1)."""
 
+    @pytest.fixture(autouse=True)
+    def _scripted_cricheroes(self, cricheroes):
+        return cricheroes
+
     async def _create(self, client, **overrides):
         payload = {"slug": "tpl", "name": "TPL", **overrides}
         resp = await client.post("/api/admin/tournaments", json=payload)
@@ -349,3 +396,166 @@ class TestCricHeroesLink:
             json={"slug": "tpl", "name": "TPL", "cricheroes_tournament_id": 2242502},
         )
         assert resp.status_code == 401
+
+
+class TestCricHeroesLinkCheck:
+    """Saving a link asks CricHeroes, with one call, whether they serve that
+    tournament to us (CRICHEROES_INTEGRATION_TECH_SPEC.md §13.1), so an id that
+    could never be read is refused now rather than leaving the stats page
+    empty."""
+
+    async def _create(self, client, **overrides):
+        payload = {"slug": "gsl", "name": "GSL", **overrides}
+        resp = await client.post("/api/admin/tournaments", json=payload)
+        return resp
+
+    async def test_a_new_link_is_checked_once(self, client, cricheroes):
+        created = (await self._create(client)).json()
+        assert cricheroes.calls == 0
+
+        resp = await client.put(
+            f"/api/admin/tournaments/{created['id']}",
+            json={"cricheroes_tournament_id": 2242502},
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["cricheroes_tournament_id"] == 2242502
+        assert resp.json()["cricheroes_warning"] is None
+        assert cricheroes.calls == 1
+
+    async def test_creating_with_a_link_checks_it(self, client, cricheroes):
+        resp = await self._create(client, cricheroes_tournament_id=2242502)
+
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["cricheroes_warning"] is None
+        assert cricheroes.calls == 1
+
+    async def test_an_id_outside_our_agreement_is_refused_and_not_saved(
+        self, client, cricheroes
+    ):
+        created = (await self._create(client)).json()
+        cricheroes.answer = refusal(170001, "Tournament not accessible", status=403)
+
+        resp = await client.put(
+            f"/api/admin/tournaments/{created['id']}",
+            json={"cricheroes_tournament_id": 60214, "name": "Renamed"},
+        )
+
+        assert resp.status_code == 422
+        assert resp.json()["detail"].startswith("Not linked.")
+        fetched = (await client.get(f"/api/admin/tournaments/{created['id']}")).json()
+        # Nothing of the edit was saved, the rename included.
+        assert fetched["cricheroes_tournament_id"] is None
+        assert fetched["name"] == "GSL"
+
+    async def test_a_refused_id_does_not_create_the_tournament(
+        self, client, cricheroes
+    ):
+        cricheroes.answer = refusal(170001, "Tournament not accessible", status=403)
+
+        resp = await self._create(client, cricheroes_tournament_id=60214)
+
+        assert resp.status_code == 422
+        listed = await client.get("/api/admin/tournaments")
+        assert listed.json()["total"] == 0
+
+    async def test_a_tournament_with_no_fixtures_yet_is_served(
+        self, client, cricheroes
+    ):
+        cricheroes.answer = refusal(170011, "No matches found for this tournament")
+
+        resp = await self._create(client, cricheroes_tournament_id=2251924)
+
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["cricheroes_tournament_id"] == 2251924
+        assert resp.json()["cricheroes_warning"] is None
+
+    async def test_an_outage_saves_the_link_and_says_it_is_unconfirmed(
+        self, client, cricheroes
+    ):
+        cricheroes.answer = httpx.Response(500, text="down")
+
+        resp = await self._create(client, cricheroes_tournament_id=2242502)
+
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["cricheroes_tournament_id"] == 2242502
+        assert "could not confirm" in body["cricheroes_warning"]
+        assert "2242502" in body["cricheroes_warning"]
+        assert "HTTP 500" in body["cricheroes_warning"]
+
+    async def test_no_credentials_here_saves_the_link_with_a_warning(self, client):
+        from main import app
+
+        async def _unconfigured():
+            async with CricHeroesClient(
+                api_key="", secret_access_key="", udid="", base_url=BASE
+            ) as unconfigured:
+                yield unconfigured
+
+        app.dependency_overrides[get_cricheroes_client] = _unconfigured
+        try:
+            resp = await self._create(client, cricheroes_tournament_id=2242502)
+        finally:
+            app.dependency_overrides.pop(get_cricheroes_client, None)
+
+        assert resp.status_code == 201, resp.text
+        assert "CRICHEROES_API_KEY" in resp.json()["cricheroes_warning"]
+
+    async def test_resaving_the_same_link_or_unlinking_asks_nothing(
+        self, client, cricheroes
+    ):
+        created = (await self._create(client, cricheroes_tournament_id=2242502)).json()
+        url = f"/api/admin/tournaments/{created['id']}"
+        assert cricheroes.calls == 1
+
+        # The edit form sends the stored link back on every save.
+        resp = await client.put(
+            url, json={"name": "Renamed", "cricheroes_tournament_id": 2242502}
+        )
+        assert resp.status_code == 200 and resp.json()["cricheroes_warning"] is None
+        resp = await client.put(url, json={"cricheroes_tournament_id": None})
+        assert resp.status_code == 200
+        assert resp.json()["cricheroes_tournament_id"] is None
+
+        assert cricheroes.calls == 1
+
+    async def test_relinking_checks_the_new_id(self, client, cricheroes):
+        created = (await self._create(client, cricheroes_tournament_id=2242502)).json()
+
+        resp = await client.put(
+            f"/api/admin/tournaments/{created['id']}",
+            json={"cricheroes_tournament_id": 2251924},
+        )
+
+        assert resp.json()["cricheroes_tournament_id"] == 2251924
+        assert cricheroes.calls == 2
+
+    async def test_an_edit_refused_for_another_reason_costs_no_call(
+        self, client, cricheroes
+    ):
+        created = (await self._create(client)).json()
+
+        resp = await client.put(
+            f"/api/admin/tournaments/{created['id']}",
+            json={
+                "cricheroes_tournament_id": 2242502,
+                "start_at": "2026-08-20T10:00:00",
+                "end_at": "2026-08-01T10:00:00",
+            },
+        )
+
+        assert resp.status_code == 400
+        assert cricheroes.calls == 0
+
+    async def test_the_warning_is_only_on_the_save_that_raised_it(
+        self, client, cricheroes
+    ):
+        cricheroes.answer = httpx.Response(500, text="down")
+        created = (await self._create(client, cricheroes_tournament_id=2242502)).json()
+
+        fetched = await client.get(f"/api/admin/tournaments/{created['id']}")
+        listed = await client.get("/api/admin/tournaments")
+
+        assert fetched.json()["cricheroes_warning"] is None
+        assert listed.json()["tournaments"][0]["cricheroes_warning"] is None

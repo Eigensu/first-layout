@@ -71,6 +71,17 @@ export default function TeamsPage() {
   // Edit squad (live contests)
   const [editPlayersTeamId, setEditPlayersTeamId] = useState<string | null>(null);
   const [savingPlayers, setSavingPlayers] = useState(false);
+  // Squad members the pool no longer offers (inactive, unpriced or deleted),
+  // fetched one by one so the edit sheet can name them and let the user remove
+  // them. The pool filters them out, so without this they were invisible.
+  const [unavailableFetch, setUnavailableFetch] = useState<{
+    teamId: string;
+    players: ApiPlayer[];
+  } | null>(null);
+  const unavailableMembers =
+    unavailableFetch && unavailableFetch.teamId === editPlayersTeamId
+      ? unavailableFetch.players
+      : [];
   const [slots, setSlots] = useState<ApiSlot[]>([]);
   // Contests state for join action
   const [contests, setContests] = useState<PublicContest[]>([]);
@@ -181,6 +192,41 @@ export default function TeamsPage() {
     // Always fetch players. If slots are unavailable/empty, slotToRole falls back to "Player".
     fetchPlayers();
   }, [contestIdParam, slots]);
+
+  useEffect(() => {
+    if (!editPlayersTeamId) return;
+    const teamId = editPlayersTeamId;
+    const team = teams.find((t) => t.id === teamId);
+    if (!team) return;
+    const inPool = new Set(players.map((p) => p.id));
+    const missing = team.player_ids.filter((id) => !inPool.has(id));
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    Promise.all(
+      missing.map(async (id): Promise<ApiPlayer | null> => {
+        try {
+          const res = await fetch(
+            `${API_BASE_URL}/api/players/${encodeURIComponent(id)}`,
+            { headers: tenantHeaders() },
+          );
+          return res.ok ? ((await res.json()) as ApiPlayer) : null;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((found) => {
+      if (!cancelled) {
+        setUnavailableFetch({
+          teamId,
+          players: found.filter((p): p is ApiPlayer => p !== null),
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editPlayersTeamId, teams, players]);
 
   // Load per-team enrollments and resolve contest names
   useEffect(() => {
@@ -806,6 +852,12 @@ export default function TeamsPage() {
               points: p.points,
               price: p.price,
               slot: p.slot || undefined,
+            }))}
+            unavailablePlayers={unavailableMembers.map((p) => ({
+              id: p.id,
+              name: p.name,
+              team: p.team,
+              price: p.price,
             }))}
             // An auction squad is sized by the contest, not by the slot maxima.
             // Using the slot total here left Save permanently disabled.
