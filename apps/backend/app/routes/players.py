@@ -38,6 +38,13 @@ async def list_players(
     contest_id: Optional[str] = Query(
         None, description="If provided, filter by allowed teams for daily contest"
     ),
+    ids: Optional[str] = Query(
+        None,
+        description=(
+            "Comma-separated player ids. Only these players are returned, and "
+            "only if they pass the other filters (contest_id included)."
+        ),
+    ),
     limit: int = Query(1000, ge=1, le=5000),
     skip: int = Query(0, ge=0),
     tournament_id: TenantId = Depends(get_tenant),
@@ -68,6 +75,18 @@ async def list_players(
             query = (
                 {"$and": [query, eligibility_filter]} if query else eligibility_filter
             )
+
+    if ids is not None:
+        # Lets a client ask which squad members a contest's pool still offers,
+        # whatever the pool's size. Malformed ids simply match nothing.
+        wanted = []
+        for raw in ids.split(","):
+            try:
+                wanted.append(PydanticObjectId(raw.strip()))
+            except Exception:
+                continue
+        id_filter = {"_id": {"$in": wanted}}
+        query = {"$and": [query, id_filter]} if query else id_filter
 
     players = (
         await scoped(Player, tournament_id)

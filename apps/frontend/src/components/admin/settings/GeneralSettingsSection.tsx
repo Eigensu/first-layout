@@ -105,7 +105,7 @@ export function GeneralSettingsSection() {
                   Min Players Per Team
                 </label>
                 <p className="text-xs text-gray-500 mb-2">
-                  Minimum number of players a user must select from each real-world team.
+                  In a daily contest between two teams, every saved squad must include at least this many players from each team.
                 </p>
                 <input
                   id="min_players"

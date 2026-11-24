@@ -25,7 +25,7 @@ from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.routes.teams import find_teams_breaking_slot_rules, slot_rule_reasons_by_team
+from app.routes.teams import slot_rule_reasons_by_team
 from app.schemas.admin.cricheroes_points import ContestPointsSummary
 from app.schemas.contest import (
     ContestCreate,
@@ -42,6 +42,7 @@ from app.services import cricheroes_cache, cricheroes_points
 from app.services.auction import (
     assert_auction_config_feasible,
     assert_slot_purse_config_feasible,
+    daily_minimum_reasons_by_team,
     find_teams_breaking_auction_rules,
     purse_rule_reasons_by_team,
     resolve_max_players_per_team,
@@ -190,11 +191,13 @@ async def create_contest(
             tournament_id=tournament_id,
         )
     elif data.contest_format == ContestFormat.SLOT_PURSE:
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
         await assert_slot_purse_config_feasible(
             purse=data.purse,
             allowed_teams=(
                 data.allowed_teams if data.contest_type == "daily" else None
             ),
+            min_per_team=settings.min_players_per_team,
             tournament_id=tournament_id,
         )
 
@@ -396,6 +399,7 @@ async def update_contest(
         await assert_slot_purse_config_feasible(
             purse=new_purse,
             allowed_teams=effective_allowed,
+            min_per_team=settings.min_players_per_team,
             tournament_id=tournament_id,
         )
 
@@ -444,10 +448,27 @@ async def update_contest(
         # comes from slot config instead of the purse, so a switch away from
         # auction_purse (or an edit while already slot_based) must not leave
         # existing squads enrolled and scoring against slot rules they were
-        # never checked against.
-        broken = await find_teams_breaking_slot_rules(
+        # never checked against. That includes the daily per-team minimum,
+        # which create and update enforce on every slot squad.
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
+        new_type = update_fields.get("contest_type", contest.contest_type)
+        new_allowed = update_fields.get("allowed_teams", contest.allowed_teams)
+        slot_reasons = await slot_rule_reasons_by_team(
             contest_id=str(contest.id), tournament_id=tournament_id
         )
+        minimum_reasons = await daily_minimum_reasons_by_team(
+            contest_id=str(contest.id),
+            allowed_teams=new_allowed if new_type == "daily" else None,
+            min_per_team=settings.min_players_per_team,
+            tournament_id=tournament_id,
+        )
+        broken = []
+        for team_id in dict.fromkeys([*slot_reasons, *minimum_reasons]):
+            name, reasons = slot_reasons.get(team_id, (None, []))
+            if team_id in minimum_reasons:
+                name, minimum_reason = minimum_reasons[team_id]
+                reasons = [*reasons, minimum_reason]
+            broken.append(f"{name} " + "; ".join(reasons))
         if broken:
             shown = broken[:5]
             more = len(broken) - len(shown)
