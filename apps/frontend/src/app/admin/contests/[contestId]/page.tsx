@@ -326,7 +326,7 @@ export default function AdminManageContestPage() {
       await loadLeaderboard();
       showAlert("Enrolled successfully", "Success");
     } catch (e: any) {
-      showAlert(e?.message || "Failed to enroll teams", "Enrollment failed");
+      showAlert(parseApiError(e, "Failed to enroll teams"), "Enrollment failed");
     } finally {
       setEnrolling(false);
     }

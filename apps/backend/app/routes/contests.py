@@ -17,6 +17,7 @@ from app.models.settings import GlobalSettings, default_logo_path
 from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.user import User
+from app.routes.teams import assert_team_enrollable
 from app.schemas.contest import ContestListResponse, ContestResponse
 from app.schemas.enrollment import EnrollmentResponse
 from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
@@ -271,6 +272,7 @@ async def enroll_in_contest(
     - Contest must exist and be public
     - Contest status cannot be completed/archived
     - Team must belong to the current user
+    - Team must have been built for this contest and meet its squad rules
     - Idempotent: if already enrolled and active, return existing enrollment
     """
     contest = await get_scoped(Contest, tournament_id, contest_id)
@@ -301,35 +303,6 @@ async def enroll_in_contest(
             status_code=403, detail="Team details visible when contest is ongoing"
         )
 
-    # If daily contest with restrictions: validate team players belong to allowed teams
-    if contest.contest_type == "daily" and contest.allowed_teams:
-        # Load players of the team and ensure their real-world team is allowed
-        from bson import ObjectId as _OID
-
-        pid_oids = [
-            PydanticObjectId(pid) for pid in team.player_ids if _OID.is_valid(pid)
-        ]
-        if pid_oids:
-            player_docs = (
-                await scoped(Player, tournament_id)
-                .find({"_id": {"$in": pid_oids}})
-                .to_list()
-            )
-            disallowed = [
-                p.name
-                for p in player_docs
-                if p.team and p.team not in contest.allowed_teams
-            ]
-            if disallowed:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "message": "Team contains players from disallowed teams for this daily contest",
-                        "disallowed_players": disallowed,
-                        "allowed_teams": contest.allowed_teams,
-                    },
-                )
-
     # Idempotent check
     existing = await scoped_one(
         TeamContestEnrollment,
@@ -350,6 +323,10 @@ async def enroll_in_contest(
             enrolled_at=existing.enrolled_at,
             removed_at=existing.removed_at,
         )
+
+    # The team must have been built for this contest and still meet its
+    # rules, whatever the format. Same check as the admin enroll path.
+    await assert_team_enrollable(team, contest, tournament_id=tournament_id)
 
     existing_user_enrollment = await scoped_one(
         TeamContestEnrollment,
@@ -387,6 +364,12 @@ async def enroll_in_contest(
             status_code=409,
             detail="You can enroll only one team in this contest",
         ) from exc
+    if team.contest_id is None:
+        # Bind a contest-less team to the contest it just passed, so later
+        # edits are validated against this contest's rules.
+        team.contest_id = str(contest.id)
+        team.updated_at = utc_now()
+        await team.save()
     await record_play(current_user, tournament_id)
 
     return EnrollmentResponse(
