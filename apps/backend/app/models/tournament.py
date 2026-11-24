@@ -40,8 +40,8 @@ class Tournament(Document):
 
     # The same tournament on CricHeroes, whose cached standings, MVP and
     # leaderboards its public stats page shows (CRICHEROES_INTEGRATION_TECH_SPEC.md
-    # §13.1). Unset: the page shows nothing. Set by platform admins only; the
-    # cache holds only the ids in CRICHEROES_SYNC_TOURNAMENT_IDS.
+    # §13.1). Unset: the page shows nothing. Set by platform admins only, and
+    # that is all it takes: the hourly sync keeps the cache of every linked id.
     cricheroes_tournament_id: Optional[int] = None
 
     created_at: datetime = Field(default_factory=utc_now)

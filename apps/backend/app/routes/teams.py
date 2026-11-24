@@ -232,6 +232,130 @@ def _assert_allowed_teams(players: List[Player], contest: Optional[Contest]) -> 
         )
 
 
+async def _load_squad_players(
+    player_ids: List[str], *, tournament_id: TenantId
+) -> List[Player]:
+    """Resolve player ids, refusing any that are malformed or resolve to nothing.
+
+    An id that resolves to nothing would otherwise silently shrink the squad
+    and understate its cost against the purse.
+    """
+    player_object_ids = []
+    for pid in player_ids:
+        try:
+            player_object_ids.append(PydanticObjectId(pid))
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid player ID: {pid}",
+            )
+    players = (
+        await scoped(Player, tournament_id)
+        .find({"_id": {"$in": player_object_ids}})
+        .to_list()
+    )
+    if len(players) != len(player_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Some player IDs are invalid",
+        )
+    return players
+
+
+async def validate_squad_for_contest(
+    players: List[Player],
+    contest: Optional[Contest],
+    submitted_count: int,
+    *,
+    tournament_id: TenantId,
+) -> float:
+    """
+    The single definition of a legal squad for a contest, in every format.
+
+    Raises HTTPException(400) on the first broken rule and returns the
+    squad's total value otherwise. Team create, team update and both enroll
+    paths (user and admin) go through here, so a squad cannot reach a
+    contest's leaderboard without meeting that contest's rules.
+
+    - Every format: a daily contest's allowed teams.
+    - auction_purse: exact squad size, per-team cap, purse, eligible players.
+    - slot_based: slot min/max, total size from slots, per-team limits.
+    - slot_purse: the slot_based rules plus one purse for the whole squad.
+    """
+    _assert_allowed_teams(players, contest)
+
+    if is_auction_contest(contest):
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
+        return await validate_auction_squad(
+            players=players,
+            contest=contest,
+            submitted_count=submitted_count,
+            max_per_team=resolve_max_players_per_team(contest, settings),
+        )
+
+    # Squad size comes from slots outside auction mode.
+    max_players_allowed = await get_slot_squad_size(tournament_id=tournament_id)
+    if max_players_allowed is not None and submitted_count > max_players_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {max_players_allowed} players allowed",
+        )
+    await _validate_slot_constraints(players, tournament_id=tournament_id)
+    # Enforce per-real-world-team composition limits
+    await validate_team_composition(
+        players=players,
+        contest=contest,
+        tournament_id=tournament_id,
+    )
+    # slot_purse: the slot rules above, plus one purse for the whole squad.
+    if is_slot_purse_contest(contest):
+        return validate_squad_purse(players, contest)
+    return sum(player.price for player in players)
+
+
+async def assert_team_enrollable(
+    team: Team, contest: Contest, *, tournament_id: TenantId
+) -> None:
+    """
+    Refuse to enroll a team that was not built for this contest, or whose
+    squad does not meet the contest's current rules.
+
+    Shared by the user enroll route and the admin bulk enroll route. The
+    squad is re-checked here, not trusted from when it was saved: a team
+    built for one contest must not be able to join another whose rules it
+    was never checked against, and the rules may have moved since.
+
+    A team saved without a contest (built from the teams page) may still join
+    one, but only by passing that contest's full rules here; the enroll
+    routes then bind it to the contest so later edits are checked against it.
+    """
+    if team.contest_id is not None and team.contest_id != str(contest.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This team was built for a different contest. "
+                "Build a team for this contest to join it."
+            ),
+        )
+
+    if (
+        not team.captain_id
+        or not team.vice_captain_id
+        or team.captain_id not in team.player_ids
+        or team.vice_captain_id not in team.player_ids
+        or team.captain_id == team.vice_captain_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Team needs a captain and a different vice-captain from its squad",
+        )
+
+    players = await _load_squad_players(team.player_ids, tournament_id=tournament_id)
+    await validate_squad_for_contest(
+        players, contest, len(team.player_ids), tournament_id=tournament_id
+    )
+
+
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 async def create_team(
     team_data: TeamCreate,
@@ -261,21 +385,6 @@ async def create_team(
                 detail="Cannot create a team for an ongoing contest.",
             )
 
-    auction_mode = is_auction_contest(contest)
-
-    # Squad size comes from the contest in auction mode, from slots otherwise.
-    max_players_allowed = None
-    if not auction_mode:
-        max_players_allowed = await get_slot_squad_size(tournament_id=tournament_id)
-        if (
-            max_players_allowed is not None
-            and len(team_data.player_ids) > max_players_allowed
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Maximum {max_players_allowed} players allowed",
-            )
-
     # Validate that captain and vice-captain are in the player list
     if team_data.captain_id not in team_data.player_ids:
         raise HTTPException(
@@ -295,54 +404,12 @@ async def create_team(
             detail="Captain and vice-captain must be different players",
         )
 
-    # Calculate total value of the team
-    # Convert string IDs to PydanticObjectId
-    player_object_ids = []
-    for pid in team_data.player_ids:
-        try:
-            player_object_ids.append(PydanticObjectId(pid))
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid player ID: {pid}",
-            )
-
-    players = (
-        await scoped(Player, tournament_id)
-        .find({"_id": {"$in": player_object_ids}})
-        .to_list()
+    players = await _load_squad_players(
+        team_data.player_ids, tournament_id=tournament_id
     )
-
-    # Verify all player IDs are valid
-    if len(players) != len(team_data.player_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Some player IDs are invalid",
-        )
-
-    # Allowed-teams applies to any daily contest, whatever its format.
-    _assert_allowed_teams(players, contest)
-
-    if auction_mode:
-        settings = await GlobalSettings.get_for_tournament(tournament_id)
-        total_value = await validate_auction_squad(
-            players=players,
-            contest=contest,
-            submitted_count=len(team_data.player_ids),
-            max_per_team=resolve_max_players_per_team(contest, settings),
-        )
-    else:
-        total_value = sum(player.price for player in players)
-        await _validate_slot_constraints(players, tournament_id=tournament_id)
-        # Enforce per-real-world-team composition limits
-        await validate_team_composition(
-            players=players,
-            contest=contest,
-            tournament_id=tournament_id,
-        )
-        # slot_purse: the slot rules above, plus one purse for the whole squad.
-        if is_slot_purse_contest(contest):
-            total_value = validate_squad_purse(players, contest)
+    total_value = await validate_squad_for_contest(
+        players, contest, len(team_data.player_ids), tournament_id=tournament_id
+    )
 
     user_id = current_user.id
     if user_id is None:
@@ -568,72 +635,12 @@ async def update_team(
                 contest = await _resolve_contest(
                     team.contest_id, tournament_id=tournament_id
                 )
-                auction_mode = is_auction_contest(contest)
-
-                # Squad size comes from the contest in auction mode, from slots otherwise.
-                max_players_allowed = None
-                if not auction_mode:
-                    max_players_allowed = await get_slot_squad_size(
-                        tournament_id=tournament_id
-                    )
-                    if (
-                        max_players_allowed is not None
-                        and len(player_ids) > max_players_allowed
-                    ):
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Maximum {max_players_allowed} players allowed",
-                        )
-
-                # Convert string IDs to PydanticObjectId
-                player_object_ids = []
-                for pid in player_ids:
-                    try:
-                        player_object_ids.append(PydanticObjectId(pid))
-                    except Exception:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Invalid player ID: {pid}",
-                        )
-                players = (
-                    await scoped(Player, tournament_id)
-                    .find({"_id": {"$in": player_object_ids}})
-                    .to_list()
+                players = await _load_squad_players(
+                    player_ids, tournament_id=tournament_id
                 )
-
-                # An id that resolves to nothing would otherwise silently shrink
-                # the squad and understate its cost against the purse.
-                if len(players) != len(player_ids):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Some player IDs are invalid",
-                    )
-
-                _assert_allowed_teams(players, contest)
-
-                if auction_mode:
-                    settings = await GlobalSettings.get_for_tournament(tournament_id)
-                    update_data["total_value"] = await validate_auction_squad(
-                        players=players,
-                        contest=contest,
-                        submitted_count=len(player_ids),
-                        max_per_team=resolve_max_players_per_team(contest, settings),
-                    )
-                else:
-                    update_data["total_value"] = sum(player.price for player in players)
-                    # Enforce per-real-world-team composition limits
-                    await validate_team_composition(
-                        players=players,
-                        contest=contest,
-                        tournament_id=tournament_id,
-                    )
-                    await _validate_slot_constraints(
-                        players, tournament_id=tournament_id
-                    )
-                    if is_slot_purse_contest(contest):
-                        update_data["total_value"] = validate_squad_purse(
-                            players, contest
-                        )
+                update_data["total_value"] = await validate_squad_for_contest(
+                    players, contest, len(player_ids), tournament_id=tournament_id
+                )
 
         update_data["updated_at"] = utc_now()
 

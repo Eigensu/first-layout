@@ -72,6 +72,10 @@ class CricHeroesSnapshot(Document):
     empty_since: Optional[datetime] = None
     last_error: Optional[str] = None
     last_error_at: Optional[datetime] = None
+    # On the match list's document only: when CricHeroes last refused the
+    # tournament (170001). The scheduled run leaves it a day before asking
+    # again (§6.7). Cleared by the next good read.
+    refused_at: Optional[datetime] = None
     # On the match list's document only: when a refresh of the tournament
     # claimed it. One run at a time, across processes (§6.7).
     claimed_at: Optional[datetime] = None

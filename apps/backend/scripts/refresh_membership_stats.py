@@ -15,6 +15,7 @@ has no memberships to refresh.
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
 
@@ -27,6 +28,8 @@ from app.services.membership_stats import refresh_tournament  # noqa: E402
 from config.database import close_mongo_connection, connect_to_mongo  # noqa: E402
 from config.observability import flush_observability, setup_observability  # noqa: E402
 from config.settings import settings  # noqa: E402
+
+logger = logging.getLogger("scripts.refresh_membership_stats")
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,7 +55,9 @@ async def main(args: argparse.Namespace) -> int:
     # (docs/POSTHOG_OBSERVABILITY.md); this is the hourly walle-stats-cron.
     setup_observability("membership-stats")
     if not settings.shared_tenancy:
-        print("Memberships exist only on the shared backend: set TENANCY=shared.")
+        logger.error(
+            "Memberships exist only on the shared backend: set TENANCY=shared."
+        )
         return 2
 
     await connect_to_mongo()
@@ -68,18 +73,22 @@ async def main(args: argparse.Namespace) -> int:
             for slug in args.tournament:
                 tournament = await Tournament.find_one(Tournament.slug == slug)
                 if tournament is None:
-                    print(f"No tournament with slug {slug!r}")
+                    logger.error("No tournament with slug %r", slug)
                     return 1
                 tournaments.append(tournament)
 
         for tournament in tournaments:
             report = await refresh_tournament(tournament)
-            print(
-                f"{report.slug}: {report.members} members refreshed, "
-                f"{report.created} missing rows created"
+            # Logged, not printed, so the run shows in PostHog Logs as
+            # walle-membership-stats, not only on the console.
+            logger.info(
+                "%s: %d members refreshed, %d missing rows created",
+                report.slug,
+                report.members,
+                report.created,
             )
         if not tournaments:
-            print("No tournaments to refresh.")
+            logger.info("No tournaments to refresh.")
     finally:
         await close_mongo_connection()
         await asyncio.to_thread(flush_observability)

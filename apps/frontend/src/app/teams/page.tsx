@@ -31,6 +31,7 @@ import { TeamViewer } from "@teamviewer/organisms/TeamViewer";
 import { EditPlayersModal } from "@teamviewer/organisms/EditPlayersModal";
 import type { TeamViewMode } from "@teamviewer/types";
 import posthog from "posthog-js";
+import { parseApiError } from "@/utils/errors";
 
 type ApiPlayer = {
   id: string;
@@ -516,9 +517,7 @@ export default function TeamsPage() {
         [team.id]: { contestId, contestName },
       }));
     } catch (e: any) {
-      const message =
-        e?.response?.data?.detail || e?.message || "Failed to enroll";
-      showAlert(message, "Enrollment failed");
+      showAlert(parseApiError(e, "Failed to enroll"), "Enrollment failed");
     } finally {
       setEnrollingTeamId(null);
     }
