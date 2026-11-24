@@ -34,7 +34,10 @@ class GlobalSettings(Document):
     default_contest_logo_file_id: Optional[str] = None
     min_players_per_team: int = Field(
         default=1,
-        description="Minimum number of players required from a single team when finalizing a team.",
+        description=(
+            "Minimum number of players every saved squad in a daily two-team "
+            "contest must take from each of the two teams."
+        ),
     )
     max_players_per_team: int = Field(
         default=7,

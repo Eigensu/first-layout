@@ -361,10 +361,14 @@ async def test_unrelated_edit_is_allowed_when_a_slot_cannot_be_filled(
 
 
 async def test_switching_to_daily_checks_the_per_team_minimum(client, user_client, db):
-    contest_id, _, _ = await _contest_with_one_team(client, user_client)
+    contest_id, bat, bowl = await _contest_with_one_team(client, user_client)
     # Squad One has two players from each of A and B. Create and update would
     # refuse it in a daily A-vs-B contest needing three from each, so the
-    # switch to daily must flag it too.
+    # switch to daily must flag it too. Spare A and B players let each team
+    # reach three across the slots, so the feasibility gate passes.
+    for team in ("A", "B"):
+        await _player(f"spare-bat-{team}", team, 10, bat)
+        await _player(f"spare-bowl-{team}", team, 10, bowl)
     settings = await GlobalSettings.get_instance()
     settings.min_players_per_team = 3
     await settings.save()
@@ -515,6 +519,84 @@ async def test_switching_to_daily_checks_squads_below_slot_maxima(
     await _player("bat-b", "B", 10, bat)
     await _player("bowl-b", "B", 10, bowl)
     created = await client.post("/api/admin/contests", json=_payload(purse=400))
+    assert created.status_code == 201, created.text
+    contest_id = created.json()["id"]
+    team = await user_client.post(
+        "/api/teams/",
+        json={
+            "team_name": "One Sided",
+            "player_ids": ids,
+            "captain_id": ids[0],
+            "vice_captain_id": ids[1],
+            "contest_id": contest_id,
+        },
+    )
+    assert team.status_code == 201, team.text
+
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}",
+        json={"contest_type": "daily", "allowed_teams": ["A", "B"]},
+    )
+
+    assert res.status_code == 400, res.text
+    lines = res.json()["detail"]["broken_teams"]
+    assert any("One Sided has fewer than 1 player(s) from B" in line for line in lines)
+
+
+async def test_pool_ids_filter_returns_only_eligible_members(user_client, db):
+    bat, _ = await _slots()
+    contest = await _contest()
+    priced = await _player("priced", "A", 100, bat)
+    injured = await _player("injured", "A", 100, bat, status="Inactive")
+    await _player("other", "A", 100, bat)
+
+    res = await user_client.get(
+        f"/api/players?contest_id={contest.id}&ids={priced.id},{injured.id},bad"
+    )
+
+    assert res.status_code == 200
+    assert [p["name"] for p in res.json()] == ["priced"]
+
+
+async def test_create_rejects_daily_contest_a_team_cannot_fill(client, db):
+    """Only team A has priced players, so no squad could meet B's minimum."""
+    bat, bowl = await _slots()
+    for slot in (bat, bowl):
+        for i in range(2):
+            await _player(f"a-{slot.code}-{i}", "A", 10, slot)
+    await _player("b-unpriced", "B", 0, bat)
+
+    res = await client.post(
+        "/api/admin/contests",
+        json=_payload(contest_type="daily", allowed_teams=["A", "B"]),
+    )
+
+    assert res.status_code == 400, res.text
+    assert "at least 1 player(s) from B" in res.json()["detail"]
+
+
+async def test_admin_purse_check_allows_float_rounding(client, db):
+    bat = Slot(code="BAT", name="Batters", min_select=3, max_select=3)
+    await bat.insert()
+    for i in range(3):
+        await _player(f"bat{i}", "A", 0.1, bat)
+
+    res = await client.post("/api/admin/contests", json=_payload(purse=0.3))
+
+    assert res.status_code == 201, res.text
+
+
+async def test_switching_slot_based_to_daily_checks_the_per_team_minimum(
+    client, user_client, db
+):
+    bat, bowl = await _ranged_slots()
+    ids = [
+        str((await _player("bat-a", "A", 100, bat)).id),
+        str((await _player("bowl-a", "A", 100, bowl)).id),
+    ]
+    created = await client.post(
+        "/api/admin/contests", json=_payload(contest_format="slot_based")
+    )
     assert created.status_code == 201, created.text
     contest_id = created.json()["id"]
     team = await user_client.post(

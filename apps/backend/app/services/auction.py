@@ -21,7 +21,7 @@ eligibility rule plus one purse for the whole squad (``evaluate_purse``).
 from collections import Counter
 from dataclasses import dataclass
 from math import ceil
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
@@ -189,7 +189,7 @@ async def assert_auction_config_feasible(
             ),
         )
 
-    if minimum_cost > purse:
+    if minimum_cost > purse + PURSE_TOLERANCE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -452,12 +452,9 @@ async def purse_rule_reasons_by_team(
         if violation is not None:
             broken[str(team.id)] = (team.team_name, violation.summary)
             continue
-        short_team = team_minimum_shortfall(squad, allowed_teams, min_per_team)
-        if short_team is not None:
-            broken[str(team.id)] = (
-                team.team_name,
-                f"has fewer than {min_per_team} player(s) from {short_team}",
-            )
+        broken.update(
+            team_minimum_reasons_by_team([(team, squad)], allowed_teams, min_per_team)
+        )
     return broken
 
 
@@ -465,6 +462,7 @@ async def assert_slot_purse_config_feasible(
     purse: float,
     allowed_teams: Optional[Sequence[str]] = None,
     *,
+    min_per_team: int = 0,
     tournament_id: TenantId,
 ) -> None:
     """
@@ -497,7 +495,11 @@ async def assert_slot_purse_config_feasible(
             )
         minimum_cost += sum(prices[: slot.min_select])
 
-    if minimum_cost > purse:
+    await assert_team_minimum_reachable(
+        pool, allowed_teams, min_per_team, tournament_id=tournament_id
+    )
+
+    if minimum_cost > purse + PURSE_TOLERANCE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -505,6 +507,80 @@ async def assert_slot_purse_config_feasible(
                 f"costs at least {minimum_cost:,.0f}."
             ),
         )
+
+
+async def assert_team_minimum_reachable(
+    pool: Sequence,
+    allowed_teams: Optional[Sequence[str]],
+    min_per_team: int,
+    *,
+    tournament_id: TenantId,
+) -> None:
+    """
+    Reject a daily slot contest where a named team cannot supply its minimum.
+
+    Every squad in a daily contest between two teams must take at least
+    ``min_per_team`` players from each. A team can only supply as many as its
+    pickable players fit in the slots (each slot capped at ``max_select``), so
+    with fewer than that nobody could build a legal squad. ``pool`` is every
+    player a participant could pick.
+    """
+    if not allowed_teams or len(allowed_teams) != 2 or min_per_team <= 0:
+        return
+    slots = await scoped(Slot, tournament_id).to_list()
+    for team in allowed_teams:
+        per_slot = Counter(p.slot for p in pool if p.team == team and p.slot)
+        reachable = sum(
+            min(per_slot.get(str(slot.id), 0), max(0, slot.max_select))
+            for slot in slots
+        )
+        if reachable < min_per_team:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Every squad needs at least {min_per_team} player(s) from "
+                    f"{team}, but only {reachable} of its players can be picked "
+                    f"into the slots. Add players for {team} before saving this "
+                    f"contest."
+                ),
+            )
+
+
+def team_minimum_reasons_by_team(
+    squads: Sequence[Tuple[Any, Sequence]],
+    allowed_teams: Optional[Sequence[str]],
+    min_per_team: int,
+) -> Dict[str, Tuple[str, str]]:
+    """
+    Of the given ``(team, players)`` squads, those that break the daily
+    per-team minimum: ``{team_id: (team_name, reason)}``.
+    """
+    broken: Dict[str, Tuple[str, str]] = {}
+    for team, squad in squads:
+        short_team = team_minimum_shortfall(squad, allowed_teams, min_per_team)
+        if short_team is not None:
+            broken[str(team.id)] = (
+                team.team_name,
+                f"has fewer than {min_per_team} player(s) from {short_team}",
+            )
+    return broken
+
+
+async def daily_minimum_reasons_by_team(
+    contest_id: str,
+    allowed_teams: Optional[Sequence[str]],
+    min_per_team: int,
+    *,
+    tournament_id: TenantId,
+) -> Dict[str, Tuple[str, str]]:
+    """Existing squads in this contest that the daily per-team minimum breaks."""
+    if not allowed_teams or len(allowed_teams) != 2 or min_per_team <= 0:
+        return {}
+    return team_minimum_reasons_by_team(
+        await _load_contest_squads(contest_id, tournament_id=tournament_id),
+        allowed_teams,
+        min_per_team,
+    )
 
 
 async def find_teams_breaking_auction_rules(

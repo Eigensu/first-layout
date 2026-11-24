@@ -10,7 +10,7 @@ import {
 import { publicContestsApi, type Contest } from "@/lib/api/public/contests";
 import { CONTEST_FORMAT, usesPurse } from "@/common/consts/contest";
 import { formatPoints } from "@/utils/playerValue";
-import { isOverPurse, isOverspent } from "@/utils/purse";
+import { isOverPurse } from "@/utils/purse";
 
 export type UIBuildPlayer = Player & { slotId: string };
 
@@ -309,7 +309,7 @@ export function useTeamBuilder(
     isAuction &&
     TOTAL_MAX > 0 &&
     selectedPlayers.length === TOTAL_MAX &&
-    !isOverspent(remainingPurse);
+    !isOverPurse(spent, purse);
 
   const canNextForActiveSlot = useMemo(() => {
     const s = slots.find((sl) => sl.id === activeSlotId);

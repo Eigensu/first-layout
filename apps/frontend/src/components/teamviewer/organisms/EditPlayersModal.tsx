@@ -15,7 +15,7 @@ import {
   POOL_STATUS,
   usePlayerPoolFilters,
 } from "@/components/team/Edit/usePlayerPoolFilters";
-import { isOverPurse, isOverspent } from "@/utils/purse";
+import { isOverPurse } from "@/utils/purse";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface EditablePlayer {
@@ -450,7 +450,7 @@ export function EditPlayersModal({
     setViceCaptainId(id);
   };
 
-  const overspent = hasPurse && isOverspent(remainingPurse);
+  const overspent = hasPurse && isOverPurse(spent, purse);
   const isValid =
     count === requiredCount &&
     !!captainId &&

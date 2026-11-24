@@ -74,14 +74,17 @@ export default function TeamsPage() {
   // Squad members the pool no longer offers (inactive, unpriced or deleted),
   // fetched one by one so the edit sheet can name them and let the user remove
   // them. The pool filters them out, so without this they were invisible.
-  const [unavailableFetch, setUnavailableFetch] = useState<{
+  //
+  // The sheet loads its own pool for the squad's contest: the page's pool
+  // follows the URL's contest (or none) and stops at one page of players, so it
+  // could offer players that contest refuses, or miss members it still offers.
+  const [editPool, setEditPool] = useState<{
     teamId: string;
-    players: ApiPlayer[];
+    pool: Player[];
+    unavailable: ApiPlayer[];
   } | null>(null);
-  const unavailableMembers =
-    unavailableFetch && unavailableFetch.teamId === editPlayersTeamId
-      ? unavailableFetch.players
-      : [];
+  const editPoolReady = editPool !== null && editPool.teamId === editPlayersTeamId;
+  const unavailableMembers = editPoolReady ? editPool.unavailable : [];
   const [slots, setSlots] = useState<ApiSlot[]>([]);
   // Contests state for join action
   const [contests, setContests] = useState<PublicContest[]>([]);
@@ -198,35 +201,66 @@ export default function TeamsPage() {
     const teamId = editPlayersTeamId;
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
-    const inPool = new Set(players.map((p) => p.id));
-    const missing = team.player_ids.filter((id) => !inPool.has(id));
-    if (missing.length === 0) return;
+    const contestQuery = team.contest_id
+      ? `contest_id=${encodeURIComponent(team.contest_id)}&`
+      : "";
+    const toPlayer = (p: ApiPlayer): Player => ({
+      ...p,
+      role: slotToRole(p.slot, slots),
+      image: p.image_url || undefined,
+      slot: p.slot || null,
+      stats: { matches: 0 },
+    });
+    const getJson = async <T,>(url: string): Promise<T | null> => {
+      try {
+        const res = await fetch(url, { headers: tenantHeaders() });
+        return res.ok ? ((await res.json()) as T) : null;
+      } catch {
+        return null;
+      }
+    };
 
     let cancelled = false;
-    Promise.all(
-      missing.map(async (id): Promise<ApiPlayer | null> => {
-        try {
-          const res = await fetch(
-            `${API_BASE_URL}/api/players/${encodeURIComponent(id)}`,
-            { headers: tenantHeaders() },
-          );
-          return res.ok ? ((await res.json()) as ApiPlayer) : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((found) => {
-      if (!cancelled) {
-        setUnavailableFetch({
-          teamId,
-          players: found.filter((p): p is ApiPlayer => p !== null),
-        });
+    (async () => {
+      const pool =
+        (await getJson<ApiPlayer[]>(
+          `${API_BASE_URL}/api/players?${contestQuery}limit=5000`,
+        )) ?? [];
+      const inPool = new Set(pool.map((p) => p.id));
+      let missing = team.player_ids.filter((id) => !inPool.has(id));
+
+      // Members past the pool's page: ask the contest's own filters about
+      // them, so only players it really refuses are shown as unavailable.
+      if (missing.length > 0) {
+        const stillOffered =
+          (await getJson<ApiPlayer[]>(
+            `${API_BASE_URL}/api/players?${contestQuery}ids=${missing
+              .map(encodeURIComponent)
+              .join(",")}`,
+          )) ?? [];
+        pool.push(...stillOffered);
+        const offered = new Set(stillOffered.map((p) => p.id));
+        missing = missing.filter((id) => !offered.has(id));
       }
-    });
+
+      const unavailable = (
+        await Promise.all(
+          missing.map((id) =>
+            getJson<ApiPlayer>(
+              `${API_BASE_URL}/api/players/${encodeURIComponent(id)}`,
+            ),
+          ),
+        )
+      ).filter((p): p is ApiPlayer => p !== null);
+
+      if (!cancelled) {
+        setEditPool({ teamId, pool: pool.map(toPlayer), unavailable });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [editPlayersTeamId, teams, players]);
+  }, [editPlayersTeamId, teams, slots]);
 
   // Load per-team enrollments and resolve contest names
   useEffect(() => {
@@ -843,7 +877,7 @@ export default function TeamsPage() {
             currentPlayerIds={et.player_ids}
             captainId={et.captain_id}
             viceCaptainId={et.vice_captain_id}
-            allPlayers={players.map((p) => ({
+            allPlayers={(editPoolReady ? editPool.pool : players).map((p) => ({
               id: p.id,
               name: p.name,
               team: p.team,
