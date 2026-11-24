@@ -404,12 +404,11 @@ def team_minimum_shortfall(
     min_per_team: int,
 ) -> Optional[str]:
     """
-    The first allowed team a complete daily squad draws too few players from.
+    The first allowed team a daily squad draws too few players from.
 
     A daily contest between exactly two teams needs at least ``min_per_team``
     from each. Returns that team's name, or None when the rule is met or does
-    not apply. Pass ``allowed_teams`` only for a daily contest. Callers decide
-    whether the squad is complete; a partial squad is never held to this.
+    not apply. Pass ``allowed_teams`` only for a daily contest.
     """
     if not allowed_teams or len(allowed_teams) != 2 or min_per_team <= 0:
         return None
@@ -427,7 +426,6 @@ async def purse_rule_reasons_by_team(
     allowed_teams: Optional[Sequence[str]] = None,
     *,
     min_per_team: int = 0,
-    full_squad_size: Optional[int] = None,
     tournament_id: TenantId,
 ) -> Dict[str, Tuple[str, str]]:
     """
@@ -438,8 +436,7 @@ async def purse_rule_reasons_by_team(
     This is evaluate_squad without the exact-size rule, which slot_purse takes
     from slots instead (routes/teams.slot_rule_reasons_by_team checks that half),
     plus the daily minimum that validate_team_composition applies on create and
-    update. Like there, the minimum applies only to a complete squad, one with
-    ``full_squad_size`` players.
+    update. Like there, it applies to every squad, whatever its size.
     """
     broken: Dict[str, Tuple[str, str]] = {}
     for team, squad in await _load_contest_squads(
@@ -455,13 +452,12 @@ async def purse_rule_reasons_by_team(
         if violation is not None:
             broken[str(team.id)] = (team.team_name, violation.summary)
             continue
-        if full_squad_size is not None and len(team.player_ids) == full_squad_size:
-            short_team = team_minimum_shortfall(squad, allowed_teams, min_per_team)
-            if short_team is not None:
-                broken[str(team.id)] = (
-                    team.team_name,
-                    f"has fewer than {min_per_team} player(s) from {short_team}",
-                )
+        short_team = team_minimum_shortfall(squad, allowed_teams, min_per_team)
+        if short_team is not None:
+            broken[str(team.id)] = (
+                team.team_name,
+                f"has fewer than {min_per_team} player(s) from {short_team}",
+            )
     return broken
 
 

@@ -25,8 +25,6 @@ def _pluralize(count: int, noun: str) -> str:
 async def validate_team_composition(
     players: List[Player],
     contest: Optional[Contest],
-    squad_size: int,
-    max_players_allowed: Optional[int],
     *,
     tournament_id: TenantId,
 ) -> None:
@@ -40,10 +38,11 @@ async def validate_team_composition(
     - Maximum (always checked): no real-world team may contribute more than
       ``max_players_per_team`` players, taken from the contest override when
       set and from this tournament's settings otherwise.
-    - Minimum (only on a complete squad): for a daily contest between exactly
-      two teams, each must contribute at least ``min_players_per_team``. This
-      is deferred until the squad is full so partially-built teams are not
-      rejected mid-selection.
+    - Minimum: for a daily contest between exactly two teams, each must
+      contribute at least ``min_players_per_team``. It applies to every saved
+      squad, not only one that fills every slot to its maximum. With slot
+      ranges (min_select < max_select) a squad can be legal below the maximum,
+      and it must not dodge the minimum by stopping short.
     """
     settings = await GlobalSettings.get_for_tournament(tournament_id)
     max_per_team = resolve_max_players_per_team(contest, settings)
@@ -59,12 +58,6 @@ async def validate_team_composition(
                     f"from team {team_name}"
                 ),
             )
-
-    squad_is_complete = (
-        max_players_allowed is not None and squad_size == max_players_allowed
-    )
-    if not squad_is_complete:
-        return
 
     allowed = (
         contest.allowed_teams

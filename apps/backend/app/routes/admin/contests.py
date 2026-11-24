@@ -25,11 +25,7 @@ from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.routes.teams import (
-    find_teams_breaking_slot_rules,
-    get_slot_squad_size,
-    slot_rule_reasons_by_team,
-)
+from app.routes.teams import find_teams_breaking_slot_rules, slot_rule_reasons_by_team
 from app.schemas.admin.cricheroes_points import ContestPointsSummary
 from app.schemas.contest import (
     ContestCreate,
@@ -419,7 +415,6 @@ async def update_contest(
                 # Same daily minimum that create and update enforce, so a
                 # switch to daily cannot leave one-sided squads scoring.
                 min_per_team=settings.min_players_per_team,
-                full_squad_size=await get_slot_squad_size(tournament_id=tournament_id),
                 tournament_id=tournament_id,
             )
             broken = []
