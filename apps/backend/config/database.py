@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from beanie import init_beanie
@@ -26,6 +27,8 @@ from app.models.tournament import Tournament
 from app.models.tournament_membership import TournamentMembership
 from app.models.user import RefreshToken, User, UserProfile
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -82,11 +85,11 @@ async def connect_to_mongo():
 
         # Test connection
         await mongo_client.admin.command("ping")
-        print(f"[OK] Connected to MongoDB at {settings.mongodb_url_redacted}")
+        logger.info("Connected to MongoDB at %s", settings.mongodb_url_redacted)
 
         database = mongo_client.get_database(settings.mongodb_db_name)
         for index in await drop_flawed_indexes(database):
-            print(f"[OK] Dropped {index}, built with a wrong definition")
+            logger.info("Dropped index %s, built with a wrong definition", index)
 
         # Initialize Beanie with document models
         await init_beanie(
@@ -117,10 +120,10 @@ async def connect_to_mongo():
                 CricHeroesMatchMvp,
             ],
         )
-        print(f"[OK] Initialized Beanie ODM with database: {settings.mongodb_db_name}")
+        logger.info("Initialized Beanie ODM with database: %s", settings.mongodb_db_name)
 
-    except Exception as e:
-        print(f"[FAIL] Failed to connect to MongoDB: {e}")
+    except Exception:
+        logger.exception("Failed to connect to MongoDB")
         raise
 
 
@@ -130,7 +133,7 @@ async def close_mongo_connection():
     if client:
         client.close()
         client = None
-        print("[OK] Closed MongoDB connection")
+        logger.info("Closed MongoDB connection")
 
 
 def get_database():
