@@ -409,6 +409,7 @@ export function useTeamBuilder(
     selectedCountByTeam,
     maxPerTeam,
     getSelectionBlock,
+    blockForSelection,
     canSubmitAuctionSquad,
 
     // setters/handlers

@@ -84,6 +84,7 @@ export default function ContestTeamBuilderPage() {
     maxPerTeam,
     selectedCountByTeam,
     getSelectionBlock,
+    blockForSelection,
     canSubmitAuctionSquad,
 
     // handlers
@@ -481,6 +482,16 @@ export default function ContestTeamBuilderPage() {
                 players={players}
                 selectedPlayers={selectedPlayers}
                 onConfirm={confirmReplace}
+                showPrice={hasPurse}
+                contestFormat={contest?.contest_format}
+                // A swap hands the outgoing player's fee back before paying
+                // for the incoming one, so check against the squad without them.
+                getBlockReason={(candidate) =>
+                  blockForSelection(
+                    selectedPlayers.filter((id) => id !== replaceTargetId),
+                    candidate,
+                  )
+                }
               />
             </>
           )}
