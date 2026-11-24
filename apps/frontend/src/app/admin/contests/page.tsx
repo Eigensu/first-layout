@@ -18,6 +18,7 @@ import {
   API_BASE_URL,
   CONTEST_DEFAULTS,
   CONTEST_FORMAT,
+  usesPurse,
   CONTEST_TYPE_OPTIONS,
   CONTEST_VISIBILITY_OPTIONS,
   tenantHeaders,
@@ -169,8 +170,12 @@ export default function AdminContestsPage() {
         return;
       }
       const isAuction = form.contest_format === CONTEST_FORMAT.AUCTION_PURSE;
+      const hasPurse = usesPurse(form.contest_format);
       if (isAuction && !form.squad_size) {
-        showAlert("Squad size is required for an auction contest", "Validation");
+        showAlert(
+          "Squad size is required for an auction contest",
+          "Validation",
+        );
         return;
       }
       const payload: ContestCreate = {
@@ -180,9 +185,10 @@ export default function AdminContestsPage() {
         // Only send allowed_teams for daily contests; clear otherwise
         allowed_teams:
           form.contest_type === "daily" ? selectedAllowedTeams : [],
-        // Auction-only settings; slot-based contests keep the server defaults
+        // Squad size is auction-only (slots size the squad otherwise); the
+        // per-team cap override applies to both purse formats.
         squad_size: isAuction ? form.squad_size : null,
-        max_players_per_team: isAuction ? form.max_players_per_team : null,
+        max_players_per_team: hasPurse ? form.max_players_per_team : null,
       };
       const res = await adminContestsApi.create(payload);
 
@@ -458,7 +464,8 @@ export default function AdminContestsPage() {
                   Derived from schedule
                 </div>
                 <p className="mt-1 text-xs text-text-muted">
-                  Status is auto-calculated from start/end time. Archive from manage view if needed.
+                  Status is auto-calculated from start/end time. Archive from
+                  manage view if needed.
                 </p>
               </div>
               <div>
@@ -496,19 +503,22 @@ export default function AdminContestsPage() {
                     })
                   }
                 >
-                  <option value={CONTEST_FORMAT.SLOT_BASED}>
-                    Slot based
-                  </option>
+                  <option value={CONTEST_FORMAT.SLOT_BASED}>Slot based</option>
                   <option value={CONTEST_FORMAT.AUCTION_PURSE}>
                     Auction purse
                   </option>
+                  <option value={CONTEST_FORMAT.SLOT_PURSE}>
+                    Slot + purse
+                  </option>
                 </select>
                 <p className="mt-1 text-xs text-text-muted">
-                  Slot based uses your slot configuration. Auction purse uses one
-                  open pool priced by auction value.
+                  Slot based uses your slot configuration. Auction purse uses
+                  one open pool priced by auction value. Slot + purse uses your
+                  slots and caps the whole squad&apos;s auction value by one
+                  purse.
                 </p>
               </div>
-              {form.contest_format === CONTEST_FORMAT.AUCTION_PURSE && (
+              {usesPurse(form.contest_format) && (
                 <>
                   <div>
                     <label className="block text-sm text-text-muted">
@@ -530,28 +540,30 @@ export default function AdminContestsPage() {
                       Points each participant may spend.
                     </p>
                   </div>
-                  <div>
-                    <label className="block text-sm text-text-muted">
-                      Squad Size
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
-                      value={form.squad_size ?? ""}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          squad_size: e.target.value
-                            ? Number(e.target.value)
-                            : null,
-                        })
-                      }
-                    />
-                    <p className="mt-1 text-xs text-text-muted">
-                      Exact number of players a squad must contain.
-                    </p>
-                  </div>
+                  {form.contest_format === CONTEST_FORMAT.AUCTION_PURSE && (
+                    <div>
+                      <label className="block text-sm text-text-muted">
+                        Squad Size
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-full border border-border-subtle bg-bg-card text-text-main p-2 rounded"
+                        value={form.squad_size ?? ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            squad_size: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          })
+                        }
+                      />
+                      <p className="mt-1 text-xs text-text-muted">
+                        Exact number of players a squad must contain.
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm text-text-muted">
                       Max Players Per Team

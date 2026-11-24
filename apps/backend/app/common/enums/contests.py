@@ -30,3 +30,6 @@ class ContestFormat(str, Enum):
     SLOT_BASED = "slot_based"
     # Single open pool priced by auction sale value, capped by a purse.
     AUCTION_PURSE = "auction_purse"
+    # Squad shape comes from Slot configuration AND its total price is capped
+    # by one purse for the whole squad. Only priced (auctioned) players count.
+    SLOT_PURSE = "slot_purse"

@@ -26,6 +26,8 @@ export const CONTEST_FORMAT = {
 	SLOT_BASED: "slot_based",
 	/** Single open pool priced by auction sale value, capped by a purse. */
 	AUCTION_PURSE: "auction_purse",
+	/** Slot configuration shapes the squad, and one purse caps its total price. */
+	SLOT_PURSE: "slot_purse",
 } as const;
 
 export type ContestStatus =
@@ -37,6 +39,17 @@ export type PointsScope =
 export type ContestType = (typeof CONTEST_TYPE)[keyof typeof CONTEST_TYPE];
 export type ContestFormat =
 	(typeof CONTEST_FORMAT)[keyof typeof CONTEST_FORMAT];
+
+/**
+ * True for every format whose squad cost is capped by the contest purse. Price
+ * then means auction points, not a cosmetic rupee tag.
+ */
+export function usesPurse(format: ContestFormat | null | undefined): boolean {
+	return (
+		format === CONTEST_FORMAT.AUCTION_PURSE ||
+		format === CONTEST_FORMAT.SLOT_PURSE
+	);
+}
 
 export const CONTEST_STATUS_OPTIONS = Object.values(
 	CONTEST_STATUS,

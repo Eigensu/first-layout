@@ -8,7 +8,7 @@ import { PitchView } from "./PitchView";
 import { SquadValueBar } from "../molecules/SquadValueBar";
 import { formatPoints } from "@/lib/utils";
 import { formatPoints as formatAuctionValue } from "@/utils/playerValue";
-import { CONTEST_FORMAT, type ContestFormat } from "@/common/consts/contest";
+import { usesPurse, type ContestFormat } from "@/common/consts/contest";
 import { getInitials, getSlotGradient } from "../types";
 import {
   type TeamViewMode,
@@ -231,7 +231,8 @@ export function TeamViewer({
   }, [teamPlayers]);
 
   // ── Auction readouts ──
-  const isAuction = contestFormat === CONTEST_FORMAT.AUCTION_PURSE;
+  // Any purse format (auction or slot + purse) shows what the squad cost.
+  const isAuction = usesPurse(contestFormat);
 
   const squadValue = useMemo(
     () =>

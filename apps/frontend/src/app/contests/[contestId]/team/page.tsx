@@ -59,6 +59,7 @@ export default function ContestTeamBuilderPage() {
     error,
     contest,
     isAuction,
+    hasPurse,
 
     // selection state
     selectedPlayers,
@@ -83,6 +84,7 @@ export default function ContestTeamBuilderPage() {
     maxPerTeam,
     selectedCountByTeam,
     getSelectionBlock,
+    blockForSelection,
     canSubmitAuctionSquad,
 
     // handlers
@@ -365,7 +367,7 @@ export default function ContestTeamBuilderPage() {
           totalMax={TOTAL_MAX || 0}
           selectedPlayerObjs={selectedPlayerObjs}
           onPlayerRemove={handlePlayerSelect}
-          isAuction={isAuction}
+          showPurse={hasPurse}
           remainingPurse={remainingPurse}
         />
       )}
@@ -409,6 +411,7 @@ export default function ContestTeamBuilderPage() {
                 slotLimits={SLOT_LIMITS}
                 totalMax={isAuction ? TOTAL_MAX : TOTAL_MAX || 12}
                 isAuction={isAuction}
+                hasPurse={hasPurse}
                 contestFormat={contest?.contest_format}
                 purse={purse}
                 spent={spent}
@@ -479,6 +482,16 @@ export default function ContestTeamBuilderPage() {
                 players={players}
                 selectedPlayers={selectedPlayers}
                 onConfirm={confirmReplace}
+                showPrice={hasPurse}
+                contestFormat={contest?.contest_format}
+                // A swap hands the outgoing player's fee back before paying
+                // for the incoming one, so check against the squad without them.
+                getBlockReason={(candidate) =>
+                  blockForSelection(
+                    selectedPlayers.filter((id) => id !== replaceTargetId),
+                    candidate,
+                  )
+                }
               />
             </>
           )}

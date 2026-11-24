@@ -25,7 +25,7 @@ from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.routes.teams import find_teams_breaking_slot_rules
+from app.routes.teams import find_teams_breaking_slot_rules, slot_rule_reasons_by_team
 from app.schemas.admin.cricheroes_points import ContestPointsSummary
 from app.schemas.contest import (
     ContestCreate,
@@ -41,7 +41,9 @@ from app.schemas.enrollment import (
 from app.services import cricheroes_cache, cricheroes_points
 from app.services.auction import (
     assert_auction_config_feasible,
+    assert_slot_purse_config_feasible,
     find_teams_breaking_auction_rules,
+    purse_rule_reasons_by_team,
     resolve_max_players_per_team,
 )
 from app.services.contest_status import (
@@ -189,6 +191,14 @@ async def create_contest(
             max_per_team=data.max_players_per_team or settings.max_players_per_team,
             # A daily contest can only draw from its named teams, so the rest
             # of the pool must not count towards feasibility.
+            allowed_teams=(
+                data.allowed_teams if data.contest_type == "daily" else None
+            ),
+            tournament_id=tournament_id,
+        )
+    elif data.contest_format == ContestFormat.SLOT_PURSE:
+        await assert_slot_purse_config_feasible(
+            purse=data.purse,
             allowed_teams=(
                 data.allowed_teams if data.contest_type == "daily" else None
             ),
@@ -362,6 +372,65 @@ async def update_contest(
                 allowed_teams=effective_allowed,
                 tournament_id=tournament_id,
             )
+            if broken:
+                shown = broken[:5]
+                more = len(broken) - len(shown)
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": (
+                            f"{len(broken)} existing team(s) would break under these "
+                            f"rules. Fix or remove them, or repeat the request with "
+                            f"force=true to apply anyway."
+                        ),
+                        "broken_teams": shown
+                        + ([f"and {more} more"] if more > 0 else []),
+                    },
+                )
+    elif new_format == ContestFormat.SLOT_PURSE and rules_changed:
+        settings = await GlobalSettings.get_for_tournament(tournament_id)
+        new_purse = update_fields.get("purse", contest.purse)
+        new_max = update_fields.get(
+            "max_players_per_team", contest.max_players_per_team
+        )
+        new_type = update_fields.get("contest_type", contest.contest_type)
+        new_allowed = update_fields.get("allowed_teams", contest.allowed_teams)
+        effective_allowed = new_allowed if new_type == "daily" else None
+        effective_max = new_max or settings.max_players_per_team
+
+        # Only when the rules move: a player going inactive later must not
+        # freeze edits that cannot affect squads, like renaming or rescheduling.
+        await assert_slot_purse_config_feasible(
+            purse=new_purse,
+            allowed_teams=effective_allowed,
+            tournament_id=tournament_id,
+        )
+
+        if not force:
+            # Every rule a slot_purse squad must meet: slot shape, then purse,
+            # per-team cap, allowed teams and the daily per-team minimum. One line
+            # per team, however many rules it breaks, so the count and the preview
+            # stay honest.
+            slot_reasons = await slot_rule_reasons_by_team(
+                contest_id=str(contest.id), tournament_id=tournament_id
+            )
+            purse_reasons = await purse_rule_reasons_by_team(
+                contest_id=str(contest.id),
+                purse=new_purse,
+                max_per_team=effective_max,
+                allowed_teams=effective_allowed,
+                # Same daily minimum that create and update enforce, so a
+                # switch to daily cannot leave one-sided squads scoring.
+                min_per_team=settings.min_players_per_team,
+                tournament_id=tournament_id,
+            )
+            broken = []
+            for team_id in dict.fromkeys([*slot_reasons, *purse_reasons]):
+                name, reasons = slot_reasons.get(team_id, (None, []))
+                if team_id in purse_reasons:
+                    name, purse_reason = purse_reasons[team_id]
+                    reasons = [*reasons, purse_reason]
+                broken.append(f"{name} " + "; ".join(reasons))
             if broken:
                 shown = broken[:5]
                 more = len(broken) - len(shown)

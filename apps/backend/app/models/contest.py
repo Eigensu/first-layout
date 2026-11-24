@@ -50,7 +50,7 @@ class Contest(Document):
 
     # how the squad is assembled; existing contests stay slot-based
     contest_format: ContestFormat = ContestFormat.SLOT_BASED
-    # auction_purse only: points budget a participant may spend
+    # auction_purse and slot_purse: points budget a participant may spend
     purse: float = Field(default=1_000_000.0, ge=0)
     # auction_purse only: exact number of players a squad must contain.
     # Slot-based contests derive squad size from Slot config instead.

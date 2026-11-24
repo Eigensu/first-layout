@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,8 +16,10 @@ from app.models.user import User
 from app.schemas.team import TeamCreate, TeamResponse, TeamsListResponse, TeamUpdate
 from app.services.auction import (
     is_auction_contest,
+    is_slot_purse_contest,
     resolve_max_players_per_team,
     validate_auction_squad,
+    validate_squad_purse,
 )
 from app.services.contest_status import compute_contest_status
 from app.services.membership import record_play
@@ -28,14 +30,20 @@ from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_on
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
-async def _get_dynamic_max_players_from_slots(
-    *, tournament_id: TenantId
-) -> Optional[int]:
-    """Compute maximum team size from slot configuration using total min_select."""
+async def get_slot_squad_size(*, tournament_id: TenantId) -> Optional[int]:
+    """
+    The largest squad the slot configuration allows: the sum of every slot's
+    max_select.
+
+    The team builder and the edit sheet both size a full squad this way, so
+    the server must too. Summing min_select instead rejected the full squad the
+    UI asked for whenever a slot's minimum was below its maximum. The per-slot
+    min/max check (_validate_slot_constraints) still decides the squad's shape.
+    """
     slots = await scoped(Slot, tournament_id).to_list()
     if not slots:
         return None
-    return sum(max(0, slot.min_select) for slot in slots)
+    return sum(max(0, slot.max_select) for slot in slots)
 
 
 async def _resolve_contest(
@@ -57,7 +65,7 @@ async def _compute_slot_violations(
     squad is legal. Shared by submission-time validation and admin
     reconciliation of existing teams so the two cannot drift apart.
     """
-    # Count players per slot (ignore players without a slot)
+    # Count players per slot (players without a valid slot are rejected below)
     slot_counts: Dict[str, int] = {}
     for p in players:
         if p.slot:
@@ -69,7 +77,7 @@ async def _compute_slot_violations(
         try:
             present_slot_oids.append(PydanticObjectId(sid))
         except Exception:
-            # If slot id is malformed, skip; it won't be validated
+            # A malformed slot id never resolves, so it is rejected below.
             continue
     slots_present = (
         await scoped(Slot, tournament_id)
@@ -88,6 +96,18 @@ async def _compute_slot_violations(
         slots_by_id.setdefault(str(s.id), s)
 
     violations = []
+    # Every player must sit in one of this tournament's slots. A player with no
+    # slot, a malformed one or one that no longer exists would otherwise fill a
+    # spare place in the squad without counting against any slot's limits.
+    unslotted = sum(1 for p in players if not p.slot or p.slot not in slots_by_id)
+    if unslotted:
+        violations.append(
+            {
+                "slot": {"id": None, "code": None, "name": "Players without a slot"},
+                "expected": {"min_select": 0, "max_select": 0},
+                "actual": unslotted,
+            }
+        )
     for sid, slot in slots_by_id.items():
         count = slot_counts.get(sid, 0)
         if count < slot.min_select or count > slot.max_select:
@@ -125,16 +145,15 @@ async def _validate_slot_constraints(
         )
 
 
-async def find_teams_breaking_slot_rules(
+async def slot_rule_reasons_by_team(
     contest_id: str, *, tournament_id: TenantId
-) -> List[str]:
+) -> Dict[str, Tuple[str, List[str]]]:
     """
-    Existing squads in this contest that current slot rules would invalidate.
+    Squads in this contest that current slot rules would invalidate, keyed by
+    team id: ``{team_id: (team_name, [reason, ...])}``.
 
-    Returns one "<team name> <reason>" line per broken team. Switching a
-    contest from auction_purse to slot_based (or editing slot config) would
-    otherwise leave squads built under the old rules enrolled and scoring
-    without ever being checked against slot composition.
+    Keyed by id so a caller combining these with other rule checks can list
+    each team once, whatever its name.
     """
     teams = (
         await scoped(Team, tournament_id)
@@ -142,7 +161,7 @@ async def find_teams_breaking_slot_rules(
         .to_list()
     )
     if not teams:
-        return []
+        return {}
 
     referenced: set = set()
     for team in teams:
@@ -160,7 +179,7 @@ async def find_teams_breaking_slot_rules(
     )
     by_id = {str(p.id): p for p in players}
 
-    broken: List[str] = []
+    broken: Dict[str, Tuple[str, List[str]]] = {}
     for team in teams:
         squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
         violations = await _compute_slot_violations(squad, tournament_id=tournament_id)
@@ -175,9 +194,24 @@ async def find_teams_breaking_slot_rules(
                     f"references {len(team.player_ids) - len(squad)} player(s) "
                     f"that no longer resolve"
                 )
-            broken.append(f"{team.team_name} " + "; ".join(reasons))
+            broken[str(team.id)] = (team.team_name, reasons)
 
     return broken
+
+
+async def find_teams_breaking_slot_rules(
+    contest_id: str, *, tournament_id: TenantId
+) -> List[str]:
+    """
+    Existing squads in this contest that current slot rules would invalidate.
+
+    Returns one "<team name> <reason>" line per broken team. Switching a
+    contest from auction_purse to slot_based (or editing slot config) would
+    otherwise leave squads built under the old rules enrolled and scoring
+    without ever being checked against slot composition.
+    """
+    reasons = await slot_rule_reasons_by_team(contest_id, tournament_id=tournament_id)
+    return [f"{name} " + "; ".join(why) for name, why in reasons.values()]
 
 
 def _assert_allowed_teams(players: List[Player], contest: Optional[Contest]) -> None:
@@ -232,9 +266,7 @@ async def create_team(
     # Squad size comes from the contest in auction mode, from slots otherwise.
     max_players_allowed = None
     if not auction_mode:
-        max_players_allowed = await _get_dynamic_max_players_from_slots(
-            tournament_id=tournament_id
-        )
+        max_players_allowed = await get_slot_squad_size(tournament_id=tournament_id)
         if (
             max_players_allowed is not None
             and len(team_data.player_ids) > max_players_allowed
@@ -306,10 +338,11 @@ async def create_team(
         await validate_team_composition(
             players=players,
             contest=contest,
-            squad_size=len(team_data.player_ids),
-            max_players_allowed=max_players_allowed,
             tournament_id=tournament_id,
         )
+        # slot_purse: the slot rules above, plus one purse for the whole squad.
+        if is_slot_purse_contest(contest):
+            total_value = validate_squad_purse(players, contest)
 
     user_id = current_user.id
     if user_id is None:
@@ -540,7 +573,7 @@ async def update_team(
                 # Squad size comes from the contest in auction mode, from slots otherwise.
                 max_players_allowed = None
                 if not auction_mode:
-                    max_players_allowed = await _get_dynamic_max_players_from_slots(
+                    max_players_allowed = await get_slot_squad_size(
                         tournament_id=tournament_id
                     )
                     if (
@@ -592,13 +625,15 @@ async def update_team(
                     await validate_team_composition(
                         players=players,
                         contest=contest,
-                        squad_size=len(player_ids),
-                        max_players_allowed=max_players_allowed,
                         tournament_id=tournament_id,
                     )
                     await _validate_slot_constraints(
                         players, tournament_id=tournament_id
                     )
+                    if is_slot_purse_contest(contest):
+                        update_data["total_value"] = validate_squad_purse(
+                            players, contest
+                        )
 
         update_data["updated_at"] = utc_now()
 

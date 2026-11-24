@@ -5,7 +5,7 @@ import { Pagination } from "./Pagination";
 import { POOL_SORTS, type PlayerListProps, type PoolSort } from "./types";
 import { playerValueLabel } from "@/utils/playerValue";
 import { priceRangesFor } from "./priceRanges";
-import { CONTEST_FORMAT } from "@/common/consts/contest";
+import { usesPurse } from "@/common/consts/contest";
 
 const PLAYERS_PER_PAGE = 20;
 
@@ -41,9 +41,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
   // An auction pool's price is points on the purse's scale, not rupees, so
   // the two formats need different bands.
-  const priceRanges = priceRangesFor(
-    contestFormat === CONTEST_FORMAT.AUCTION_PURSE,
-  );
+  const priceRanges = priceRangesFor(usesPurse(contestFormat));
 
   const teamOptions = React.useMemo(() => {
     const names = new Set<string>();

@@ -1,6 +1,8 @@
 import React from "react";
 import { Button, Avatar, Player } from "@/components";
 import { formatPoints } from "@/lib/utils";
+import type { ContestFormat } from "@/common/consts/contest";
+import { formatPlayerValue } from "@/utils/playerValue";
 
 interface ReplacePlayerModalProps {
   open: boolean;
@@ -9,6 +11,11 @@ interface ReplacePlayerModalProps {
   players: Player[];
   selectedPlayers: string[];
   onConfirm: (newPlayerId: string) => void;
+  /** Purse contests show what each candidate costs. */
+  showPrice?: boolean;
+  contestFormat?: ContestFormat;
+  /** Why a candidate cannot come in (over purse, team cap), or null. */
+  getBlockReason?: (candidate: Player) => string | null;
 }
 
 export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
@@ -18,6 +25,9 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
   players,
   selectedPlayers,
   onConfirm,
+  showPrice = false,
+  contestFormat,
+  getBlockReason,
 }) => {
   if (!open) return null;
 
@@ -39,7 +49,7 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
             const slotId = (target as any)?.slotId;
             const candidates = players.filter(
               (p) =>
-                (p as any).slotId === slotId && !selectedPlayers.includes(p.id)
+                (p as any).slotId === slotId && !selectedPlayers.includes(p.id),
             );
             if (!target)
               return <div className="text-text-muted">No player selected.</div>;
@@ -53,24 +63,33 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
                   . Choose a replacement from the same slot.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {candidates.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => onConfirm(p.id)}
-                      className="flex items-center gap-3 p-3 border rounded-lg border-border-subtle hover:bg-bg-elevated text-left"
-                    >
-                      <Avatar name={p.name} size="sm" />
-                      <div className="flex-1">
-                        <div className="font-medium text-text-main">
-                          {p.name}
+                  {candidates.map((p) => {
+                    const blocked = getBlockReason?.(p) ?? null;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => onConfirm(p.id)}
+                        disabled={blocked !== null}
+                        title={blocked ?? undefined}
+                        className="flex items-center gap-3 p-3 border rounded-lg border-border-subtle hover:bg-bg-elevated text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        <Avatar name={p.name} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-text-main">
+                            {p.name}
+                          </div>
+                          <div className="text-xs text-text-muted">
+                            {blocked ?? p.team}
+                          </div>
                         </div>
-                        <div className="text-xs text-text-muted">{p.team}</div>
-                      </div>
-                      <div className="text-right text-sm text-success">
-                        {formatPoints(p.points || 0)} pts
-                      </div>
-                    </button>
-                  ))}
+                        <div className="text-right text-sm text-success">
+                          {showPrice
+                            ? formatPlayerValue(p.price || 0, contestFormat)
+                            : `${formatPoints(p.points || 0)} pts`}
+                        </div>
+                      </button>
+                    );
+                  })}
                   {candidates.length === 0 && (
                     <div className="text-sm text-text-muted">
                       No available players in this slot.
@@ -82,7 +101,11 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
           })()}
         </div>
         <div className="px-5 py-3 border-t border-border-subtle flex justify-end">
-          <Button variant="ghost" onClick={onClose} className="text-text-main hover:bg-bg-card-soft">
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            className="text-text-main hover:bg-bg-card-soft"
+          >
             Close
           </Button>
         </div>

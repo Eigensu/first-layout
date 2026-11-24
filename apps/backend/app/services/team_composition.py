@@ -14,7 +14,7 @@ from fastapi import HTTPException, status
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.settings import GlobalSettings
-from app.services.auction import resolve_max_players_per_team
+from app.services.auction import resolve_max_players_per_team, team_minimum_shortfall
 from app.utils.tenant import TenantId
 
 
@@ -25,8 +25,6 @@ def _pluralize(count: int, noun: str) -> str:
 async def validate_team_composition(
     players: List[Player],
     contest: Optional[Contest],
-    squad_size: int,
-    max_players_allowed: Optional[int],
     *,
     tournament_id: TenantId,
 ) -> None:
@@ -40,10 +38,11 @@ async def validate_team_composition(
     - Maximum (always checked): no real-world team may contribute more than
       ``max_players_per_team`` players, taken from the contest override when
       set and from this tournament's settings otherwise.
-    - Minimum (only on a complete squad): for a daily contest between exactly
-      two teams, each must contribute at least ``min_players_per_team``. This
-      is deferred until the squad is full so partially-built teams are not
-      rejected mid-selection.
+    - Minimum: for a daily contest between exactly two teams, each must
+      contribute at least ``min_players_per_team``. It applies to every saved
+      squad, not only one that fills every slot to its maximum. With slot
+      ranges (min_select < max_select) a squad can be legal below the maximum,
+      and it must not dodge the minimum by stopping short.
     """
     settings = await GlobalSettings.get_for_tournament(tournament_id)
     max_per_team = resolve_max_players_per_team(contest, settings)
@@ -60,27 +59,18 @@ async def validate_team_composition(
                 ),
             )
 
-    squad_is_complete = (
-        max_players_allowed is not None and squad_size == max_players_allowed
+    allowed = (
+        contest.allowed_teams
+        if contest is not None and contest.contest_type == "daily"
+        else None
     )
-    if not squad_is_complete:
-        return
-
-    if (
-        contest is None
-        or contest.contest_type != "daily"
-        or not contest.allowed_teams
-        or len(contest.allowed_teams) != 2
-    ):
-        return
-
-    for required_team in contest.allowed_teams:
-        if team_counts.get(required_team, 0) < settings.min_players_per_team:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Must select at least "
-                    f"{_pluralize(settings.min_players_per_team, 'player')} "
-                    f"from team {required_team}"
-                ),
-            )
+    short_team = team_minimum_shortfall(players, allowed, settings.min_players_per_team)
+    if short_team is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Must select at least "
+                f"{_pluralize(settings.min_players_per_team, 'player')} "
+                f"from team {short_team}"
+            ),
+        )

@@ -23,8 +23,10 @@ interface PlayerSelectionStepProps {
   slotLimits: Record<string, number>;
   totalMax: number;
 
-  // Auction format
+  // Auction format: one open pool, no slots
   isAuction?: boolean;
+  /** Squad price is capped by the purse (auction, or slots + purse) */
+  hasPurse?: boolean;
   contestFormat?: ContestFormat;
   purse?: number;
   spent?: number;
@@ -67,6 +69,7 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
   totalMax,
 
   isAuction = false,
+  hasPurse = isAuction,
   contestFormat,
   purse = 0,
   spent = 0,
@@ -103,11 +106,12 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
         >
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-              {isAuction ? (
+              {hasPurse && (
                 <Badge variant="success" size="sm" className="justify-center">
                   Purse left: {formatPoints(remainingPurse)}
                 </Badge>
-              ) : (
+              )}
+              {!isAuction &&
                 slots.map((s) => {
                   const count = selectedCountBySlot[s.id] || 0;
                   const limit = slotLimits[s.id] || 4;
@@ -121,8 +125,7 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
                       {s.name}: {count}/{limit}
                     </Badge>
                   );
-                })
-              )}
+                })}
             </div>
 
             <div className="flex items-center justify-between">
@@ -157,17 +160,19 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
               Clear All
             </Button>
           </div>
+          {hasPurse && (
+            <PurseBar
+              purse={purse}
+              spent={spent}
+              remaining={remainingPurse}
+              selectedCount={selectedPlayers.length}
+              squadSize={totalMax}
+              countByTeam={selectedCountByTeam}
+              maxPerTeam={maxPerTeam}
+            />
+          )}
           {isAuction ? (
             <>
-              <PurseBar
-                purse={purse}
-                spent={spent}
-                remaining={remainingPurse}
-                selectedCount={selectedPlayers.length}
-                squadSize={totalMax}
-                countByTeam={selectedCountByTeam}
-                maxPerTeam={maxPerTeam}
-              />
               <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
                 Pick {totalMax} players without going over your purse
                 {maxPerTeam > 0
@@ -178,11 +183,16 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
           ) : (
             <div className="mb-2 rounded-lg border border-amber-200 bg-amber-500/10 text-amber-500 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm">
               {(() => {
-                const mins = Array.from(new Set(slots.map((s) => s.min_select)));
+                const mins = Array.from(
+                  new Set(slots.map((s) => s.min_select)),
+                );
+                const purseNote = hasPurse
+                  ? " Your whole squad must stay within the purse."
+                  : "";
                 if (mins.length === 1) {
-                  return `Select ${mins[0]} players in each Slot and press Next to proceed.`;
+                  return `Select ${mins[0]} players in each Slot and press Next to proceed.${purseNote}`;
                 }
-                return `Meet the minimum required players in each Slot and press Next to proceed.`;
+                return `Meet the minimum required players in each Slot and press Next to proceed.${purseNote}`;
               })()}
             </div>
           )}
@@ -231,7 +241,7 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
                   isAuction
                     ? players
                     : (players.filter(
-                        (p) => (p as any).slotId === activeSlotId
+                        (p) => (p as any).slotId === activeSlotId,
                       ) as unknown as Player[])
                 }
                 selectedPlayers={selectedPlayers}
@@ -239,11 +249,11 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
                 maxSelections={totalMax || 0}
                 onBlockedSelect={onBlockSelect}
                 compact={true}
-                compactShowPrice={isAuction}
+                compactShowPrice={hasPurse}
                 showPoolFilters={isAuction}
                 contestFormat={contestFormat}
                 getDisabledReason={
-                  isAuction && getSelectionBlock
+                  hasPurse && getSelectionBlock
                     ? (player) => getSelectionBlock(player)
                     : undefined
                 }
@@ -265,7 +275,11 @@ export const PlayerSelectionStep: React.FC<PlayerSelectionStepProps> = ({
                     return p?.slotId === playerSlotId;
                   }).length;
                   const limit = slotLimits[playerSlotId] || 4;
-                  return currentSlotCount >= limit;
+                  if (currentSlotCount >= limit) return true;
+                  // slot_purse: the purse and per-team cap apply on top.
+                  return hasPurse && getSelectionBlock
+                    ? getSelectionBlock(player) !== null
+                    : false;
                 }}
               />
             )}
