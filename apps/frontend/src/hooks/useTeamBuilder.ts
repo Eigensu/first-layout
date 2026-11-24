@@ -13,6 +13,9 @@ import { formatPoints } from "@/utils/playerValue";
 
 export type UIBuildPlayer = Player & { slotId: string };
 
+/** Float slack when comparing a squad's total with the purse. */
+const PURSE_EPSILON = 1e-6;
+
 /** Why a player cannot be added to the current squad, or null if they can. */
 export type SelectionBlock = string | null;
 
@@ -239,6 +242,14 @@ export function useTeamBuilder(
 
   const maxPerTeam = contest?.effective_max_players_per_team ?? 0;
 
+  // Built once per pool so the checks below stay cheap on a large auction pool:
+  // the Replace dialog runs them once per candidate.
+  const playerById = useMemo(() => {
+    const map = new Map<string, UIBuildPlayer>();
+    players.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [players]);
+
   /**
    * Why an unselected player cannot be added to `selectedIds`, or null if they
    * can be.
@@ -260,7 +271,7 @@ export function useTeamBuilder(
       }
 
       const chosen = selectedIds
-        .map((id) => players.find((p) => p.id === id))
+        .map((id) => playerById.get(id))
         .filter((p): p is UIBuildPlayer => Boolean(p));
 
       if (maxPerTeam > 0) {
@@ -274,15 +285,18 @@ export function useTeamBuilder(
         }
       }
 
-      const left = purse - chosen.reduce((sum, p) => sum + (p.price || 0), 0);
-      if ((player.price || 0) > left) {
+      // Compare the new total with the purse, as the server does, with a small
+      // tolerance so float rounding cannot refuse a player who exactly fits.
+      const spentSoFar = chosen.reduce((sum, p) => sum + (p.price || 0), 0);
+      const left = purse - spentSoFar;
+      if (spentSoFar + (player.price || 0) > purse + PURSE_EPSILON) {
         return `${player.name ?? "This player"} costs ${formatPoints(
           player.price,
         )} but you have ${formatPoints(left)} left.`;
       }
       return null;
     },
-    [hasPurse, players, TOTAL_MAX, maxPerTeam, purse],
+    [hasPurse, playerById, TOTAL_MAX, maxPerTeam, purse],
   );
 
   /** Block reason against the current selection, for rendering. */

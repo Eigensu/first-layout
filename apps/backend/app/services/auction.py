@@ -21,7 +21,7 @@ eligibility rule plus one purse for the whole squad (``evaluate_purse``).
 from collections import Counter
 from dataclasses import dataclass
 from math import ceil
-from typing import Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
@@ -392,22 +392,34 @@ async def _load_contest_squads(contest_id: str, *, tournament_id: TenantId):
     ]
 
 
-async def find_teams_over_purse(
-    contest_id: str, purse: float, *, tournament_id: TenantId
-) -> List[str]:
+async def purse_rule_reasons_by_team(
+    contest_id: str,
+    purse: float,
+    max_per_team: int,
+    allowed_teams: Optional[Sequence[str]] = None,
+    *,
+    tournament_id: TenantId,
+) -> Dict[str, Tuple[str, str]]:
     """
-    Existing squads in a slot_purse contest that the given purse would break.
+    Squads in a slot_purse contest that the given purse, per-team cap or
+    allowed-teams list would break: ``{team_id: (team_name, reason)}``.
 
-    The slot half of the rules is checked separately by
-    routes/teams.find_teams_breaking_slot_rules.
+    This is evaluate_squad without the exact-size rule, which slot_purse takes
+    from slots instead (routes/teams.slot_rule_reasons_by_team checks that half).
     """
-    broken: List[str] = []
+    broken: Dict[str, Tuple[str, str]] = {}
     for team, squad in await _load_contest_squads(
         contest_id, tournament_id=tournament_id
     ):
-        violation = evaluate_purse(squad, purse)
+        violation = evaluate_squad(
+            players=squad,
+            squad_size=None,
+            purse=purse,
+            max_per_team=max_per_team,
+            allowed_teams=allowed_teams,
+        )
         if violation is not None:
-            broken.append(f"{team.team_name} {violation.summary}")
+            broken[str(team.id)] = (team.team_name, violation.summary)
     return broken
 
 

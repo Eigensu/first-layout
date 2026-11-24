@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -127,16 +127,15 @@ async def _validate_slot_constraints(
         )
 
 
-async def find_teams_breaking_slot_rules(
+async def slot_rule_reasons_by_team(
     contest_id: str, *, tournament_id: TenantId
-) -> List[str]:
+) -> Dict[str, Tuple[str, List[str]]]:
     """
-    Existing squads in this contest that current slot rules would invalidate.
+    Squads in this contest that current slot rules would invalidate, keyed by
+    team id: ``{team_id: (team_name, [reason, ...])}``.
 
-    Returns one "<team name> <reason>" line per broken team. Switching a
-    contest from auction_purse to slot_based (or editing slot config) would
-    otherwise leave squads built under the old rules enrolled and scoring
-    without ever being checked against slot composition.
+    Keyed by id so a caller combining these with other rule checks can list
+    each team once, whatever its name.
     """
     teams = (
         await scoped(Team, tournament_id)
@@ -144,7 +143,7 @@ async def find_teams_breaking_slot_rules(
         .to_list()
     )
     if not teams:
-        return []
+        return {}
 
     referenced: set = set()
     for team in teams:
@@ -162,7 +161,7 @@ async def find_teams_breaking_slot_rules(
     )
     by_id = {str(p.id): p for p in players}
 
-    broken: List[str] = []
+    broken: Dict[str, Tuple[str, List[str]]] = {}
     for team in teams:
         squad = [by_id[pid] for pid in team.player_ids if pid in by_id]
         violations = await _compute_slot_violations(squad, tournament_id=tournament_id)
@@ -177,9 +176,24 @@ async def find_teams_breaking_slot_rules(
                     f"references {len(team.player_ids) - len(squad)} player(s) "
                     f"that no longer resolve"
                 )
-            broken.append(f"{team.team_name} " + "; ".join(reasons))
+            broken[str(team.id)] = (team.team_name, reasons)
 
     return broken
+
+
+async def find_teams_breaking_slot_rules(
+    contest_id: str, *, tournament_id: TenantId
+) -> List[str]:
+    """
+    Existing squads in this contest that current slot rules would invalidate.
+
+    Returns one "<team name> <reason>" line per broken team. Switching a
+    contest from auction_purse to slot_based (or editing slot config) would
+    otherwise leave squads built under the old rules enrolled and scoring
+    without ever being checked against slot composition.
+    """
+    reasons = await slot_rule_reasons_by_team(contest_id, tournament_id=tournament_id)
+    return [f"{name} " + "; ".join(why) for name, why in reasons.values()]
 
 
 def _assert_allowed_teams(players: List[Player], contest: Optional[Contest]) -> None:

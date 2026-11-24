@@ -240,13 +240,14 @@ async def test_create_rejects_slot_without_enough_priced_players(client, db):
     assert "Slot Batters needs 2" in res.json()["detail"]
 
 
-async def test_tightening_purse_below_an_existing_team_is_refused(
-    client, user_client, db
-):
+async def _contest_with_one_team(client, user_client):
+    """
+    A slot_purse contest holding "Squad One": two batters and two bowlers at
+    100 each, two of them from team A. Cheap team-C players keep tighter rules
+    feasible, so the existing-team check is what has to catch a change.
+    """
     bat, bowl = await _slots()
     players = await _squad(bat, bowl, price=100)
-    # Cheaper alternatives keep the tighter purse feasible, so the existing
-    # team check is what has to catch it.
     for slot in (bat, bowl):
         for i in range(2):
             await _player(f"cheap-{slot.code}-{i}", "C", 10, slot)
@@ -267,6 +268,13 @@ async def test_tightening_purse_below_an_existing_team_is_refused(
         },
     )
     assert team.status_code == 201, team.text
+    return contest_id, bat, bowl
+
+
+async def test_tightening_purse_below_an_existing_team_is_refused(
+    client, user_client, db
+):
+    contest_id, _, _ = await _contest_with_one_team(client, user_client)
 
     res = await client.put(f"/api/admin/contests/{contest_id}", json={"purse": 200})
 
@@ -278,3 +286,74 @@ async def test_tightening_purse_below_an_existing_team_is_refused(
         f"/api/admin/contests/{contest_id}?force=true", json={"purse": 200}
     )
     assert forced.status_code == 200, forced.text
+
+
+async def test_lowering_the_team_cap_below_an_existing_team_is_refused(
+    client, user_client, db
+):
+    contest_id, _, _ = await _contest_with_one_team(client, user_client)
+
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}", json={"max_players_per_team": 1}
+    )
+
+    assert res.status_code == 400
+    lines = res.json()["detail"]["broken_teams"]
+    assert any("Squad One has 2 players from A" in line for line in lines)
+
+
+async def test_narrowing_allowed_teams_below_an_existing_team_is_refused(
+    client, user_client, db
+):
+    contest_id, _, _ = await _contest_with_one_team(client, user_client)
+
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}",
+        json={"contest_type": "daily", "allowed_teams": ["A", "C"]},
+    )
+
+    assert res.status_code == 400
+    lines = res.json()["detail"]["broken_teams"]
+    assert any("Squad One includes players outside" in line for line in lines)
+
+
+async def test_a_team_breaking_two_rules_is_listed_once(client, user_client, db):
+    contest_id, bat, _ = await _contest_with_one_team(client, user_client)
+    # Batters now need three, so Squad One breaks the slot rule as well as the
+    # tighter purse below.
+    bat.min_select = 3
+    bat.max_select = 3
+    await bat.save()
+
+    res = await client.put(f"/api/admin/contests/{contest_id}", json={"purse": 200})
+
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert detail["message"].startswith("1 existing team(s)")
+    assert len(detail["broken_teams"]) == 1
+    line = detail["broken_teams"][0]
+    assert "Batters: has 2, needs 3-3" in line
+    assert "costs 400, over the purse of 200" in line
+
+
+async def test_unrelated_edit_is_allowed_when_a_slot_cannot_be_filled(
+    client, user_client, db
+):
+    contest_id, _, bowl = await _contest_with_one_team(client, user_client)
+    # Every bowler but one goes inactive: no new squad could fill the slot.
+    for p in await Player.find(Player.slot == str(bowl.id)).to_list():
+        if p.name != "bowl1":
+            p.status = "Inactive"
+            await p.save()
+
+    renamed = await client.put(
+        f"/api/admin/contests/{contest_id}", json={"name": "Renamed"}
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    # A rule change still has to pass the feasibility gate.
+    repriced = await client.put(
+        f"/api/admin/contests/{contest_id}", json={"purse": 500}
+    )
+    assert repriced.status_code == 400
+    assert "Slot Bowlers needs 2" in repriced.json()["detail"]
