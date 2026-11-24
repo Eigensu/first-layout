@@ -17,6 +17,7 @@ from app.common.enums.contests import ContestFormat
 from app.models.admin.slot import Slot
 from app.models.contest import Contest
 from app.models.player import Player
+from app.models.settings import GlobalSettings
 from app.models.user import User
 from app.utils.dependencies import get_current_active_user
 
@@ -357,3 +358,55 @@ async def test_unrelated_edit_is_allowed_when_a_slot_cannot_be_filled(
     )
     assert repriced.status_code == 400
     assert "Slot Bowlers needs 2" in repriced.json()["detail"]
+
+
+async def test_switching_to_daily_checks_the_per_team_minimum(client, user_client, db):
+    contest_id, _, _ = await _contest_with_one_team(client, user_client)
+    # Squad One has two players from each of A and B. Create and update would
+    # refuse it in a daily A-vs-B contest needing three from each, so the
+    # switch to daily must flag it too.
+    settings = await GlobalSettings.get_instance()
+    settings.min_players_per_team = 3
+    await settings.save()
+
+    res = await client.put(
+        f"/api/admin/contests/{contest_id}",
+        json={"contest_type": "daily", "allowed_teams": ["A", "B"]},
+    )
+
+    assert res.status_code == 400
+    lines = res.json()["detail"]["broken_teams"]
+    assert any("Squad One has fewer than 3 player(s) from A" in line for line in lines)
+
+
+async def test_squad_filling_every_slot_maximum_is_accepted(user_client, db):
+    """The builder and edit sheet size a full squad by slot maxima."""
+    bat = Slot(code="BAT", name="Batters", min_select=1, max_select=2)
+    bowl = Slot(code="BOWL", name="Bowlers", min_select=1, max_select=2)
+    await bat.insert()
+    await bowl.insert()
+    contest = await _contest(purse=400)
+    players = await _squad(bat, bowl, price=100)
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 201, res.text
+
+
+async def test_float_rounding_does_not_push_a_fitting_squad_over_the_purse(
+    user_client, db
+):
+    bat, bowl = await _slots()
+    contest = await _contest(purse=0.3)
+    # 0.1 + 0.1 + 0.1 alone is 0.30000000000000004 in floating point, and the
+    # fourth price is far below a point anyone could see.
+    players = [
+        await _player("bat1", "A", 0.1, bat),
+        await _player("bat2", "B", 0.1, bat),
+        await _player("bowl1", "A", 0.1, bowl),
+        await _player("bowl2", "B", 1e-9, bowl),
+    ]
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 201, res.text

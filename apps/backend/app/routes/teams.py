@@ -30,14 +30,20 @@ from app.utils.tenant import TenantId, get_scoped, get_tenant, scoped, scoped_on
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
-async def _get_dynamic_max_players_from_slots(
-    *, tournament_id: TenantId
-) -> Optional[int]:
-    """Compute maximum team size from slot configuration using total min_select."""
+async def get_slot_squad_size(*, tournament_id: TenantId) -> Optional[int]:
+    """
+    The largest squad the slot configuration allows: the sum of every slot's
+    max_select.
+
+    The team builder and the edit sheet both size a full squad this way, so
+    the server must too. Summing min_select instead rejected the full squad the
+    UI asked for whenever a slot's minimum was below its maximum. The per-slot
+    min/max check (_validate_slot_constraints) still decides the squad's shape.
+    """
     slots = await scoped(Slot, tournament_id).to_list()
     if not slots:
         return None
-    return sum(max(0, slot.min_select) for slot in slots)
+    return sum(max(0, slot.max_select) for slot in slots)
 
 
 async def _resolve_contest(
@@ -248,9 +254,7 @@ async def create_team(
     # Squad size comes from the contest in auction mode, from slots otherwise.
     max_players_allowed = None
     if not auction_mode:
-        max_players_allowed = await _get_dynamic_max_players_from_slots(
-            tournament_id=tournament_id
-        )
+        max_players_allowed = await get_slot_squad_size(tournament_id=tournament_id)
         if (
             max_players_allowed is not None
             and len(team_data.player_ids) > max_players_allowed
@@ -559,7 +563,7 @@ async def update_team(
                 # Squad size comes from the contest in auction mode, from slots otherwise.
                 max_players_allowed = None
                 if not auction_mode:
-                    max_players_allowed = await _get_dynamic_max_players_from_slots(
+                    max_players_allowed = await get_slot_squad_size(
                         tournament_id=tournament_id
                     )
                     if (
