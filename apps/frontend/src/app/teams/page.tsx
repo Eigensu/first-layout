@@ -30,6 +30,7 @@ import { HeroHeader } from "@teamviewer/molecules/HeroHeader";
 import { TeamViewer } from "@teamviewer/organisms/TeamViewer";
 import { EditPlayersModal } from "@teamviewer/organisms/EditPlayersModal";
 import type { TeamViewMode } from "@teamviewer/types";
+import posthog from "posthog-js";
 
 type ApiPlayer = {
   id: string;
@@ -419,6 +420,10 @@ export default function TeamsPage() {
     try {
       setEnrollingTeamId(team.id);
       await publicContestsApi.enroll(contestId, team.id);
+      posthog.capture("contest_enrolled", {
+        contest_id: contestId,
+        enrollment_source: "teams_page",
+      });
       const contestName =
         contests.find((c) => c.id === contestId)?.name || "Contest";
       setEnrollSuccessByTeam((prev) => ({
@@ -445,6 +450,7 @@ export default function TeamsPage() {
       if (!token) throw new Error("Not authenticated");
 
       await deleteTeam(teamId, token);
+      posthog.capture("team_deleted");
       setTeams((prev) => prev.filter((t) => t.id !== teamId));
     } catch (err: any) {
       showAlert(
@@ -490,6 +496,7 @@ export default function TeamsPage() {
         token,
       );
       setTeams((prev) => prev.map((t) => (t.id === teamId ? updatedTeam : t)));
+      posthog.capture("team_renamed");
       setEditingTeamId(null);
       setEditingTeamName("");
       showToast({ message: "Team renamed", variant: "success" });
@@ -532,6 +539,7 @@ export default function TeamsPage() {
         token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      posthog.capture("team_captain_changed");
       showToast({ message: "Captain updated", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to set captain", "Update failed");
@@ -553,6 +561,7 @@ export default function TeamsPage() {
         token,
       );
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      posthog.capture("team_vice_captain_changed");
       showToast({ message: "Vice-captain updated", variant: "success" });
     } catch (e: any) {
       showAlert(e?.message || "Failed to set vice-captain", "Update failed");
@@ -587,6 +596,10 @@ export default function TeamsPage() {
       }
       const updated = await updateTeam(editPlayersTeamId, payload, token);
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      posthog.capture("team_updated", {
+        player_count: payload.player_ids.length,
+        update_source: "teams_page",
+      });
       setEditPlayersTeamId(null);
       showToast({ message: "Squad changes saved", variant: "success" });
     } catch (e: any) {
@@ -619,6 +632,7 @@ export default function TeamsPage() {
       const token = localStorage.getItem(LS_KEYS.ACCESS_TOKEN) as string;
       const updated = await updateTeam(actionTeamId, payload as any, token);
       setTeams((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      posthog.capture("team_player_replaced");
       setShowReplaceModal(false);
       setActionPlayerId(null);
       setActionTeamId(null);

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, CONTENT_TYPES, AUTH, API, ROUTES, LS_KEYS, tenantHeaders } from '@/common/consts';
 import { extractErrorMessage } from '@/utils/errors';
+import { reportApiError } from '@/lib/analytics/posthog';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -56,6 +57,7 @@ apiClient.interceptors.response.use(
 
     // For auth endpoints with 401, just reject with a clear error - NO retry, NO redirect
     if (error.response?.status === 401 && isAuthEndpoint) {
+      reportApiError(error);
       return Promise.reject(error);
     }
 
@@ -96,6 +98,7 @@ apiClient.interceptors.response.use(
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
+        if (axios.isAxiosError(refreshError)) reportApiError(refreshError);
         // If refresh fails, clear tokens and redirect to login
         localStorage.removeItem(LS_KEYS.ACCESS_TOKEN);
         localStorage.removeItem(LS_KEYS.REFRESH_TOKEN);
@@ -111,6 +114,9 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Every failure the caller sees is reported; a 401 the refresh above
+    // recovered from is not one.
+    reportApiError(error);
     return Promise.reject(error);
   }
 );

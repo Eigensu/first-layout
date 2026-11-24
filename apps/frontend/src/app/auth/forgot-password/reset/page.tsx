@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Input } from "@/components/auth/Input";
 import { Button } from "@/components/ui/Button";
 import { tenantHeaders } from "@/common/consts";
+import posthog from "posthog-js";
 
 export default function ForgotPasswordResetPage() {
   const router = useRouter();
@@ -44,6 +45,7 @@ export default function ForgotPasswordResetPage() {
       if (!res.ok) {
         throw new Error(extractErrorMessage(data?.detail, "Reset failed"));
       }
+      posthog.capture("password_reset_completed");
       setMessage("Password updated. You can now log in.");
       setTimeout(() => router.push("/auth/login"), 1000);
     } catch (err: any) {

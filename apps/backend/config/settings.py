@@ -148,6 +148,16 @@ class Settings(BaseSettings):
     otp_max_attempts: int = Field(default=5, alias="OTP_MAX_ATTEMPTS")
     reset_token_ttl_seconds: int = Field(default=600, alias="RESET_TOKEN_TTL_SECONDS")
 
+    # Logging and PostHog (docs/POSTHOG_OBSERVABILITY.md). LOG_LEVEL applies to
+    # the console and to PostHog alike. The API key is the project's public
+    # "phc_" token, the one the website uses too; without it nothing is sent to
+    # PostHog and logs only reach the console. POSTHOG_ACCESS_LOGS also ships
+    # uvicorn's line per request, which is most of the volume.
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    posthog_api_key: Optional[str] = Field(default=None, alias="POSTHOG_API_KEY")
+    posthog_host: str = Field(default="https://us.i.posthog.com", alias="POSTHOG_HOST")
+    posthog_access_logs: bool = Field(default=False, alias="POSTHOG_ACCESS_LOGS")
+
     # Resend, the email channel for reset and change-email codes (spec §5.4).
     # Both must be set for the channel to be offered; until then the email
     # option answers 503 and the website hides it.
@@ -163,6 +173,25 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("log_level")
+    @classmethod
+    def _log_level_is_a_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            raise ValueError(
+                "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR or CRITICAL; "
+                f"{value!r} is not one"
+            )
+        return level
+
+    @field_validator("posthog_host", mode="before")
+    @classmethod
+    def _blank_posthog_host_is_default(cls, value):
+        # Left empty in Railway: the US cloud, like the field's default.
+        if isinstance(value, str) and not value.strip():
+            return "https://us.i.posthog.com"
+        return value.strip().rstrip("/") if isinstance(value, str) else value
 
     @field_validator("cricheroes_sync_tournament_ids")
     @classmethod
