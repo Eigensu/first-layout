@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import uuid
@@ -10,6 +11,8 @@ from fastapi import HTTPException, UploadFile, status
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".svg", ".webp"}
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/svg+xml", "image/webp"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+logger = logging.getLogger(__name__)
 
 # Upload directories
 BASE_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
@@ -145,8 +148,8 @@ def delete_upload_file(file_path: str) -> bool:
             full_path.unlink()
             return True
         return False
-    except Exception as e:
-        print(f"Error deleting file {file_path}: {e}")
+    except Exception:
+        logger.exception("Could not delete file %s", file_path)
         return False
 
 

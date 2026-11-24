@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, Tuple
 
 from beanie import PydanticObjectId
@@ -10,6 +11,8 @@ from app.models.user import User
 from app.schemas.leaderboard import LeaderboardEntrySchema, LeaderboardResponseSchema
 from app.utils.dependencies import get_optional_current_user
 from app.utils.tenant import TenantId, get_tenant, scoped
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
@@ -125,7 +128,8 @@ async def get_leaderboard(
         return LeaderboardResponseSchema(
             entries=entries, currentUserEntry=current_user_entry
         )
-    except Exception as e:
-        # In case of error, return mock data
-        print(f"Error fetching leaderboard: {e}")
+    except Exception:
+        # In case of error, return mock data. Logged with the traceback so the
+        # failure reaches PostHog Error Tracking instead of passing silently.
+        logger.exception("Leaderboard query failed; serving mock data")
         return _get_mock_leaderboard(current_user)
