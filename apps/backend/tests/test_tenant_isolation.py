@@ -652,6 +652,8 @@ async def test_an_admin_enrolls_and_unenrolls_within_the_tournament(world, clien
         user_id=PydanticObjectId(),
         team_name="alpha walk-in",
         player_ids=[str(a.star.id), str(a.keeper.id)],
+        captain_id=str(a.star.id),
+        vice_captain_id=str(a.keeper.id),
     )
     await team.insert()
 
@@ -680,12 +682,29 @@ async def test_an_admin_enrolls_and_unenrolls_within_the_tournament(world, clien
     assert removed.json() == {"unenrolled": 1}
 
 
+async def _team_for(a, contest) -> Team:
+    """A second alpha team, built for ``contest``: a team only joins the
+    contest it was built for."""
+    team = Team(
+        tournament_id=a.id,
+        user_id=a.team.user_id,
+        team_name=f"alpha {contest.code} team",
+        player_ids=[str(a.star.id), str(a.keeper.id)],
+        captain_id=str(a.star.id),
+        vice_captain_id=str(a.keeper.id),
+        contest_id=str(contest.id),
+    )
+    await team.insert()
+    return team
+
+
 async def test_an_enrollment_records_its_tournament(world, user_client):
     a = world.alpha
+    team = await _team_for(a, a.semi)
     response = await user_client.post(
         f"/api/contests/{a.semi.id}/enroll",
         headers=ALPHA,
-        json={"team_id": str(a.team.id)},
+        json={"team_id": str(team.id)},
     )
 
     assert response.status_code == 200, response.text
@@ -951,11 +970,12 @@ async def test_a_daily_contest_checks_the_squad_against_this_tournaments_players
         end_at=start + timedelta(days=1),
     )
     await daily.insert()
+    team = await _team_for(a, daily)
 
     response = await user_client.post(
         f"/api/contests/{daily.id}/enroll",
         headers=ALPHA,
-        json={"team_id": str(a.team.id)},
+        json={"team_id": str(team.id)},
     )
 
     assert response.status_code == 200, response.text

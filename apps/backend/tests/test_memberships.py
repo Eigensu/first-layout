@@ -294,7 +294,12 @@ async def test_entering_a_contest_marks_you_as_having_played(
     contest, player_ids = squad
     user = await _user("rahul")
     team = Team(
-        tournament_id=alpha.id, user_id=user.id, team_name="t", player_ids=player_ids
+        tournament_id=alpha.id,
+        user_id=user.id,
+        team_name="t",
+        player_ids=player_ids,
+        captain_id=player_ids[0],
+        vice_captain_id=player_ids[1],
     )
     await team.insert()
 
@@ -347,7 +352,7 @@ async def test_a_single_tournament_service_writes_no_memberships(
     tournaments, squad, anon_client, http
 ):
     """TENANCY=single, the default: the header is ignored and nothing is written."""
-    contest, player_ids = squad
+    contest, _ = squad
     await anon_client.post(
         "/api/auth/register",
         headers=ALPHA,
@@ -359,7 +364,18 @@ async def test_a_single_tournament_service_writes_no_memberships(
         },
     )
     user = await User.find_one(User.username == "newplayer")
-    team = Team(user_id=user.id, team_name="t", player_ids=player_ids)
+    # A legacy service's squad comes from its own, tournament-less players.
+    legacy_players = [AdminPlayer(name=f"legacy {i}", team="XI") for i in range(2)]
+    for p in legacy_players:
+        await p.insert()
+    player_ids = [str(p.id) for p in legacy_players]
+    team = Team(
+        user_id=user.id,
+        team_name="t",
+        player_ids=player_ids,
+        captain_id=player_ids[0],
+        vice_captain_id=player_ids[1],
+    )
     await team.insert()
     legacy_contest = Contest(
         code="LEGACY",
@@ -408,7 +424,12 @@ async def test_a_failed_first_play_date_does_not_fail_the_entry(
     user = await _user("rahul")
     await record_sign_in(user, alpha.id)
     team = Team(
-        tournament_id=alpha.id, user_id=user.id, team_name="t", player_ids=player_ids
+        tournament_id=alpha.id,
+        user_id=user.id,
+        team_name="t",
+        player_ids=player_ids,
+        captain_id=player_ids[0],
+        vice_captain_id=player_ids[1],
     )
     await team.insert()
     real = TournamentMembership.get_motor_collection()

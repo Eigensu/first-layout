@@ -25,7 +25,11 @@ from app.models.team import Team
 from app.models.team_contest_enrollment import TeamContestEnrollment
 from app.models.tournament import Tournament
 from app.models.user import User
-from app.routes.teams import find_teams_breaking_slot_rules, slot_rule_reasons_by_team
+from app.routes.teams import (
+    assert_team_enrollable,
+    find_teams_breaking_slot_rules,
+    slot_rule_reasons_by_team,
+)
 from app.schemas.admin.cricheroes_points import ContestPointsSummary
 from app.schemas.contest import (
     ContestCreate,
@@ -536,6 +540,13 @@ async def delete_contest(
     return {"message": "Contest deleted"}
 
 
+def _reason(detail: object) -> str:
+    """One line from an HTTPException detail, string or dict shaped."""
+    if isinstance(detail, dict):
+        return str(detail.get("message") or detail)
+    return str(detail)
+
+
 @router.post("/{contest_id}/enroll-teams", response_model=List[EnrollmentResponse])
 async def enroll_teams(
     contest_id: str,
@@ -550,8 +561,10 @@ async def enroll_teams(
     if not body.team_ids:
         return []
 
-    created: List[EnrollmentResponse] = []
-
+    # Resolve and check every team before enrolling any, so one bad team
+    # refuses the batch instead of leaving it half applied.
+    teams: List[Team] = []
+    rejected: List[str] = []
     for tid in body.team_ids:
         try:
             oid = PydanticObjectId(tid)
@@ -560,7 +573,28 @@ async def enroll_teams(
         team = await get_scoped(Team, tournament_id, oid)
         if not team:
             raise HTTPException(status_code=404, detail=f"Team not found: {tid}")
+        try:
+            await assert_team_enrollable(team, contest, tournament_id=tournament_id)
+        except HTTPException as exc:
+            rejected.append(f"{team.team_name}: {_reason(exc.detail)}")
+            continue
+        teams.append(team)
 
+    if rejected:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": (
+                    f"{len(rejected)} team(s) cannot join this contest. "
+                    f"Nothing was enrolled."
+                ),
+                "rejected_teams": rejected,
+            },
+        )
+
+    created: List[EnrollmentResponse] = []
+
+    for team in teams:
         # Ensure no duplicate active enrollment
         # Separate arguments, which find_one ANDs together. Beanie's operators
         # do not support `&`: joined with it, this raised TypeError for every
