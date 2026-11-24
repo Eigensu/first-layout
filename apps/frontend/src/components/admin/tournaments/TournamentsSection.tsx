@@ -210,6 +210,8 @@ function TournamentForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Already saved: a second submit would save again, or create a duplicate.
+    if (warning) return;
     setError(null);
 
     if (!form.name.trim()) {
@@ -261,7 +263,11 @@ function TournamentForm({
         <CardBody className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-text-main">
-              {isEdit ? `Edit ${initial?.name}` : "Create Tournament"}
+              {warning
+                ? `Saved ${form.name}`
+                : isEdit
+                  ? `Edit ${initial?.name}`
+                  : "Create Tournament"}
             </h2>
             <button
               onClick={dismiss}
@@ -273,211 +279,215 @@ function TournamentForm({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className={labelClass}>Tournament Name *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="e.g. Delhi Premier Cricket League"
-                className={inputClass}
-                maxLength={200}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>Subdomain Slug *</label>
-              <div className="flex items-center gap-2">
+            {/* Once saved with a warning, the edit is done: what was typed after
+                it would be lost on Close, so nothing can be typed. */}
+            <fieldset disabled={Boolean(warning)} className="space-y-4 min-w-0">
+              <div>
+                <label className={labelClass}>Tournament Name *</label>
                 <input
                   type="text"
-                  value={form.slug}
-                  onChange={(e) => handleSlugChange(e.target.value)}
-                  placeholder="dpcl"
-                  className={`${inputClass} font-mono`}
-                  maxLength={32}
+                  value={form.name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="e.g. Delhi Premier Cricket League"
+                  className={inputClass}
+                  maxLength={200}
                   required
                 />
-                {slugStatus.state === "checking" && (
-                  <Loader2 className="w-5 h-5 animate-spin text-text-muted shrink-0" />
-                )}
-                {slugStatus.state === "ok" && (
-                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-                )}
-                {slugStatus.state === "error" && (
-                  <XCircle className="w-5 h-5 text-red-500 shrink-0" />
-                )}
               </div>
-              <p className="mt-1 text-xs text-text-muted">
-                Fans will visit{" "}
-                <span className="font-mono text-accent-pink">
-                  {form.slug || "<slug>"}.{ROOT_DOMAIN}
-                </span>
-                {" "}— active immediately after saving.
-              </p>
-              {slugStatus.state === "error" && (
-                <p className="mt-1 text-xs text-red-500">{slugStatus.message}</p>
-              )}
-            </div>
 
-            <div>
-              <label className={labelClass}>Description</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
-                rows={2}
-                placeholder="Short blurb shown on the tournament landing page"
-                className={inputClass}
-                maxLength={2000}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Status</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => set("status", e.target.value as TournamentStatus)}
-                  className={inputClass}
-                >
-                  {STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Logo URL</label>
-                <input
-                  type="url"
-                  value={form.logo_url}
-                  onChange={(e) => set("logo_url", e.target.value)}
-                  placeholder="https://…"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Starts (IST)</label>
-                <input
-                  type="datetime-local"
-                  value={form.start_at}
-                  onChange={(e) => set("start_at", e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Ends (IST)</label>
-                <input
-                  type="datetime-local"
-                  value={form.end_at}
-                  onChange={(e) => set("end_at", e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Primary Brand Color</label>
+                <label className={labelClass}>Subdomain Slug *</label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="color"
-                    value={form.primary_color || "#3c1f62"}
-                    onChange={(e) => set("primary_color", e.target.value)}
-                    className="h-10 w-14 rounded border border-border-subtle bg-bg-card cursor-pointer"
+                    type="text"
+                    value={form.slug}
+                    onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="dpcl"
+                    className={`${inputClass} font-mono`}
+                    maxLength={32}
+                    required
                   />
-                  {form.primary_color && (
-                    <button
-                      type="button"
-                      onClick={() => set("primary_color", "")}
-                      className="text-xs text-text-muted hover:text-text-main"
-                    >
-                      Clear
-                    </button>
+                  {slugStatus.state === "checking" && (
+                    <Loader2 className="w-5 h-5 animate-spin text-text-muted shrink-0" />
+                  )}
+                  {slugStatus.state === "ok" && (
+                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  )}
+                  {slugStatus.state === "error" && (
+                    <XCircle className="w-5 h-5 text-red-500 shrink-0" />
                   )}
                 </div>
-              </div>
-              <div>
-                <label className={labelClass}>Secondary Brand Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={form.secondary_color || "#4a325f"}
-                    onChange={(e) => set("secondary_color", e.target.value)}
-                    className="h-10 w-14 rounded border border-border-subtle bg-bg-card cursor-pointer"
-                  />
-                  {form.secondary_color && (
-                    <button
-                      type="button"
-                      onClick={() => set("secondary_color", "")}
-                      className="text-xs text-text-muted hover:text-text-main"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className={labelClass} htmlFor="tournament-cricheroes">
-                CricHeroes Tournament
-              </label>
-              <input
-                id="tournament-cricheroes"
-                type="text"
-                inputMode="url"
-                value={form.cricheroes}
-                onChange={(e) => set("cricheroes", e.target.value)}
-                placeholder="2242502, or its cricheroes.com link"
-                className={`${inputClass} font-mono`}
-                aria-describedby="tournament-cricheroes-help"
-              />
-              <p id="tournament-cricheroes-help" className="mt-1 text-xs text-text-muted">
-                {form.cricheroes.trim() && cricheroesId === null ? (
-                  <span className="text-danger">
-                    No tournament id in that. Paste the id or a
-                    cricheroes.com/tournament/… link.
-                  </span>
-                ) : cricheroesId !== null &&
-                  String(cricheroesId) !== form.cricheroes.trim() ? (
-                  <>Links CricHeroes tournament <span className="font-mono">{cricheroesId}</span>.</>
-                ) : (
-                  <>
-                    Shows its points table, MVP and leaderboards on{" "}
-                    <span className="font-mono">/stats</span>, from the hourly
-                    CricHeroes sync, which picks it up on its next run. Checked
-                    with CricHeroes when you save: only tournaments in our
-                    CricHeroes agreement can be linked. Leave empty for none.
-                  </>
-                )}
-              </p>
-            </div>
-
-            <details className="rounded-lg border border-border-subtle p-3">
-              <summary className="text-sm text-text-muted cursor-pointer select-none">
-                Advanced: separate backend (legacy deployments only)
-              </summary>
-              <div className="mt-3">
-                <label className={labelClass}>API Base URL</label>
-                <input
-                  type="url"
-                  value={form.api_base_url}
-                  onChange={(e) => set("api_base_url", e.target.value)}
-                  placeholder="Leave empty to use the shared API (recommended)"
-                  className={inputClass}
-                />
                 <p className="mt-1 text-xs text-text-muted">
-                  Only for tournaments still running on their own Railway
-                  service (e.g. https://api-lpcl.{ROOT_DOMAIN}). New tournaments
-                  should leave this empty.
+                  Fans will visit{" "}
+                  <span className="font-mono text-accent-pink">
+                    {form.slug || "<slug>"}.{ROOT_DOMAIN}
+                  </span>
+                  {" "}— active immediately after saving.
+                </p>
+                {slugStatus.state === "error" && (
+                  <p className="mt-1 text-xs text-red-500">{slugStatus.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className={labelClass}>Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => set("description", e.target.value)}
+                  rows={2}
+                  placeholder="Short blurb shown on the tournament landing page"
+                  className={inputClass}
+                  maxLength={2000}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => set("status", e.target.value as TournamentStatus)}
+                    className={inputClass}
+                  >
+                    {STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Logo URL</label>
+                  <input
+                    type="url"
+                    value={form.logo_url}
+                    onChange={(e) => set("logo_url", e.target.value)}
+                    placeholder="https://…"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Starts (IST)</label>
+                  <input
+                    type="datetime-local"
+                    value={form.start_at}
+                    onChange={(e) => set("start_at", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Ends (IST)</label>
+                  <input
+                    type="datetime-local"
+                    value={form.end_at}
+                    onChange={(e) => set("end_at", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Primary Brand Color</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={form.primary_color || "#3c1f62"}
+                      onChange={(e) => set("primary_color", e.target.value)}
+                      className="h-10 w-14 rounded border border-border-subtle bg-bg-card cursor-pointer"
+                    />
+                    {form.primary_color && (
+                      <button
+                        type="button"
+                        onClick={() => set("primary_color", "")}
+                        className="text-xs text-text-muted hover:text-text-main"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>Secondary Brand Color</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={form.secondary_color || "#4a325f"}
+                      onChange={(e) => set("secondary_color", e.target.value)}
+                      className="h-10 w-14 rounded border border-border-subtle bg-bg-card cursor-pointer"
+                    />
+                    {form.secondary_color && (
+                      <button
+                        type="button"
+                        onClick={() => set("secondary_color", "")}
+                        className="text-xs text-text-muted hover:text-text-main"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass} htmlFor="tournament-cricheroes">
+                  CricHeroes Tournament
+                </label>
+                <input
+                  id="tournament-cricheroes"
+                  type="text"
+                  inputMode="url"
+                  value={form.cricheroes}
+                  onChange={(e) => set("cricheroes", e.target.value)}
+                  placeholder="2242502, or its cricheroes.com link"
+                  className={`${inputClass} font-mono`}
+                  aria-describedby="tournament-cricheroes-help"
+                />
+                <p id="tournament-cricheroes-help" className="mt-1 text-xs text-text-muted">
+                  {form.cricheroes.trim() && cricheroesId === null ? (
+                    <span className="text-danger">
+                      No tournament id in that. Paste the id or a
+                      cricheroes.com/tournament/… link.
+                    </span>
+                  ) : cricheroesId !== null &&
+                    String(cricheroesId) !== form.cricheroes.trim() ? (
+                    <>Links CricHeroes tournament <span className="font-mono">{cricheroesId}</span>.</>
+                  ) : (
+                    <>
+                      Shows its points table, MVP and leaderboards on{" "}
+                      <span className="font-mono">/stats</span>, from the hourly
+                      CricHeroes sync, which picks it up on its next run. Checked
+                      with CricHeroes when you save: only tournaments in our
+                      CricHeroes agreement can be linked. Leave empty for none.
+                    </>
+                  )}
                 </p>
               </div>
-            </details>
+
+              <details className="rounded-lg border border-border-subtle p-3">
+                <summary className="text-sm text-text-muted cursor-pointer select-none">
+                  Advanced: separate backend (legacy deployments only)
+                </summary>
+                <div className="mt-3">
+                  <label className={labelClass}>API Base URL</label>
+                  <input
+                    type="url"
+                    value={form.api_base_url}
+                    onChange={(e) => set("api_base_url", e.target.value)}
+                    placeholder="Leave empty to use the shared API (recommended)"
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Only for tournaments still running on their own Railway
+                    service (e.g. https://api-lpcl.{ROOT_DOMAIN}). New tournaments
+                    should leave this empty.
+                  </p>
+                </div>
+              </details>
+            </fieldset>
 
             {error && (
               <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm px-3 py-2">

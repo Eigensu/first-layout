@@ -90,12 +90,17 @@ describe('linking a CricHeroes tournament', () => {
     expect(notice.textContent).toContain('Saved.');
     expect(notice.textContent).toContain('could not confirm they serve tournament 2251924');
     // Still open, so it can be read; the list reloads only on Close.
-    expect(screen.getByText('Edit GSL')).toBeTruthy();
+    expect(screen.getByText('Saved GSL')).toBeTruthy();
     expect(api.list).toHaveBeenCalledTimes(1);
+    // Already saved: nothing more can be typed, or sent again.
+    const field = screen.getByLabelText('CricHeroes Tournament') as HTMLInputElement;
+    expect(field.closest('fieldset')?.disabled).toBe(true);
+    fireEvent.submit(field.closest('form')!);
+    expect(api.update).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByText('Close'));
 
-    await waitFor(() => expect(screen.queryByText('Edit GSL')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Saved GSL')).toBeNull());
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
@@ -112,7 +117,7 @@ describe('linking a CricHeroes tournament', () => {
     // The header's X, not the footer's button: the tournament is already saved.
     fireEvent.click(screen.getByLabelText('Close'));
 
-    await waitFor(() => expect(screen.queryByText('Edit GSL')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Saved GSL')).toBeNull());
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
