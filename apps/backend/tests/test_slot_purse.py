@@ -410,3 +410,31 @@ async def test_float_rounding_does_not_push_a_fitting_squad_over_the_purse(
     res = await user_client.post("/api/teams/", json=_body(players, contest))
 
     assert res.status_code == 201, res.text
+
+
+async def test_player_without_a_slot_cannot_fill_a_spare_place(user_client, db):
+    """
+    With slot ranges, the slot minima leave spare places under the cap. A
+    player outside every slot must not be able to take one.
+    """
+    bat = Slot(code="BAT", name="Batters", min_select=1, max_select=2)
+    bowl = Slot(code="BOWL", name="Bowlers", min_select=1, max_select=2)
+    await bat.insert()
+    await bowl.insert()
+    contest = await _contest(purse=400)
+    unslotted = Player(name="drifter", team="B", price=100, status="Active")
+    await unslotted.insert()
+    players = [
+        await _player("bat1", "A", 100, bat),
+        await _player("bowl1", "B", 100, bowl),
+        unslotted,
+    ]
+
+    res = await user_client.post("/api/teams/", json=_body(players, contest))
+
+    assert res.status_code == 400
+    violations = res.json()["detail"]["violations"]
+    assert any(
+        v["slot"]["name"] == "Players without a slot" and v["actual"] == 1
+        for v in violations
+    )

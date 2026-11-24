@@ -65,7 +65,7 @@ async def _compute_slot_violations(
     squad is legal. Shared by submission-time validation and admin
     reconciliation of existing teams so the two cannot drift apart.
     """
-    # Count players per slot (ignore players without a slot)
+    # Count players per slot (players without a valid slot are rejected below)
     slot_counts: Dict[str, int] = {}
     for p in players:
         if p.slot:
@@ -77,7 +77,7 @@ async def _compute_slot_violations(
         try:
             present_slot_oids.append(PydanticObjectId(sid))
         except Exception:
-            # If slot id is malformed, skip; it won't be validated
+            # A malformed slot id never resolves, so it is rejected below.
             continue
     slots_present = (
         await scoped(Slot, tournament_id)
@@ -96,6 +96,18 @@ async def _compute_slot_violations(
         slots_by_id.setdefault(str(s.id), s)
 
     violations = []
+    # Every player must sit in one of this tournament's slots. A player with no
+    # slot, a malformed one or one that no longer exists would otherwise fill a
+    # spare place in the squad without counting against any slot's limits.
+    unslotted = sum(1 for p in players if not p.slot or p.slot not in slots_by_id)
+    if unslotted:
+        violations.append(
+            {
+                "slot": {"id": None, "code": None, "name": "Players without a slot"},
+                "expected": {"min_select": 0, "max_select": 0},
+                "actual": unslotted,
+            }
+        )
     for sid, slot in slots_by_id.items():
         count = slot_counts.get(sid, 0)
         if count < slot.min_select or count > slot.max_select:
