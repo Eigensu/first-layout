@@ -4,13 +4,21 @@
     python scripts/sync_cricheroes.py --tournament-id 2242502
     python scripts/sync_cricheroes.py --force
 
-The plain form is the scheduled run, for every tournament in
-CRICHEROES_SYNC_TOURNAMENT_IDS. Each run reads the match list, one call per
-tournament; standings, the MVP table and leaderboards are read again only when
-a completed result changed or they are older than
-CRICHEROES_SNAPSHOT_MAX_AGE_HOURS. --force reads them all. Every call is
-counted (§6.6), and the run ends by logging a warning if this quota term's
-calls are past CRICHEROES_USAGE_WARN_PERCENT.
+The plain form is the scheduled run, for every CricHeroes tournament a
+tournament is linked to in Admin > Tournaments (§13.1) -- nothing to configure
+when one is added. Each run reads the match list, one call per tournament;
+standings, the MVP table and leaderboards are read again only when a completed
+result changed or they are older than CRICHEROES_SNAPSHOT_MAX_AGE_HOURS.
+--force reads them all. Every call is counted (§6.6), and the run ends by
+logging a warning if this quota term's calls are past
+CRICHEROES_USAGE_WARN_PERCENT.
+
+A tournament CricHeroes refused (170001, outside our agreement) is skipped
+for a day after the refusal, so a bad link fails once a day, not every hour;
+--force asks again at once.
+
+CRICHEROES_SYNC_TOURNAMENT_IDS, when set, is a cap: only the linked tournaments
+it names are read, and a run says which linked ones it held back.
 
 For a tournament some contest takes its points from (§9.3), the run also
 reads the due match MVP tables and rescores those contests, and prints how
@@ -22,8 +30,8 @@ like the MVP table before the first match, is not a failure and is listed under
 "no data yet" -- 1 when
 anything failed (a resource, a match's MVP table or a contest's scoring) or
 the credentials are missing, and
-0 with a message when no tournament is configured, so a scheduled service set
-up ahead of the configuration does not report failures.
+0 with a message when no tournament is linked, so a scheduled service set up
+ahead of the first link does not report failures.
 """
 
 import argparse
@@ -40,7 +48,6 @@ from app.services import cricheroes_cache, cricheroes_usage  # noqa: E402
 from app.services.cricheroes_errors import CricHeroesConfigError  # noqa: E402
 from config.database import close_mongo_connection, connect_to_mongo  # noqa: E402
 from config.observability import flush_observability, setup_observability  # noqa: E402
-from config.settings import get_settings  # noqa: E402
 
 logger = logging.getLogger("scripts.sync_cricheroes")
 
@@ -51,7 +58,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--tournament-id",
         type=int,
         action="append",
-        help="one configured CricHeroes tournament; repeat for more (default: all)",
+        help="one linked CricHeroes tournament; repeat for more (default: all)",
     )
     parser.add_argument(
         "--force", action="store_true", help="read every resource, changed or not"
@@ -79,14 +86,31 @@ def summary(report: SyncReport) -> str:
 
 async def run(args: argparse.Namespace) -> int:
     """The run itself, with the database already connected."""
-    configured = get_settings().cricheroes_sync_tournaments
+    configured, held_back = await cricheroes_cache.sync_selection()
+    if held_back:
+        # Said first, and whatever else happens: a linked tournament that
+        # never refreshes is otherwise a mystery.
+        print(
+            f"Linked but not synced, outside CRICHEROES_SYNC_TOURNAMENT_IDS: "
+            f"{held_back}"
+        )
     if not configured:
-        print("No tournaments to refresh: CRICHEROES_SYNC_TOURNAMENT_IDS is empty.")
+        print(
+            "No tournaments to refresh: "
+            + (
+                "every linked tournament is held back by CRICHEROES_SYNC_TOURNAMENT_IDS."
+                if held_back
+                else "no tournament is linked to a CricHeroes tournament."
+            )
+        )
         return 0
     ids = args.tournament_id or configured
     unknown = [t for t in ids if t not in configured]
     if unknown:
-        print(f"Not in CRICHEROES_SYNC_TOURNAMENT_IDS: {unknown}")
+        print(
+            f"Not synced, as no tournament is linked to them (or "
+            f"CRICHEROES_SYNC_TOURNAMENT_IDS holds them back): {unknown}"
+        )
         return 1
 
     async with cricheroes_usage.counted_client() as client:

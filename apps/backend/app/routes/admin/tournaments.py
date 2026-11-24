@@ -15,6 +15,7 @@ from app.models.tournament_membership import (
     TournamentMembership,
 )
 from app.models.user import User
+from app.routes.admin.cricheroes import get_cricheroes_client
 from app.schemas.tournament import (
     SlugAvailabilityResponse,
     TournamentAdminAppoint,
@@ -27,13 +28,21 @@ from app.schemas.tournament import (
     validate_slug,
 )
 from app.services.auth.identity import AmbiguousIdentifier, resolve_login_identity
+from app.services.cricheroes_client import CricHeroesClient
+from app.services.cricheroes_errors import (
+    CricHeroesAccessError,
+    CricHeroesError,
+    is_no_data_yet,
+)
 from app.utils.dependencies import get_platform_admin
 from config.settings import settings
 
 router = APIRouter(prefix="/api/admin/tournaments", tags=["Admin - Tournaments"])
 
 
-def to_response(t: Tournament) -> TournamentResponse:
+def to_response(
+    t: Tournament, cricheroes_warning: Optional[str] = None
+) -> TournamentResponse:
     return TournamentResponse(
         id=str(t.id),
         slug=t.slug,
@@ -47,9 +56,40 @@ def to_response(t: Tournament) -> TournamentResponse:
         secondary_color=t.secondary_color,
         api_base_url=t.api_base_url,
         cricheroes_tournament_id=t.cricheroes_tournament_id,
+        cricheroes_warning=cricheroes_warning,
         created_at=t.created_at,
         updated_at=t.updated_at,
     )
+
+
+async def _check_cricheroes_link(
+    client: CricHeroesClient, cricheroes_id: int
+) -> Optional[str]:
+    """Ask CricHeroes whether they serve this tournament to us: one call, the
+    match list the sync reads first (spec §13.1).
+
+    Refused with a 422 only when CricHeroes answer that the id is outside our
+    agreement (170001): a link that could never be read, and an admin who
+    typed it wants to know now, not when the stats page stays empty. A
+    tournament with no fixtures yet answers with a "no data" code and is
+    served. Anything else -- an outage, their firewall, no credentials on this
+    service -- cannot say either way, so the link is saved and the reason
+    returned as a warning, rather than an outage at CricHeroes stopping an
+    admin from linking.
+    """
+    try:
+        await client.get_tournament_match_list(cricheroes_id)
+    except CricHeroesAccessError as exc:
+        raise HTTPException(status_code=422, detail=f"Not linked. {exc}") from exc
+    except CricHeroesError as exc:
+        if is_no_data_yet(exc):
+            return None
+        return (
+            f"Linked, but CricHeroes could not confirm they serve tournament "
+            f"{cricheroes_id} to us: {str(exc).rstrip('.')}. If they do not, no "
+            "stats will arrive."
+        )
+    return None
 
 
 async def _get_or_404(tournament_id: str) -> Tournament:
@@ -83,6 +123,7 @@ async def check_slug(slug: str, current_user: User = Depends(get_platform_admin)
 async def create_tournament(
     data: TournamentCreate,
     current_user: User = Depends(get_platform_admin),
+    cricheroes: CricHeroesClient = Depends(get_cricheroes_client),
 ):
     if data.start_at and data.end_at and data.start_at >= data.end_at:
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
@@ -90,6 +131,13 @@ async def create_tournament(
     existing = await Tournament.find_one(Tournament.slug == data.slug)
     if existing:
         raise HTTPException(status_code=400, detail="Slug is already taken")
+
+    # Last, so a request refused for any other reason costs no call.
+    warning = (
+        await _check_cricheroes_link(cricheroes, data.cricheroes_tournament_id)
+        if data.cricheroes_tournament_id is not None
+        else None
+    )
 
     now = utc_now()
     tournament = Tournament(
@@ -108,7 +156,7 @@ async def create_tournament(
         updated_at=now,
     )
     await tournament.insert()
-    return to_response(tournament)
+    return to_response(tournament, cricheroes_warning=warning)
 
 
 @router.get("", response_model=TournamentListResponse)
@@ -163,10 +211,19 @@ async def update_tournament(
     tournament_id: str,
     data: TournamentUpdate,
     current_user: User = Depends(get_platform_admin),
+    cricheroes: CricHeroesClient = Depends(get_cricheroes_client),
 ):
     tournament = await _get_or_404(tournament_id)
 
     updates = data.model_dump(exclude_unset=True)
+    # Only a link that is new or changed is checked with CricHeroes: the edit
+    # form sends the stored one back on every save, and unlinking asks nothing.
+    new_link = updates.get("cricheroes_tournament_id")
+    link_to_check = (
+        new_link
+        if new_link is not None and new_link != tournament.cricheroes_tournament_id
+        else None
+    )
 
     # Optional fields may be sent as null to clear them, but core identity
     # fields can only be replaced, never nulled.
@@ -193,9 +250,16 @@ async def update_tournament(
     ):
         raise HTTPException(status_code=400, detail="start_at must be before end_at")
 
+    # Last, so a request refused for any other reason costs no call.
+    warning = (
+        await _check_cricheroes_link(cricheroes, link_to_check)
+        if link_to_check is not None
+        else None
+    )
+
     tournament.updated_at = utc_now()
     await tournament.save()
-    return to_response(tournament)
+    return to_response(tournament, cricheroes_warning=warning)
 
 
 @router.delete("/{tournament_id}")

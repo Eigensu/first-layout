@@ -10,7 +10,9 @@ import pytest_asyncio
 from cricheroes_responses import refusal
 
 import scripts.sync_cricheroes as script
+from app.common.enums.tournaments import TournamentStatus
 from app.models.cricheroes import CricHeroesCallCount
+from app.models.tournament import Tournament
 from app.schemas.admin.cricheroes_ops import SyncReport
 from app.services import cricheroes_usage
 from app.services.cricheroes_client import CricHeroesClient
@@ -23,9 +25,20 @@ BASE = "https://cricheroes.test/api/v1"
 CREDS = {"api_key": "k", "secret_access_key": "s", "udid": "u"}
 
 
+async def link(slug: str, cricheroes_id: int) -> None:
+    """A tournament linked to a CricHeroes tournament, as an admin does."""
+    await Tournament(
+        slug=slug,
+        name=slug.upper(),
+        status=TournamentStatus.LIVE,
+        cricheroes_tournament_id=cricheroes_id,
+    ).insert()
+
+
 @pytest_asyncio.fixture
 async def upstream(db, monkeypatch):
-    """Every endpoint answers with the doc's example, unless set otherwise."""
+    """Every endpoint answers with the doc's example, unless set otherwise.
+    One tournament is linked to 2242502, and nothing else is configured."""
     answers: dict = {}
 
     def answer(request):
@@ -48,7 +61,8 @@ async def upstream(db, monkeypatch):
 
     monkeypatch.setattr(cricheroes_usage, "counted_client", client)
     settings = get_settings()
-    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", "2242502")
+    monkeypatch.setattr(settings, "cricheroes_sync_tournament_ids", "")
+    await link("tpl", 2242502)
     yield answers, creds
     await http.aclose()
 
@@ -201,16 +215,62 @@ async def test_missing_credentials_exit_1_without_a_call(upstream, capsys):
     assert await CricHeroesCallCount.find_all().count() == 0
 
 
-async def test_nothing_configured_is_not_a_failure(upstream, capsys, monkeypatch):
-    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
+async def test_nothing_linked_is_not_a_failure(upstream, capsys):
+    await Tournament.find_all().delete()
 
     assert await script.run(script.parse_args([])) == 0
 
-    assert "CRICHEROES_SYNC_TOURNAMENT_IDS is empty" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "No tournaments to refresh: no tournament is linked" in out
+    assert await CricHeroesCallCount.find_all().count() == 0
 
 
-async def test_only_configured_tournaments(upstream, capsys):
+async def test_a_tournament_linked_later_is_synced_with_nothing_configured(
+    upstream, capsys
+):
+    await link("gsl", 2251924)
+
+    assert await script.run(script.parse_args([])) == 0
+
+    out = capsys.readouterr().out
+    assert "2242502: 5 call(s)" in out and "2251924: 5 call(s)" in out
+    assert "Linked but not synced" not in out
+
+
+async def test_a_cap_holds_back_a_linked_tournament_and_says_so(
+    upstream, capsys, monkeypatch
+):
+    await link("gsl", 2251924)
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "2242502")
+
+    assert await script.run(script.parse_args([])) == 0
+
+    out = capsys.readouterr().out
+    assert (
+        "Linked but not synced, outside CRICHEROES_SYNC_TOURNAMENT_IDS: [2251924]"
+        in out
+    )
+    assert "2242502: 5 call(s)" in out and "2251924:" not in out
+
+
+async def test_a_cap_that_holds_back_everything_is_loud_but_not_a_failure(
+    upstream, capsys, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "60214")
+
+    assert await script.run(script.parse_args([])) == 0
+
+    out = capsys.readouterr().out
+    assert (
+        "Linked but not synced, outside CRICHEROES_SYNC_TOURNAMENT_IDS: [2242502]"
+        in out
+    )
+    assert "every linked tournament is held back" in out
+    assert await CricHeroesCallCount.find_all().count() == 0
+
+
+async def test_only_linked_tournaments(upstream, capsys):
     assert await script.run(script.parse_args(["--tournament-id", "60214"])) == 1
 
-    assert "Not in CRICHEROES_SYNC_TOURNAMENT_IDS: [60214]" in capsys.readouterr().out
+    assert "Not synced, as no tournament is linked to them" in capsys.readouterr().out
     assert await CricHeroesCallCount.find_all().count() == 0

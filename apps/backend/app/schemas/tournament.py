@@ -117,6 +117,10 @@ class TournamentResponse(DatesInIST):
     secondary_color: Optional[str] = None
     api_base_url: Optional[str] = None
     cricheroes_tournament_id: Optional[int] = None
+    # Set only on the response to a save that linked a CricHeroes tournament,
+    # when CricHeroes could not be asked whether they serve it: the link is
+    # saved, and this says what is not confirmed.
+    cricheroes_warning: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

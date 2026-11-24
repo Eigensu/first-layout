@@ -122,8 +122,11 @@ class Settings(BaseSettings):
     cricheroes_usage_warn_percent: float = Field(
         default=50.0, gt=0, le=100, alias="CRICHEROES_USAGE_WARN_PERCENT"
     )
-    # The CricHeroes tournaments kept cached (spec §6.7), comma-separated, e.g.
-    # "2242502,2251924". Empty: the sync does nothing.
+    # Optional cap on the CricHeroes tournaments the sync keeps cached (spec
+    # §6.7), comma-separated, e.g. "2242502,2251924". Leave it unset: the sync
+    # reads every tournament linked in Admin > Tournaments. Set, only the ids
+    # named here are read, however many are linked -- for stopping the sync
+    # spending quota on one, not for turning one on.
     cricheroes_sync_tournament_ids: str = Field(
         default="", alias="CRICHEROES_SYNC_TOURNAMENT_IDS"
     )
