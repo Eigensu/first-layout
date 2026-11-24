@@ -338,8 +338,6 @@ async def create_team(
         await validate_team_composition(
             players=players,
             contest=contest,
-            squad_size=len(team_data.player_ids),
-            max_players_allowed=max_players_allowed,
             tournament_id=tournament_id,
         )
         # slot_purse: the slot rules above, plus one purse for the whole squad.
@@ -627,8 +625,6 @@ async def update_team(
                     await validate_team_composition(
                         players=players,
                         contest=contest,
-                        squad_size=len(player_ids),
-                        max_players_allowed=max_players_allowed,
                         tournament_id=tournament_id,
                     )
                     await _validate_slot_constraints(
