@@ -2,6 +2,7 @@
 
 import React from "react";
 import { formatPoints } from "@/utils/playerValue";
+import { isOverspent } from "@/utils/purse";
 
 export interface EditPurseBarProps {
   purse: number;
@@ -31,7 +32,7 @@ export function EditPurseBar({
 }: EditPurseBarProps) {
   const remaining = purse - spent;
   const pctSpent = purse > 0 ? Math.min(100, (spent / purse) * 100) : 0;
-  const overspent = remaining < 0;
+  const overspent = isOverspent(remaining);
   const placesLeft = Math.max(0, squadSize - selectedCount);
 
   return (

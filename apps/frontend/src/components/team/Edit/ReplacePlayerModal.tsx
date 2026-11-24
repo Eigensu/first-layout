@@ -7,6 +7,7 @@ import { PoolFilterBar } from "./PoolFilterBar";
 import { usePlayerPoolFilters } from "./usePlayerPoolFilters";
 import { usesPurse, type ContestFormat } from "@/common/consts/contest";
 import { formatPlayerValue, formatPoints } from "@/utils/playerValue";
+import { isOverPurse } from "@/utils/purse";
 
 interface ReplacePlayerModalProps {
   isOpen: boolean;
@@ -58,16 +59,20 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
   const target = targetPlayerId ? playerById[targetPlayerId] : undefined;
 
   /**
-   * What a replacement may cost: the purse minus the rest of the squad, i.e.
-   * the outgoing player's fee is handed back before the incoming one is paid.
+   * What the rest of the squad costs: the outgoing player's fee is handed
+   * back before the incoming one is paid.
    */
-  const budgetForSwap = useMemo(() => {
-    if (!isAuction) return Number.POSITIVE_INFINITY;
-    const spentByOthers = currentPlayerIds
-      .filter((id) => id !== targetPlayerId)
-      .reduce((sum, id) => sum + (playerById[id]?.price || 0), 0);
-    return purse - spentByOthers;
-  }, [isAuction, currentPlayerIds, targetPlayerId, playerById, purse]);
+  const spentByOthers = useMemo(
+    () =>
+      currentPlayerIds
+        .filter((id) => id !== targetPlayerId)
+        .reduce((sum, id) => sum + (playerById[id]?.price || 0), 0),
+    [currentPlayerIds, targetPlayerId, playerById],
+  );
+  /** What a replacement may cost, for display. */
+  const budgetForSwap = isAuction
+    ? purse - spentByOthers
+    : Number.POSITIVE_INFINITY;
 
   /** Squad counts per real-world team, with the outgoing player already removed. */
   const countByTeamAfterRemoval = useMemo(() => {
@@ -109,7 +114,8 @@ export const ReplacePlayerModal: React.FC<ReplacePlayerModalProps> = ({
         return `Already ${maxPerTeam} from ${p.team}.`;
       }
     }
-    if ((p.price || 0) > budgetForSwap) {
+    // Compare the squad's new total with the purse, as the server does.
+    if (isOverPurse(spentByOthers + (p.price || 0), purse)) {
       return `Costs ${formatPoints(p.price || 0)}, budget ${formatPoints(
         budgetForSwap,
       )}.`;

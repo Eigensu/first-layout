@@ -1,5 +1,6 @@
 import React from "react";
 import { formatPoints } from "@/utils/playerValue";
+import { isOverspent } from "@/utils/purse";
 
 interface PurseBarProps {
   purse: number;
@@ -27,7 +28,7 @@ export const PurseBar: React.FC<PurseBarProps> = ({
   maxPerTeam = 0,
 }) => {
   const pctSpent = purse > 0 ? Math.min(100, (spent / purse) * 100) : 0;
-  const overspent = remaining < 0;
+  const overspent = isOverspent(remaining);
   const placesLeft = Math.max(0, squadSize - selectedCount);
 
   // Only teams the user has actually drawn from, fullest first.

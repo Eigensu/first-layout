@@ -10,11 +10,9 @@ import {
 import { publicContestsApi, type Contest } from "@/lib/api/public/contests";
 import { CONTEST_FORMAT, usesPurse } from "@/common/consts/contest";
 import { formatPoints } from "@/utils/playerValue";
+import { isOverPurse, isOverspent } from "@/utils/purse";
 
 export type UIBuildPlayer = Player & { slotId: string };
-
-/** Float slack when comparing a squad's total with the purse. */
-const PURSE_EPSILON = 1e-6;
 
 /** Why a player cannot be added to the current squad, or null if they can. */
 export type SelectionBlock = string | null;
@@ -285,11 +283,12 @@ export function useTeamBuilder(
         }
       }
 
-      // Compare the new total with the purse, as the server does, with a small
-      // tolerance so float rounding cannot refuse a player who exactly fits.
+      // Compare the new total with the purse exactly as Continue and the
+      // server do (utils/purse.ts), so the picker never admits a squad that
+      // cannot be saved, nor refuses one that can.
       const spentSoFar = chosen.reduce((sum, p) => sum + (p.price || 0), 0);
       const left = purse - spentSoFar;
-      if (spentSoFar + (player.price || 0) > purse + PURSE_EPSILON) {
+      if (isOverPurse(spentSoFar + (player.price || 0), purse)) {
         return `${player.name ?? "This player"} costs ${formatPoints(
           player.price,
         )} but you have ${formatPoints(left)} left.`;
@@ -310,7 +309,7 @@ export function useTeamBuilder(
     isAuction &&
     TOTAL_MAX > 0 &&
     selectedPlayers.length === TOTAL_MAX &&
-    remainingPurse >= 0;
+    !isOverspent(remainingPurse);
 
   const canNextForActiveSlot = useMemo(() => {
     const s = slots.find((sl) => sl.id === activeSlotId);

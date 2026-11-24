@@ -15,6 +15,7 @@ import {
   POOL_STATUS,
   usePlayerPoolFilters,
 } from "@/components/team/Edit/usePlayerPoolFilters";
+import { isOverPurse, isOverspent } from "@/utils/purse";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface EditablePlayer {
@@ -42,6 +43,14 @@ export interface EditPlayersModalProps {
 
   /** All available players to pick from */
   allPlayers: EditablePlayer[];
+
+  /**
+   * Squad members the pool above no longer offers: inactive, unpriced or
+   * deleted players. They are listed only so the user can remove them, and
+   * never offered as picks. A member missing from both lists still shows, as
+   * "Unavailable player".
+   */
+  unavailablePlayers?: EditablePlayer[];
 
   /** Required squad size (slot-based: sum of slot maxima; auction: squad_size) */
   requiredCount?: number;
@@ -218,6 +227,39 @@ function PlayerRow({
   );
 }
 
+/** A squad member who can no longer be picked: name, why, and Remove. */
+function UnavailableRow({
+  player,
+  onRemove,
+}: {
+  player: EditablePlayer;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl border bg-danger-tonal border-danger-edge">
+      <div className="w-9 h-9 shrink-0 rounded-full bg-white/10 flex items-center justify-center text-text-muted text-xs font-bold">
+        {getInitials(player.name)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] sm:text-sm font-medium text-text-main truncate leading-tight">
+          {player.name}
+        </p>
+        <p className="text-[10px] sm:text-[11px] text-danger truncate">
+          {player.team ? `${player.team} · ` : ""}No longer available
+        </p>
+      </div>
+      <button
+        onClick={onRemove}
+        className="shrink-0 w-9 h-9 rounded-full border flex items-center justify-center transition-all active:scale-90 bg-danger-tonal border-danger-edge text-danger hover:bg-danger-tonal-hover"
+        title="Remove from squad"
+        aria-label={`Remove ${player.name} from squad`}
+      >
+        <X className="w-4 h-4" strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
+
 function SectionHeading({ label, count }: { label: string; count: number }) {
   return (
     <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted px-1 pt-1">
@@ -235,6 +277,7 @@ export function EditPlayersModal({
   captainId: initialCaptainId,
   viceCaptainId: initialViceCaptainId,
   allPlayers,
+  unavailablePlayers = [],
   requiredCount = 16,
   slotLimits = {},
   contestFormat,
@@ -282,6 +325,27 @@ export function EditPlayersModal({
   }, [allPlayers]);
 
   const count = selectedIds.length;
+
+  /**
+   * Squad members the pool does not offer. The server refuses a squad that
+   * still holds one, so they get their own section with a Remove button and
+   * block Save until they are gone. They are never offered back as picks.
+   */
+  const stranded = useMemo(() => {
+    const known = new Map(unavailablePlayers.map((p) => [p.id, p]));
+    return selectedIds
+      .filter((id) => !playerById[id])
+      .map(
+        (id): EditablePlayer =>
+          known.get(id) ?? { id, name: "Unavailable player" },
+      );
+  }, [selectedIds, playerById, unavailablePlayers]);
+
+  const removeStranded = (id: string) => {
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    if (captainId === id) setCaptainId("");
+    if (viceCaptainId === id) setViceCaptainId("");
+  };
 
   const spent = useMemo(
     () =>
@@ -339,7 +403,7 @@ export function EditPlayersModal({
           }
         }
         const price = player.price || 0;
-        if (price > remainingPurse) {
+        if (isOverPurse(spent + price, purse)) {
           return `Costs ${formatPoints(price)}, only ${formatPoints(
             remainingPurse,
           )} left.`;
@@ -355,6 +419,8 @@ export function EditPlayersModal({
       hasPurse,
       maxPerTeam,
       selectedCountByTeam,
+      spent,
+      purse,
       remainingPurse,
       slotLimits,
       selectedCountBySlot,
@@ -384,12 +450,13 @@ export function EditPlayersModal({
     setViceCaptainId(id);
   };
 
-  const overspent = hasPurse && remainingPurse < 0;
+  const overspent = hasPurse && isOverspent(remainingPurse);
   const isValid =
     count === requiredCount &&
     !!captainId &&
     !!viceCaptainId &&
     captainId !== viceCaptainId &&
+    stranded.length === 0 &&
     !overspent;
 
   if (!isOpen) return null;
@@ -408,20 +475,32 @@ export function EditPlayersModal({
    * (over the purse *and* a duplicate captain), pushing the list off a phone
    * screen to say things the user can only fix one at a time anyway.
    */
-  const notice: { tone: "danger" | "warning"; text: string } | null = overspent
-    ? {
-        tone: "danger",
-        text: `Over the purse by ${formatPoints(Math.abs(remainingPurse))} — remove a player to save.`,
-      }
-    : captainId && captainId === viceCaptainId
-      ? { tone: "danger", text: "Captain and Vice-Captain must differ." }
-      : count === requiredCount && !captainId && !viceCaptainId
-        ? { tone: "warning", text: "Tap C and VC on players to assign them." }
-        : count === requiredCount && !captainId
-          ? { tone: "warning", text: "Assign a Captain." }
-          : count === requiredCount && !viceCaptainId
-            ? { tone: "warning", text: "Assign a Vice-Captain." }
-            : null;
+  const notice: { tone: "danger" | "warning"; text: string } | null =
+    stranded.length > 0
+      ? {
+          tone: "danger",
+          text:
+            stranded.length === 1
+              ? `${stranded[0].name} is no longer available. Remove them to save.`
+              : `${stranded.length} players are no longer available. Remove them to save.`,
+        }
+      : overspent
+        ? {
+            tone: "danger",
+            text: `Over the purse by ${formatPoints(Math.abs(remainingPurse))} — remove a player to save.`,
+          }
+        : captainId && captainId === viceCaptainId
+          ? { tone: "danger", text: "Captain and Vice-Captain must differ." }
+          : count === requiredCount && !captainId && !viceCaptainId
+            ? {
+                tone: "warning",
+                text: "Tap C and VC on players to assign them.",
+              }
+            : count === requiredCount && !captainId
+              ? { tone: "warning", text: "Assign a Captain." }
+              : count === requiredCount && !viceCaptainId
+                ? { tone: "warning", text: "Assign a Vice-Captain." }
+                : null;
 
   const renderRow = (p: EditablePlayer) => (
     <PlayerRow
@@ -534,6 +613,22 @@ export function EditPlayersModal({
 
         {/* Player list */}
         <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-2 space-y-1.5 min-h-0">
+          {stranded.length > 0 && (
+            <>
+              <SectionHeading
+                label="No longer available"
+                count={stranded.length}
+              />
+              {stranded.map((p) => (
+                <UnavailableRow
+                  key={p.id}
+                  player={p}
+                  onRemove={() => removeStranded(p.id)}
+                />
+              ))}
+            </>
+          )}
+
           {filters.filtered.length === 0 && (
             <p className="text-center text-text-muted text-xs py-6">
               No players match your search.

@@ -1,6 +1,7 @@
 import React from "react";
 import { Player } from "@/components";
 import { formatPoints } from "@/utils/playerValue";
+import { isOverspent } from "@/utils/purse";
 
 interface SelectedPlayersBarProps {
   selectedPlayersCount: number;
@@ -23,7 +24,7 @@ export const SelectedPlayersBar: React.FC<SelectedPlayersBarProps> = ({
   const purseChip = showPurse ? (
     <span
       className={`px-1.5 py-0 rounded-full text-[9px] sm:text-xs font-bold shadow-sm ${
-        remainingPurse < 0
+        isOverspent(remainingPurse)
           ? "bg-red-500 text-white"
           : "bg-emerald-500/15 text-emerald-500"
       }`}

@@ -14,7 +14,7 @@ from fastapi import HTTPException, status
 from app.models.contest import Contest
 from app.models.player import Player
 from app.models.settings import GlobalSettings
-from app.services.auction import resolve_max_players_per_team
+from app.services.auction import resolve_max_players_per_team, team_minimum_shortfall
 from app.utils.tenant import TenantId
 
 
@@ -66,21 +66,18 @@ async def validate_team_composition(
     if not squad_is_complete:
         return
 
-    if (
-        contest is None
-        or contest.contest_type != "daily"
-        or not contest.allowed_teams
-        or len(contest.allowed_teams) != 2
-    ):
-        return
-
-    for required_team in contest.allowed_teams:
-        if team_counts.get(required_team, 0) < settings.min_players_per_team:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Must select at least "
-                    f"{_pluralize(settings.min_players_per_team, 'player')} "
-                    f"from team {required_team}"
-                ),
-            )
+    allowed = (
+        contest.allowed_teams
+        if contest is not None and contest.contest_type == "daily"
+        else None
+    )
+    short_team = team_minimum_shortfall(players, allowed, settings.min_players_per_team)
+    if short_team is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Must select at least "
+                f"{_pluralize(settings.min_players_per_team, 'player')} "
+                f"from team {short_team}"
+            ),
+        )
