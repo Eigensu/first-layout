@@ -453,7 +453,13 @@ every run. Instead (`NO_DATA_YET_CODES`, `is_no_data_yet`):
 A mistyped tournament id cannot hide behind this. CricHeroes refuse every id
 outside our agreement, real or made up, with 170001 (seen live for a made-up
 id on 16 Nov 2026, §7), not with 170011. That refusal is a failure, so the run
-exits 1. A 170011 on the match list therefore comes only from a tournament we
+exits 1. A link is checked when it is saved (§13.1), but one saved earlier, or
+saved while CricHeroes could not be reached, can still be refused here. So the
+match-list document records when it was refused (`refused_at`), and the
+scheduled run passes the tournament over, as skipped and not failed, for 24
+hours after that: one call and one failure a day, not one an hour, until the
+link is fixed. A good read clears it. "Refresh now" and `--force` ask again at
+once. A 170011 on the match list therefore comes only from a tournament we
 are served that has no fixtures yet. What no answer can catch is the *other*
 served tournament configured by mistake: its tables are read like any others.
 

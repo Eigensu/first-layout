@@ -13,6 +13,10 @@ result changed or they are older than CRICHEROES_SNAPSHOT_MAX_AGE_HOURS.
 logging a warning if this quota term's calls are past
 CRICHEROES_USAGE_WARN_PERCENT.
 
+A tournament CricHeroes refused (170001, outside our agreement) is skipped
+for a day after the refusal, so a bad link fails once a day, not every hour;
+--force asks again at once.
+
 CRICHEROES_SYNC_TOURNAMENT_IDS, when set, is a cap: only the linked tournaments
 it names are read, and a run says which linked ones it held back.
 
@@ -82,9 +86,7 @@ def summary(report: SyncReport) -> str:
 
 async def run(args: argparse.Namespace) -> int:
     """The run itself, with the database already connected."""
-    linked = await cricheroes_cache.linked_tournaments()
-    configured = await cricheroes_cache.tournaments_to_sync()
-    held_back = [t for t in linked if t not in configured]
+    configured, held_back = await cricheroes_cache.sync_selection()
     if held_back:
         # Said first, and whatever else happens: a linked tournament that
         # never refreshes is otherwise a mystery.

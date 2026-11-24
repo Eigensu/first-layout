@@ -54,7 +54,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
@@ -74,6 +74,7 @@ from app.schemas.cricheroes import (
 from app.services import cricheroes_points
 from app.services.cricheroes_client import CricHeroesClient
 from app.services.cricheroes_errors import (
+    CricHeroesAccessError,
     CricHeroesConfigError,
     CricHeroesError,
     is_no_data_yet,
@@ -126,6 +127,11 @@ RESOURCES: Dict[str, Resource] = {r.name: r for r in (MATCHES, *DEPENDENTS)}
 
 # Everything but the cached data, for decisions and the status view.
 WITHOUT_DATA = {"data": 0}
+
+# How long a tournament CricHeroes refused (170001, outside our agreement) is
+# left before the scheduled run asks again: one call and one failure a day,
+# not one an hour, for a link nobody has fixed yet.
+REFUSED_RETRY_AFTER = timedelta(hours=24)
 
 
 def _key(resource: str, tournament_id: int) -> str:
@@ -217,6 +223,7 @@ async def _save(
             "empty_since": empty_since,
             "last_error": None,
             "last_error_at": None,
+            "refused_at": None,
         },
     )
 
@@ -228,8 +235,21 @@ async def _save_error(
     await _upsert(
         resource,
         tournament_id,
-        {"last_error": str(error)[:500], "last_error_at": when},
+        {
+            "last_error": str(error)[:500],
+            "last_error_at": when,
+            # Only a refusal holds the next scheduled read back
+            # (`_refused_until`); any other failure is retried next run.
+            "refused_at": when if isinstance(error, CricHeroesAccessError) else None,
+        },
     )
+
+
+def _refused_until(snapshot: dict) -> Optional[datetime]:
+    """When a match list CricHeroes last refused (170001) is next read, or
+    None if it was not refused."""
+    refused = _when(snapshot.get("refused_at"))
+    return refused + REFUSED_RETRY_AFTER if refused is not None else None
 
 
 def _empty_for_now(snapshot: dict, error: Exception) -> bool:
@@ -369,11 +389,15 @@ async def sync_tournament(
     tournament_id: int,
     *,
     force: bool = False,
+    retry_refused: bool = False,
     now: Optional[datetime] = None,
 ) -> SyncReport:
     """Refresh one tournament's cache; see the module docstring for what.
 
-    `force` reads every resource, changed results or not. A missing
+    `force` reads every resource, changed results or not. A tournament
+    CricHeroes refused (170001) is passed over for a day after the refusal,
+    unless `retry_refused` or `force` is given -- an admin's "refresh now",
+    say, after the link is fixed or CricHeroes add it. A missing
     credential is raised (it would fail every call); any other failure is
     recorded in the report and on the resource, and the run goes on.
     """
@@ -382,13 +406,17 @@ async def sync_tournament(
     if reason is not None:
         return SyncReport(tournament_id=tournament_id, skipped=reason)
     try:
-        return await _sync(client, tournament_id, force, now)
+        return await _sync(client, tournament_id, force, retry_refused, now)
     finally:
         await _release(tournament_id, now)
 
 
 async def _sync(
-    client: CricHeroesClient, tournament_id: int, force: bool, now: datetime
+    client: CricHeroesClient,
+    tournament_id: int,
+    force: bool,
+    retry_refused: bool,
+    now: datetime,
 ) -> SyncReport:
     report = SyncReport(tournament_id=tournament_id)
     documents = (
@@ -397,6 +425,15 @@ async def _sync(
         .to_list(None)
     )
     cached = {d["resource"]: d for d in documents}
+
+    retry_at = _refused_until(cached.get(MATCHES.name, {}))
+    if retry_at is not None and now < retry_at and not (force or retry_refused):
+        report.skipped = (
+            "CricHeroes refused this tournament (170001, outside our "
+            f"agreement); asking again after {retry_at:%Y-%m-%d %H:%M} UTC, "
+            "or relink it in Admin > Tournaments"
+        )
+        return report
 
     try:
         matches = await MATCHES.fetch(client, tournament_id)
@@ -494,14 +531,25 @@ async def linked_tournaments() -> List[int]:
     return sorted({t.cricheroes_tournament_id for t in linked})
 
 
-async def tournaments_to_sync() -> List[int]:
-    """The CricHeroes tournaments the scheduled run keeps cached: every linked
-    one (`linked_tournaments`), or, when CRICHEROES_SYNC_TOURNAMENT_IDS is set,
-    only those of them it names -- a cap an operator can put on what the sync
-    spends, not a list anyone has to maintain."""
+async def sync_selection() -> Tuple[List[int], List[int]]:
+    """The linked CricHeroes tournaments (`linked_tournaments`), split into
+    the ones the scheduled run keeps cached and the ones it holds back, from
+    one read so the two always add up. Every linked one is kept unless
+    CRICHEROES_SYNC_TOURNAMENT_IDS is set; then only those of them it names
+    are -- a cap an operator can put on what the sync spends, not a list
+    anyone has to maintain."""
     linked = await linked_tournaments()
     cap = get_settings().cricheroes_sync_tournaments
-    return [i for i in linked if i in cap] if cap else linked
+    if not cap:
+        return linked, []
+    return [i for i in linked if i in cap], [i for i in linked if i not in cap]
+
+
+async def tournaments_to_sync() -> List[int]:
+    """The CricHeroes tournaments the scheduled run keeps cached
+    (`sync_selection`)."""
+    synced, _ = await sync_selection()
+    return synced
 
 
 async def sync(
@@ -509,13 +557,16 @@ async def sync(
     tournament_ids: Optional[List[int]] = None,
     *,
     force: bool = False,
+    retry_refused: bool = False,
 ) -> List[SyncReport]:
     """Refresh every tournament that is linked (`tournaments_to_sync`), or the
     ones given, one after the other."""
     ids = tournament_ids if tournament_ids is not None else await tournaments_to_sync()
     reports = []
     for tournament_id in ids:
-        report = await sync_tournament(client, tournament_id, force=force)
+        report = await sync_tournament(
+            client, tournament_id, force=force, retry_refused=retry_refused
+        )
         logger.info(
             "CricHeroes sync %s: refreshed %s, unchanged %s, failed %s%s",
             tournament_id,

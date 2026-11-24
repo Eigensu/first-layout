@@ -440,12 +440,10 @@ async def usage(days: int = Query(default=30, ge=1, le=366)):
 @router.get("/cache", response_model=CacheStatusResponse)
 async def cache_status():
     """What is cached, how old it is, and whether its last refresh failed."""
-    synced = await cricheroes_cache.tournaments_to_sync()
+    synced, held_back = await cricheroes_cache.sync_selection()
     return CacheStatusResponse(
         tournaments=synced,
-        linked_not_synced=[
-            t for t in await cricheroes_cache.linked_tournaments() if t not in synced
-        ],
+        linked_not_synced=held_back,
         max_age_hours=get_settings().cricheroes_snapshot_max_age_hours,
         snapshots=await cricheroes_cache.status(),
     )
@@ -461,8 +459,10 @@ async def refresh_cache(
 
     Only tournaments the scheduled run keeps (those a tournament is linked to),
     so this cannot be used to cache, and pay for, arbitrary ids. `force` reads
-    every resource whether results changed or not. A tournament refreshed in
-    the last few minutes is passed over either way.
+    every resource whether results changed or not. A tournament CricHeroes
+    refused is asked again, unlike on the hourly run, as an admin refreshing
+    by hand has likely just fixed it. A tournament refreshed in the last few
+    minutes is passed over either way.
     """
     configured = await cricheroes_cache.tournaments_to_sync()
     if tournament_id is not None and tournament_id not in configured:
@@ -484,7 +484,9 @@ async def refresh_cache(
         )
     ids = [tournament_id] if tournament_id is not None else configured
     try:
-        reports = await cricheroes_cache.sync(client, ids, force=force)
+        reports = await cricheroes_cache.sync(
+            client, ids, force=force, retry_refused=True
+        )
     except CricHeroesError as exc:
         raise _to_http_error(exc) from exc
     return RefreshResponse(reports=reports)

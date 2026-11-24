@@ -27,6 +27,7 @@ from app.services.cricheroes_cache import (
     read,
     results_digest,
     sync,
+    sync_selection,
     sync_tournament,
     tournaments_to_sync,
 )
@@ -403,6 +404,75 @@ async def test_a_tournament_not_served_is_recorded_not_raised(upstream, configur
     assert "do not give us access" in report.failed["matches"]
 
 
+def refuse(upstream):
+    upstream.answers["get-tournament-match-list"] = refusal(
+        170001, "Access to this tournament is not allowed.", status=403
+    )
+
+
+async def test_a_refused_tournament_is_asked_again_a_day_later(upstream, configured):
+    refuse(upstream)
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    # The hourly runs in between cost nothing, and are not failures.
+    for hour in (1, 12, 23):
+        report = await sync_tournament(
+            upstream.client, TPL, now=T0 + timedelta(hours=hour)
+        )
+        assert report.failed == {} and "170001" in report.skipped
+        assert "2026-11-06 10:00 UTC" in report.skipped
+    assert upstream.total() == 0
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=24))
+    assert "do not give us access" in report.failed["matches"]
+    assert upstream.calls == {"get-tournament-match-list": 1}
+
+
+async def test_once_served_a_refused_tournament_is_read_every_run(upstream, configured):
+    refuse(upstream)
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.answers["get-tournament-match-list"] = ok(
+        DOC["get-tournament-match-list"]["data"]
+    )
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=24))
+    assert report.failed == {} and report.skipped is None
+    assert (await snapshot("matches")).refused_at is None
+
+    upstream.reset()
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=25))
+    assert report.skipped is None
+    assert upstream.calls == {"get-tournament-match-list": 1}
+
+
+async def test_other_failures_are_retried_next_run(upstream, configured):
+    upstream.answers["get-tournament-match-list"] = httpx.ConnectError("refused")
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    report = await sync_tournament(upstream.client, TPL, now=T0 + timedelta(hours=1))
+
+    assert report.skipped is None and "matches" in report.failed
+    assert upstream.calls == {"get-tournament-match-list": 1}
+
+
+@pytest.mark.parametrize("flag", ["force", "retry_refused"])
+async def test_a_refused_tournament_can_be_asked_again_at_once(
+    upstream, configured, flag
+):
+    refuse(upstream)
+    await sync_tournament(upstream.client, TPL, now=T0)
+    upstream.reset()
+
+    report = await sync_tournament(
+        upstream.client, TPL, now=T0 + timedelta(hours=1), **{flag: True}
+    )
+
+    assert report.skipped is None and "matches" in report.failed
+    assert upstream.calls == {"get-tournament-match-list": 1}
+
+
 # -- before the first match ------------------------------------------------------
 
 # What CricHeroes answered for tournament 2242502 on 15 Nov 2026, the day
@@ -719,6 +789,15 @@ async def test_the_cap_holds_linked_tournaments_back(db, monkeypatch):
 
     assert await tournaments_to_sync() == [TPL]
     assert await linked_tournaments() == [TPL, 2251924]
+    assert await sync_selection() == ([TPL], [2251924])
+
+
+async def test_with_no_cap_nothing_is_held_back(db, monkeypatch):
+    await link("tpl", TPL)
+    await link("gsl", 2251924)
+    monkeypatch.setattr(get_settings(), "cricheroes_sync_tournament_ids", "")
+
+    assert await sync_selection() == ([TPL, 2251924], [])
 
 
 async def test_the_cap_cannot_add_a_tournament_nobody_linked(db, monkeypatch):
@@ -772,6 +851,28 @@ async def test_refresh_now(client, serve, configured):
     )
     assert again.json()["reports"][0]["skipped"].startswith("refreshed 0 minute")
     assert serve.total() == 5
+
+
+async def test_refresh_now_asks_again_about_a_refused_tournament(
+    client, serve, configured
+):
+    # The hourly run would wait a day; an admin refreshing by hand has likely
+    # just fixed the link, or heard CricHeroes added it.
+    refuse(serve)
+    await sync_tournament(serve.client, TPL)
+    serve.answers["get-tournament-match-list"] = ok(
+        DOC["get-tournament-match-list"]["data"]
+    )
+    await CricHeroesSnapshot.get_motor_collection().update_one(
+        {"key": f"matches:{TPL}"}, {"$set": {"claimed_at": None}}
+    )
+    serve.reset()
+
+    response = await client.post("/api/admin/cricheroes/cache/refresh")
+
+    [report] = response.json()["reports"]
+    assert report["skipped"] is None and report["failed"] == {}
+    assert serve.calls["get-tournament-match-list"] == 1
 
 
 async def test_refresh_now_only_for_linked_tournaments(client, serve, configured):
